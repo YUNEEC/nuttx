@@ -59,10 +59,11 @@
 
 #include "up_arch.h"
 
-/* Only for the STM32F[1|3|4]0xx family and STM32L15xx (EEPROM only) for now */
+/* Only for the STM32F[1|3|4]0xx family , STM32F76XX and STM32L15xx (EEPROM only)  for now */
 
 #if defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) || \
-    defined (CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32_STM32L15XX)
+    defined (CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32_STM32L15XX) || \
+    defined (CONFIG_STM32F7_STM32F76XX)
 
 #if defined(CONFIG_STM32_FLASH_CONFIG_DEFAULT) && \
     (defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F4XXX))
@@ -86,7 +87,7 @@
 #if defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX)
 #  define FLASH_CR_PAGE_ERASE              FLASH_CR_PER
 #  define FLASH_SR_WRITE_PROTECTION_ERROR  FLASH_SR_WRPRT_ERR
-#elif defined(CONFIG_STM32_STM32F4XXX)
+#elif defined(CONFIG_STM32_STM32F4XXX) || defined (CONFIG_STM32F7_STM32F76XX)
 #  define FLASH_CR_PAGE_ERASE              FLASH_CR_SER
 #  define FLASH_SR_WRITE_PROTECTION_ERROR  FLASH_SR_WRPERR
 #endif
@@ -394,13 +395,13 @@ ssize_t stm32_eeprom_erase(size_t addr, size_t eraselen)
  *
  ************************************************************************************/
 
-#ifdef CONFIG_STM32_STM32F4XXX
+#if defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
 int stm32_flash_writeprotect(size_t page, bool enabled)
 {
   uint32_t reg;
   uint32_t val;
 
-#ifdef CONFIG_STM32_STM32F4XXX
+#if defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
   if (page >= STM32_FLASH_NPAGES)
     {
       return -EFAULT;
@@ -415,7 +416,7 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
     {
       reg = STM32_FLASH_OPTCR;
     }
-#if defined(CONFIG_STM32_FLASH_CONFIG_I) && defined(CONFIG_STM32_STM32F4XXX)
+#if defined(CONFIG_STM32_FLASH_CONFIG_I) && defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
   else
     {
       reg = STM32_FLASH_OPTCR1;
@@ -500,7 +501,7 @@ size_t up_progmem_getaddress(size_t page)
 
 #endif /* defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) */
 
-#ifdef CONFIG_STM32_STM32F4XXX
+#if defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
 
 size_t up_progmem_pagesize(size_t page)
 {
@@ -592,7 +593,7 @@ ssize_t up_progmem_erasepage(size_t page)
 
   sem_lock();
 
-#if !defined(CONFIG_STM32_STM32F4XXX)
+#if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
   if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
     {
       sem_unlock();
@@ -612,7 +613,7 @@ ssize_t up_progmem_erasepage(size_t page)
   page_address = up_progmem_getaddress(page);
   putreg32(page_address, STM32_FLASH_AR);
 
-#elif defined(CONFIG_STM32_STM32F4XXX)
+#elif defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
   modifyreg32(STM32_FLASH_CR, FLASH_CR_SNB_MASK, FLASH_CR_SNB(page));
 #endif
 
@@ -685,7 +686,7 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
   sem_lock();
 
-#if !defined(CONFIG_STM32_STM32F4XXX)
+#if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
   if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
     {
       sem_unlock();
@@ -703,7 +704,7 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
   modifyreg32(STM32_FLASH_CR, 0, FLASH_CR_PG);
 
-#if defined(CONFIG_STM32_STM32F4XXX)
+#if defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
   /* TODO: implement up_progmem_write() to support other sizes than 16-bits */
   modifyreg32(STM32_FLASH_CR, FLASH_CR_PSIZE_MASK, FLASH_CR_PSIZE_X16);
 #endif
@@ -746,4 +747,5 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 #endif /* !defined(CONFIG_STM32_STM32L15XX) */
 
 #endif /* defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) || \
-          defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32_STM32L15XX) */
+          defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32_STM32L15XX)  || \
+          defined (CONFIG_STM32F7_STM32F76XX)*/
