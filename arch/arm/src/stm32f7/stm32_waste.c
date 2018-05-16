@@ -1,9 +1,8 @@
-/************************************************************************************
- * arch/arm/src/stm32f7/chip/stm32_flash.h
+/****************************************************************************
+ *  arch/arm/src/stm32/stm32_waste.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            David Sidrane <david_s5@nscdg.com>
+ *   Copyright (C) 2011 Uros Platise. All rights reserved.
+ *   Author: Uros Platise <uros.platise@isotel.eu>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +31,27 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-#ifndef __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H
-#define __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H
-
-/************************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
-#include "chip.h"
+#include <stdint.h>
+#include "stm32_waste.h"
 
-#if defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX)
-#  include "chip/stm32f74xx75xx_flash.h"
-#elif defined(CONFIG_STM32F7_STM32F76XX) || defined(CONFIG_STM32F7_STM32F77XX)
-#  include "chip/stm32f76xx77xx_flash.h"
-#else
-#  error "Unsupported STM32 F7 part"
-#endif
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
 
+uint32_t idle_wastecounter = 0;
 
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
-#endif /* __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H */
+void up_waste(void)
+{
+  idle_wastecounter++;
+}

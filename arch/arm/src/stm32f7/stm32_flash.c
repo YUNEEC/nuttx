@@ -59,6 +59,7 @@
 
 #include "up_arch.h"
 
+
 /* Only for the STM32F[1|3|4]0xx family , STM32F76XX and STM32L15xx (EEPROM only)  for now */
 
 #if defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) || \
@@ -593,13 +594,13 @@ ssize_t up_progmem_erasepage(size_t page)
 
   sem_lock();
 
-#if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
-  if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
-    {
-      sem_unlock();
-      return -EPERM;
-    }
-#endif
+// #if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
+//   if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
+//     {
+//       sem_unlock();
+//       return -EPERM;
+//     }
+// #endif
 
   /* Get flash ready and begin erasing single page */
 
@@ -614,7 +615,8 @@ ssize_t up_progmem_erasepage(size_t page)
   putreg32(page_address, STM32_FLASH_AR);
 
 #elif defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
-  modifyreg32(STM32_FLASH_CR, FLASH_CR_SNB_MASK, FLASH_CR_SNB(page));
+  /*FLASH_CR_SNB(page)=(((uint32_t)((page) % 12) << (3))) | ((page / 12) << 7)*/
+  modifyreg32(STM32_FLASH_CR, FLASH_CR_SNB_MASK,  FLASH_CR_SNB(page));
 #endif
 
   modifyreg32(STM32_FLASH_CR, 0, FLASH_CR_STRT);
@@ -662,7 +664,7 @@ ssize_t up_progmem_ispageerased(size_t page)
 
 ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 {
-  uint16_t *hword = (uint16_t *)buf;
+  uint32_t *word = (uint32_t *)buf;
   size_t written = count;
 
   /* STM32 requires half-word access */
@@ -686,13 +688,13 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
   sem_lock();
 
-// #if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
-//   if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
-//     {
-//       sem_unlock();
-//       return -EPERM;
-//     }
-// #endif
+#if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
+  if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
+    {
+      sem_unlock();
+      return -EPERM;
+    }
+#endif
 
   /* Get flash ready and begin flashing */
 
@@ -705,17 +707,17 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
   modifyreg32(STM32_FLASH_CR, 0, FLASH_CR_PG);
 
 #if defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32F7_STM32F76XX)
-  /* TODO: implement up_progmem_write() to support other sizes than 16-bits */
-  modifyreg32(STM32_FLASH_CR, FLASH_CR_PSIZE_MASK, FLASH_CR_PSIZE_X16);
+  /* TODO: implement up_progmem_write() to support other sizes than 32-bits */
+  modifyreg32(STM32_FLASH_CR, FLASH_CR_PSIZE_MASK, FLASH_CR_PSIZE_X32);
 #endif
 
-  for (addr += STM32_FLASH_BASE; count; count -= 2, hword++, addr += 2)
+  for (addr += STM32_FLASH_BASE; count; count -= 4, word++, addr += 4)
     {
       /* Write half-word and wait to complete */
 
-      putreg16(*hword, addr);
-
-      while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY) up_waste();
+      putreg32(*word, addr);
+      __asm__ volatile("DSB \n");
+      while ( (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY) == FLASH_SR_BSY ) up_waste();
 
       /* Verify */
 
@@ -726,7 +728,7 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
           return -EROFS;
         }
 
-      if (getreg16(addr) != *hword)
+      if (getreg32(addr) != *word)
         {
           modifyreg32(STM32_FLASH_CR, FLASH_CR_PG, 0);
           sem_unlock();

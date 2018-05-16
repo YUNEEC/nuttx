@@ -1,9 +1,8 @@
-/************************************************************************************
- * arch/arm/src/stm32f7/chip/stm32_flash.h
+/****************************************************************************
+ *  arch/arm/src/stm32/stm32_waste.h
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            David Sidrane <david_s5@nscdg.com>
+ *   Copyright (C) 2011, 2015 Uros Platise. All rights reserved.
+ *   Author: Uros Platise <uros.platise@isotel.eu>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,26 +31,49 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-#ifndef __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H
-#define __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H
+#ifndef __ARCH_ARM_SRC_STM32_STM32_WASTE_H
+#define __ARCH_ARM_SRC_STM32_STM32_WASTE_H
 
-/************************************************************************************
- * Included Files
- ************************************************************************************/
+/* Waste CPU Time */
 
-#include <nuttx/config.h>
-#include "chip.h"
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
-#if defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX)
-#  include "chip/stm32f74xx75xx_flash.h"
-#elif defined(CONFIG_STM32F7_STM32F76XX) || defined(CONFIG_STM32F7_STM32F77XX)
-#  include "chip/stm32f76xx77xx_flash.h"
+#ifndef __ASSEMBLY__
+
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C"
+{
 #else
-#  error "Unsupported STM32 F7 part"
+#define EXTERN extern
 #endif
 
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
+/** Waste CPU Time
+ *
+ *   up_waste() is the logic that will be executed when portions of kernel
+ *   or user-app is polling some register or similar, waiting for desired
+ *   status. This time is wasted away. This function offers a measure of
+ *   badly written piece of software or some undesired behavior.
+ *
+ *   At the same time this function adds to some IDLE time which portion
+ *   cannot be used for other purposes (yet).
+ **/
 
-#endif /* __ARCH_ARM_SRC_STM32F7_CHIP_STM32_FLASH_H */
+void up_waste(void);
+
+#undef EXTERN
+#if defined(__cplusplus)
+}
+#endif
+
+#endif /* __ASSEMBLY__ */
+#endif /* __ARCH_ARM_SRC_STM32_STM32_WASTE_H */
