@@ -594,13 +594,13 @@ ssize_t up_progmem_erasepage(size_t page)
 
   sem_lock();
 
-// #if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
-//   if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
-//     {
-//       sem_unlock();
-//       return -EPERM;
-//     }
-// #endif
+#if !defined(CONFIG_STM32_STM32F4XXX) && !defined(CONFIG_STM32F7_STM32F76XX)
+  if (!(getreg32(STM32_RCC_CR) & RCC_CR_HSION))
+    {
+      sem_unlock();
+      return -EPERM;
+    }
+#endif
 
   /* Get flash ready and begin erasing single page */
 
@@ -713,10 +713,13 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
   for (addr += STM32_FLASH_BASE; count; count -= 4, word++, addr += 4)
     {
-      /* Write half-word and wait to complete */
+      /* Write word and wait to complete */
 
       putreg32(*word, addr);
+
+      /* This is important. This makesuer the I/D-cache will not skip the following waiting */
       __asm__ volatile("DSB \n");
+
       while ( (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY) == FLASH_SR_BSY ) up_waste();
 
       /* Verify */
