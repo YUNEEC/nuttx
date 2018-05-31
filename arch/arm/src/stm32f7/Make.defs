@@ -108,7 +108,7 @@ endif
 # Required STM32F7 files
 
 CHIP_ASRCS  =
-CHIP_CSRCS  = stm32_allocateheap.c stm32_exti_gpio.c stm32_gpio.c
+CHIP_CSRCS  = stm32_allocateheap.c stm32_exti_gpio.c stm32_gpio.c stm32_flash.c stm32_waste.c
 CHIP_CSRCS += stm32_irq.c stm32_lowputc.c stm32_rcc.c stm32_serial.c
 CHIP_CSRCS += stm32_start.c
 
