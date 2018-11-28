@@ -158,6 +158,7 @@ struct fs_smartfsdir_s
   uint16_t fs_firstsector;                    /* First sector of directory list */
   uint16_t fs_currsector;                     /* Current sector of directory list */
   uint16_t fs_curroffset;                     /* Current offset within current sector */
+  uint16_t fs_doffset;                        /* Offset in directory entry */
 };
 #endif
 
