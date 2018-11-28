@@ -215,6 +215,9 @@
 #define CONFIG_SMARTFS_ENTRY_DATLEN
 //#define CONFIG_SMARTFS_DUMP
 
+/* entry offset */
+#define SMARTFS_INVALID_OFFSET  0xffff
+
 /****************************************************************************
  * Public Types
  ****************************************************************************/
@@ -227,10 +230,9 @@
 
 struct smartfs_entry_s
 {
-  uint16_t          firstsector;  /* Sector number of the name */
-  uint16_t          dsector;      /* Sector number of the directory entry */
-  uint16_t          doffset;      /* Offset of the directory entry */
-  uint16_t          dfirst;       /* 1st sector number of the directory entry */
+  uint16_t          firstsector;  /* Sector number of the name. 0xffff for directory. */
+  uint16_t          poffset;      /* parent offset of the directory sector since chain header */
+  uint16_t          doffset;      /* Offset of the directory entry since chain header */
   uint16_t          flags;        /* Flags, including mode */
   FAR char          *name;        /* inode name */
   uint32_t          utc;          /* Time stamp */
@@ -247,7 +249,8 @@ struct smartfs_entry_header_s
                                       15:   Empty entry
                                       14:   Active entry
                                       12-0: Permissions bits */
-  uint16_t          firstsector;  /* Sector number of the name */
+  uint16_t          firstsector;  /* Sector number of the name. 0xffff for directory */
+  uint16_t          poffset;      /* parent offset of the directory sector */
 #ifdef CONFIG_SMARTFS_ENTRY_DATLEN
   uint32_t          datlen;       /* file size in byte, 0 for directory */
 #endif
@@ -361,10 +364,10 @@ int smartfs_unmount(struct smartfs_mountpt_s *fs);
 
 int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
         struct smartfs_entry_s *direntry, const char *relpath,
-        uint16_t *parentdirsector, const char **filename);
+        uint16_t *poffset, const char **filename);
 
 int smartfs_createentry(struct smartfs_mountpt_s *fs,
-        uint16_t parentdirsector, const char* filename,
+        uint16_t poffset, const char* filename,
         uint16_t type,
         mode_t mode, struct smartfs_entry_s *direntry,
         uint16_t sectorno, FAR struct smartfs_ofile_s *sf);
