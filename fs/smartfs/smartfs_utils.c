@@ -75,22 +75,11 @@ int smartfs_readsector(struct smartfs_mountpt_s *fs, uint16_t sector)
   struct smart_read_write_s readwrite;
   int ret;
 
-#ifdef CONFIG_SMARTFS_SECTOR_CACHE
-  if (sector != fs->fs_currsector) {
-#endif
-     readwrite.logsector = sector;
-     readwrite.count = fs->fs_llformat.availbytes;
-     readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
-     readwrite.offset = 0;
-     ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
-
-#ifdef CONFIG_SMARTFS_SECTOR_CACHE
-     fs->fs_currsector = sector;
-     fs->fs_currsize = ret;
-  } else {
-     ret = fs->fs_currsize;
-  }
-#endif
+  readwrite.logsector = sector;
+  readwrite.count = fs->fs_llformat.availbytes;
+  readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
+  readwrite.offset = 0;
+  ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
 
   return ret;
 }
@@ -352,10 +341,6 @@ int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable)
 #endif /* CONFIG_SMARTFS_MULTI_ROOT_DIRS */
 
   fs->fs_rwbuffer = (char *) kmm_malloc(fs->fs_llformat.availbytes);
-#ifdef CONFIG_SMARTFS_SECTOR_CACHE
-  fs->fs_currsector = 0xffff;
-  fs->fs_currsize = 0;
-#endif
   fs->fs_chainbuffer = (char *)kmm_malloc(sizeof(struct smartfs_chain_header_s));
   fs->fs_workbuffer = (char *) kmm_malloc(256);
   fs->fs_rootsector = SMARTFS_ROOT_DIR_SECTOR;
@@ -561,12 +546,12 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
        ret = OK
    */
 
-  /* Initial parent offset as root directory entry offset */
-
-  *poffset = 0;
-
   entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
   headersize = sizeof(struct smartfs_chain_header_s);
+
+  /* Initial parent offset as root directory entry offset */
+
+  *poffset = headersize;
 
   /* Test if this is a request for the root directory */
 
@@ -574,7 +559,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
     {
       direntry->firstsector = fs->fs_rootsector;
       direntry->flags = SMARTFS_DIRENT_TYPE_DIR | 0777;
-      direntry->doffset = 0;
+      direntry->doffset = headersize;
       direntry->utc = 0;
       direntry->name = NULL;
       direntry->datlen = 0;
@@ -589,9 +574,9 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
       direntry->doffset = SMARTFS_INVALID_OFFSET;
     }
 
-  /* search from root entry at offset 0 */
+  /* search from root entry at end of chain header */
 
-  curr_poffset = 0;
+  curr_poffset = headersize;
 
   /* Read the directory sector */
 
@@ -714,7 +699,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
                      direntry->flags = entry->flags;
                      direntry->utc = entry->utc;
 #endif
-                     direntry->doffset = offset - headersize;
+                     direntry->doffset = offset;
                      if (direntry->name == NULL)
                        {
                          direntry->name = (char *) kmm_malloc(fs->fs_llformat.namesize+1);
@@ -820,7 +805,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
 
               /* Save parent directory entry offset */
 
-              *poffset = offset - headersize;
+              *poffset = offset;
 
               curr_poffset = *poffset;
 
@@ -870,7 +855,7 @@ errout:
  ****************************************************************************/
 
 int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
-                        uint16_t poffset, FAR const char *filename,
+                        uint16_t poffset, uint16_t doffset, FAR const char *filename,
                         uint16_t type,  mode_t mode,
                         FAR struct smartfs_entry_s *direntry,
                         uint16_t sectorno, FAR struct smartfs_ofile_s *sf)
@@ -886,65 +871,69 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   /* Start at the 1st sector in the parent directory */
 
   found = FALSE;
-  entrysize = sizeof(struct smartfs_entry_header_s) +
-              fs->fs_llformat.namesize;
+  entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
 
   /* Validate the name isn't too long */
 
   if (strlen(filename) > fs->fs_llformat.namesize)
     {
-      return -ENAMETOOLONG;
+      ret = -ENAMETOOLONG;
+      goto errout;
     }
 
   /* Read the root directory sector and find a place to insert
    * the new entry.
    */
-      ret = smartfs_readsector(fs, fs->fs_rootsector);
-      if (ret < 0)
-        {
-          goto errout;
-        }
+  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  if (ret < 0)
+    {
+      goto errout;
+    }
 
-      /* Get the next chained sector */
+  /* Get the next chained sector */
 
-      header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
+  header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
 
-      /* Search for an empty entry in this sector from second entry */
+  /* Search for an empty entry in this sector from second entry */
 
-      offset = sizeof(struct smartfs_chain_header_s) + sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
-      entry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
-      while (offset + entrysize < fs->fs_llformat.availbytes)
-        {
-          /* Check if this entry is available */
+  if (doffset) {
+    offset = doffset;
+  } else {
+    offset = sizeof(struct smartfs_chain_header_s) + sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
+  }
+  entry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
+  while (offset + entrysize < fs->fs_llformat.availbytes)
+    {
+      /* Check if this entry is available */
 
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
-          if ((smartfs_rdle16(&entry->flags) == SMARTFS_ERASEDSTATE_16BIT) ||
-              ((smartfs_rdle16(&entry->flags) &
+      if ((smartfs_rdle16(&entry->flags) == SMARTFS_ERASEDSTATE_16BIT) ||
+          ((smartfs_rdle16(&entry->flags) &
 #else
-          if ((entry->flags == SMARTFS_ERASEDSTATE_16BIT) ||
-              ((entry->flags &
+      if ((entry->flags == SMARTFS_ERASEDSTATE_16BIT) ||
+          ((entry->flags &
 #endif
-                (SMARTFS_DIRENT_EMPTY | SMARTFS_DIRENT_ACTIVE)) ==
-               (~SMARTFS_ERASEDSTATE_16BIT &
-                (SMARTFS_DIRENT_EMPTY | SMARTFS_DIRENT_ACTIVE))))
-            {
-              /* We found an empty entry.  Use it. */
+            (SMARTFS_DIRENT_EMPTY | SMARTFS_DIRENT_ACTIVE)) ==
+            (~SMARTFS_ERASEDSTATE_16BIT &
+            (SMARTFS_DIRENT_EMPTY | SMARTFS_DIRENT_ACTIVE))))
+        {
+          /* We found an empty entry.  Use it. */
 
-              found = TRUE;
-              break;
-            }
-
-          /* Not available.  Skip to next entry */
-
-          offset += entrysize;
-          entry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
+          found = TRUE;
+          break;
         }
 
-      if (!found) {
-          ret = -ENOSPC;
-          ferr("Cannot find a free entry\n");
-          goto errout;
-      }
+      /* Not available.  Skip to next entry */
+
+      offset += entrysize;
+      entry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
+    }
+
+  if (!found) {
+      ret = -ENOSPC;
+      ferr("Cannot find a free entry\n");
+      goto errout;
+  }
 
   /* We found an insertion point.  Create the entry at sector,offset */
 
@@ -1144,8 +1133,7 @@ int smartfs_deleteentry(struct smartfs_mountpt_s *fs,
 
   /* Mark this entry as inactive */
 
-  direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[entry->doffset + 
-              sizeof(struct smartfs_chain_header_s)];
+  direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[entry->doffset];
 #if CONFIG_SMARTFS_ERASEDSTATE == 0xFF
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
   smartfs_wrle16(&direntry->flags, smartfs_rdle16(&direntry->flags) & ~SMARTFS_DIRENT_ACTIVE);
@@ -1163,7 +1151,7 @@ int smartfs_deleteentry(struct smartfs_mountpt_s *fs,
   /* Write the updated flags back to the sector */
 
   ret = smartfs_writesector(fs, fs->fs_rootsector, (uint8_t *) &direntry->flags,
-                            entry->doffset + sizeof(struct smartfs_chain_header_s), sizeof(uint16_t));
+                            entry->doffset, sizeof(uint16_t));
   if (ret < 0)
     {
       ferr("ERROR: Error marking entry inactive at sector %d\n",
@@ -1189,7 +1177,6 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
         struct smartfs_entry_s *entry)
 {
   int                             ret;
-  uint16_t                        nextsector;
   uint16_t                        offset;
   uint16_t                        entrysize;
   int                             count;
@@ -1199,57 +1186,53 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
   /* Walk through the directory's sectors and count entries */
 
   count = 0;
-  nextsector = entry->firstsector;
-  while (nextsector != SMARTFS_ERASEDSTATE_16BIT)
+
+  /* Read root sector into our buffer */
+
+  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  if (ret < 0)
     {
-      /* Read the next sector into our buffer */
+      ferr("ERROR: Error reading sector %d\n", fs->fs_rootsector);
+      goto errout;
+    }
 
-      ret = smartfs_readsector(fs, nextsector);
-      if (ret < 0)
-        {
-          ferr("ERROR: Error reading sector %d\n", nextsector);
-          break;
-        }
+  /* Validate this is a directory type sector */
 
-      /* Validate this is a directory type sector */
+  header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
+  if (header->type != SMARTFS_SECTOR_TYPE_DIR)
+    {
+      ferr("ERROR: Sector %d is not a DIR sector! type = %d\n", fs->fs_rootsector, header->type);
+      goto errout;
+    }
 
-      header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
-      if (header->type != SMARTFS_SECTOR_TYPE_DIR)
-        {
-          ferr("ERROR: Sector %d is not a DIR sector!\n", nextsector);
-          goto errout;
-        }
+  /* Loop for all entries in this sector and count them */
 
-      /* Loop for all entries in this sector and count them */
-
-      offset = sizeof(struct smartfs_chain_header_s);
-      entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
-      direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
-      while (offset + entrysize < fs->fs_llformat.availbytes)
-        {
+  offset = sizeof(struct smartfs_chain_header_s);
+  entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
+  direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
+  while (offset + entrysize < fs->fs_llformat.availbytes)
+    {
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
-          if (((smartfs_rdle16(&direntry->flags) & SMARTFS_DIRENT_EMPTY) !=
-              (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_EMPTY)) &&
-              ((smartfs_rdle16(&direntry->flags) & SMARTFS_DIRENT_ACTIVE) ==
-              (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_ACTIVE)))
+      if (((smartfs_rdle16(&direntry->flags) & SMARTFS_DIRENT_EMPTY) !=
+          (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_EMPTY)) &&
+          ((smartfs_rdle16(&direntry->flags) & SMARTFS_DIRENT_ACTIVE) ==
+          (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_ACTIVE)))
 #else
-          if (((direntry->flags & SMARTFS_DIRENT_EMPTY) !=
+      if (((direntry->flags & SMARTFS_DIRENT_EMPTY) !=
               (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_EMPTY)) &&
               ((direntry->flags & SMARTFS_DIRENT_ACTIVE) ==
               (SMARTFS_ERASEDSTATE_16BIT & SMARTFS_DIRENT_ACTIVE)))
 #endif
-            {
-              /* Count this entry */
-              count++;
-            }
-
-          offset += entrysize;
-          direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
+        {
+          if (direntry->poffset == entry->doffset)
+          {
+            /* Count this entry */
+            count++;
+          }
         }
 
-      /* Get the next sector from the header */
-
-      nextsector = SMARTFS_NEXTSECTOR(header);
+      offset += entrysize;
+      direntry = (struct smartfs_entry_header_s *) &fs->fs_rwbuffer[offset];
     }
 
   ret = count;
@@ -1315,12 +1298,6 @@ int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
 
           memset(fs->fs_rwbuffer, CONFIG_SMARTFS_ERASEDSTATE, fs->fs_llformat.availbytes);
           header->type = SMARTFS_SECTOR_TYPE_FILE;
-
-#ifdef CONFIG_SMARTFS_SECTOR_CACHE
-          /* invalidate cache in fs->fs_rwbuffer */
-          fs->fs_currsector = 0xffff;
-          fs->fs_currsize = 0;
-#endif
 
           /* Now write the new sector data */
 
