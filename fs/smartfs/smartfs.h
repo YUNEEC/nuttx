@@ -211,7 +211,6 @@
 #define CONFIG_SMARTFS_USE_SECTOR_BUFFER
 #endif
 
-#define CONFIG_SMARTFS_SECTOR_CACHE
 #define CONFIG_SMARTFS_ENTRY_DATLEN
 //#define CONFIG_SMARTFS_DUMP
 
@@ -231,8 +230,8 @@
 struct smartfs_entry_s
 {
   uint16_t          firstsector;  /* Sector number of the name. 0xffff for directory. */
-  uint16_t          poffset;      /* parent offset of the directory sector since chain header */
-  uint16_t          doffset;      /* Offset of the directory entry since chain header */
+  uint16_t          poffset;      /* parent offset of the directory sector */
+  uint16_t          doffset;      /* Offset of the directory entry */
   uint16_t          flags;        /* Flags, including mode */
   FAR char          *name;        /* inode name */
   uint32_t          utc;          /* Time stamp */
@@ -329,10 +328,6 @@ struct smartfs_mountpt_s
   char                       *fs_chainbuffer; /* Chain header buffer */
   char                       *fs_workbuffer;/* Working buffer */
   uint8_t                     fs_rootsector;/* Root directory sector num */
-#ifdef CONFIG_SMARTFS_SECTOR_CACHE
-  uint16_t                    fs_currsector; /* Current sector read for fs_rwbuffer */
-  int                         fs_currsize;   /* Current data size of fs_rwbuffer */
-#endif
 };
 
 /****************************************************************************
@@ -367,7 +362,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
         uint16_t *poffset, const char **filename);
 
 int smartfs_createentry(struct smartfs_mountpt_s *fs,
-        uint16_t poffset, const char* filename,
+        uint16_t poffset, uint16_t doffset, const char* filename,
         uint16_t type,
         mode_t mode, struct smartfs_entry_s *direntry,
         uint16_t sectorno, FAR struct smartfs_ofile_s *sf);
