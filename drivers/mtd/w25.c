@@ -451,24 +451,6 @@ static void w25_read_last_ecc_address(FAR struct spi_dev_s *spi, uint16_t *page)
 }
 #endif
 
-#if 0
-static void w25_read_bbm(FAR struct spi_dev_s *spi)
-{
-  uint8_t *buffer = (FAR uint8_t *)kmm_malloc(80);
-
-  SPI_SELECT(spi, SPIDEV_FLASH(0), true);
-
-  (void)SPI_SEND(spi, W25_RDBBM);
-  (void)SPI_SEND(spi, W25_DUMMY);
-
-  SPI_RECVBLOCK(spi, buffer, 80);
-
-  SPI_SELECT(spi, SPIDEV_FLASH(0), false);
-
-  kmm_free(buffer);
-}
-#endif
-
 /************************************************************************************
  * Name: w25_lock
  ************************************************************************************/
@@ -1843,11 +1825,9 @@ FAR struct mtd_dev_s *w25_initialize(FAR struct spi_dev_s *spi)
         }
     }
 
-    priv->lastaddr = 0xffffffff;
+  priv->lastaddr = 0xffffffff;
 
-    priv->page_buf = (FAR uint8_t *)kmm_malloc(W25_PAGE_SIZE+W25_SPARE_SIZE);
-
-  //w25_read_bbm(priv->spi);
+  priv->page_buf = (FAR uint8_t *)kmm_malloc(W25_PAGE_SIZE+W25_SPARE_SIZE);
 
   /* Register the MTD with the procfs system if enabled */
 
