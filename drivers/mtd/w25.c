@@ -776,7 +776,7 @@ static int w25_blockerase(struct w25_dev_s *priv, size_t block)
   off_t address = block << W25_BLOCK_SHIFT;
 
 #ifdef CONFIG_W25_SPI_DEBUG
-  ferr("sector: %08lx\n", (long)sector);
+  ferr("block: %08lx\n", (long)block);
 #endif
 
   if (w25_is_badblock(priv, block)) {
