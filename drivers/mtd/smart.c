@@ -470,7 +470,7 @@ static void smart_save_meta(FAR struct smart_struct_s *dev)
 
   MTD_BWRITE(dev->mtd, dev->mapphyssector, dev->mtdBlksPerSector,
                  (FAR uint8_t *) dev->sMap);
-#ifdef ONFIG_SMARTFS_DEBUG
+#ifdef CONFIG_SMARTFS_DEBUG
   ferr("save meta\n");
 #endif
 }
@@ -1943,7 +1943,7 @@ static int smart_set_wear_level(FAR struct smart_struct_s *dev, uint16_t block,
  *
  ****************************************************************************/
 
-static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
+static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 {
   int       physsector;
   int       ret;
@@ -2150,7 +2150,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
                so map sector is on good block if root sector is found */
             dev->mapphyssector = physsector+1;
 
-            if (!fullscan)
+            if (!is_format)
               smart_load_meta(dev);
 #endif
             dev->sMap[SMART_SIGNATURE_SECTOR] = dev->rootphyssector;
@@ -2162,7 +2162,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
 
 #ifdef CONFIG_SMART_MAP_METADATA
       /* Do not do full scan to save boot time */
-      if (!fullscan) {
+      if (!is_format) {
 
         /* Do not scan block if freecount is normal or bad block */
         if ((dev->freecount[physsector / dev->sectorsPerBlk] >= 0) &&
@@ -2173,7 +2173,6 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
         } else {
           /* There is problem in freecount of this block.
              Reset freecount and do physical sector in following logic */
-          /* TODO: remove sectorsPerBlk logic */
           ferr("Abnormal freecount found: block %d count %d\n", physsector / dev->sectorsPerBlk,
                 dev->freecount[physsector / dev->sectorsPerBlk]);
           dev->freecount[physsector / dev->sectorsPerBlk] = dev->availSectPerBlk;
@@ -2241,7 +2240,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
 
       /* used */
 
-      /* This block is commited, therefore not free.  Update the
+      /* This block is commited, therefore not free. Update the
        * erase block's freecount.
        */
 
@@ -2266,167 +2265,6 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool fullscan)
                logicalsector, physsector);
           continue;
         }
-
-      /* If root sector is not found, then read in the signature
-       * information to validate the format signature.
-       */
-
-#if 0
-      /* Test for duplicate logical sectors on the device */
-
-#ifndef CONFIG_MTD_SMART_MINIMIZE_RAM
-      if (dev->sMap[logicalsector] != SMART_SMAP_INVALID)
-#else
-      if (dev->sBitMap[logicalsector >> 3] & (1 << (logicalsector & 0x07)))
-#endif
-        {
-          /* Uh-oh, we found more than 1 physical sector claiming to be
-           * the same logical sector.  Use the sequence number information
-           * to resolve who wins.
-           */
-
-#if SMART_STATUS_VERSION == 1
-          if (header.status & SMART_STATUS_CRC)
-            {
-              seq2 = header.seq;
-            }
-          else
-            {
-              seq2 = *((FAR uint16_t *) &header.seq);
-            }
-#else
-          seq2 = header.seq;
-#endif
-
-          /* We must re-read the 1st physical sector to get it's seq number */
-
-#ifndef CONFIG_MTD_SMART_MINIMIZE_RAM
-          readaddress = dev->sMap[logicalsector]  * dev->mtdBlksPerSector * dev->geo.blocksize;
-#else
-          /* For minimize RAM, we have to rescan to find the 1st sector claiming to
-           * be this logical sector.
-           */
-
-          for (dupsector = 0; dupsector < sector; dupsector++)
-            {
-              /* Calculate the read address for this sector */
-
-              readaddress = dupsector * dev->mtdBlksPerSector * dev->geo.blocksize;
-
-              /* Read the header for this sector */
-
-              ret = MTD_READ(dev->mtd, readaddress, sizeof(struct smart_sect_header_s),
-                             (FAR uint8_t *) &header);
-              if (ret != sizeof(struct smart_sect_header_s))
-                {
-                  goto err_out;
-                }
-
-              /* Get the logical sector number for this physical sector */
-
-              duplogsector = *((FAR uint16_t *) header.logicalsector);
-
-#if CONFIG_SMARTFS_ERASEDSTATE == 0x00
-              if (duplogsector == 0)
-                {
-                  duplogsector = SMART_SMAP_INVALID;
-                }
-#endif
-
-              /* Test if this sector has been committed */
-
-              if ((header.status & SMART_STATUS_COMMITTED) ==
-                      (CONFIG_SMARTFS_ERASEDSTATE & SMART_STATUS_COMMITTED))
-                {
-                  continue;
-                }
-
-              /* Test if this sector has been release and skip it if it has */
-
-              if ((header.status & SMART_STATUS_RELEASED) !=
-                      (CONFIG_SMARTFS_ERASEDSTATE & SMART_STATUS_RELEASED))
-                {
-                  continue;
-                }
-
-              if ((header.status & SMART_STATUS_VERBITS) != SMART_STATUS_VERSION)
-                {
-                  continue;
-                }
-
-              /* Now compare if this logical sector matches the current sector */
-
-              if (duplogsector == logicalsector)
-                {
-                  break;
-                }
-            }
-#endif
-
-          ret = MTD_READ(dev->mtd, readaddress, sizeof(struct smart_sect_header_s),
-                  (FAR uint8_t *) &header);
-          if (ret != sizeof(struct smart_sect_header_s))
-            {
-              goto err_out;
-            }
-
-#if SMART_STATUS_VERSION == 1
-          if (header.status & SMART_STATUS_CRC)
-            {
-              seq1 = header.seq;
-            }
-          else
-            {
-              seq1 = *((FAR uint16_t *) &header.seq);
-            }
-#else
-          seq1 = header.seq;
-#endif
-
-          /* Now determine who wins */
-
-          if ((seq1 > 0xfff0 && seq2 < 10) || seq2 > seq1)
-            {
-              /* Seq 2 is the winner ... bigger or it wrapped */
-
-#ifndef CONFIG_MTD_SMART_MINIMIZE_RAM
-              loser = dev->sMap[logicalsector];
-              dev->sMap[logicalsector] = sector;
-#else
-              loser = dupsector;
-#endif
-            }
-          else
-            {
-              /* We keep the original mapping and seq2 is the loser */
-
-              loser = sector;
-            }
-
-          /* Now release the loser sector */
-
-          readaddress = loser  * dev->mtdBlksPerSector * dev->geo.blocksize;
-          ret = MTD_READ(dev->mtd, readaddress, sizeof(struct smart_sect_header_s),
-                  (FAR uint8_t *) &header);
-          if (ret != sizeof(struct smart_sect_header_s))
-            {
-              goto err_out;
-            }
-
-#if CONFIG_SMARTFS_ERASEDSTATE == 0xff
-          header.status &= ~SMART_STATUS_RELEASED;
-#else
-          header.status |= SMART_STATUS_RELEASED;
-#endif
-          offset = readaddress + offsetof(struct smart_sect_header_s, status);
-          ret = smart_bytewrite(dev, offset, 1, &header.status);
-          if (ret < 0)
-            {
-              ferr("ERROR: Error %d releasing duplicate sector\n", -ret);
-              goto err_out;
-            }
-        }
-#endif
 
 #ifndef CONFIG_MTD_SMART_MINIMIZE_RAM
       /* Update the logical to physical sector map */
@@ -3051,14 +2889,6 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   finfo("Entry\n");
 
-  /* Set the sector size for the device */
-
-  ret = smart_setsectorsize(dev, sectorsize);
-  if (ret != OK)
-    {
-      return ret;
-    }
-
   /* Check for invalid format */
 
   if (dev->erasesize == 0 || dev->sectorsPerBlk == 0)
@@ -3078,6 +2908,15 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   ret = MTD_IOCTL(dev->mtd, MTDIOC_BULKERASE, 0);
   if (ret < 0)
     {
+      return ret;
+    }
+
+  /* Do a scan of the device */
+
+  ret = smart_scan(dev, true);
+  if (ret < 0)
+    {
+      ferr("ERROR: smart_scan failed: %d\n", -ret);
       return ret;
     }
 
@@ -3177,14 +3016,6 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
       return -EIO;
     }
 #endif
-
-  /* Now initialize our internal control variables */
-
-  ret = smart_setsectorsize(dev, sectorsize);
-  if (ret != OK)
-    {
-      return ret;
-    }
 
   dev->formatstatus = SMART_FMT_STAT_UNKNOWN;
   dev->releasesectors = 0;
@@ -5723,15 +5554,6 @@ int smart_initialize(int minor, FAR struct mtd_dev_s *mtd, FAR const char *partn
 #ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
       dev->minor = minor;
 #endif
-
-      /* Do a scan of the device */
-
-      ret = smart_scan(dev, false);
-      if (ret < 0)
-        {
-          ferr("ERROR: smart_scan failed: %d\n", -ret);
-          goto errout;
-        }
 
       /* Create a MTD block device name */
 

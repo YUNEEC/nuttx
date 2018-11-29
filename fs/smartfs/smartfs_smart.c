@@ -1844,6 +1844,11 @@ errout_with_semaphore:
       kmm_free(entry.name);
     }
 
+  if (ret == OK)
+    {
+      FS_IOCTL(fs, BIOC_FLUSH, 0);
+    }
+
   smartfs_semgive(fs);
   return ret;
 }
@@ -1926,7 +1931,10 @@ errout_with_semaphore:
       entry.name = NULL;
     }
 
-  FS_IOCTL(fs, BIOC_FLUSH, 0);
+  if (ret == OK)
+    {
+      FS_IOCTL(fs, BIOC_FLUSH, 0);
+    }
 
   smartfs_semgive(fs);
   return ret;
@@ -2016,7 +2024,10 @@ errout_with_semaphore:
       kmm_free(entry.name);
     }
 
-  FS_IOCTL(fs, BIOC_FLUSH, 0);
+  if (ret == OK)
+    {
+      FS_IOCTL(fs, BIOC_FLUSH, 0);
+    }
 
   smartfs_semgive(fs);
   return ret;
@@ -2147,7 +2158,10 @@ errout_with_semaphore:
       newentry.name = NULL;
     }
 
-  FS_IOCTL(fs, BIOC_FLUSH, 0);
+  if (ret == OK)
+    {
+      FS_IOCTL(fs, BIOC_FLUSH, 0);
+    }
 
   smartfs_semgive(fs);
   return ret;
