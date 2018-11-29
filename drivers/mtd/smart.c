@@ -2447,7 +2447,7 @@ static inline int smart_getformat(FAR struct smart_struct_s *dev,
     }
 
   fmt->sectorsize = dev->sectorsize;
-  fmt->availbytes = dev->sectorsize - sizeof(struct smart_sect_header_s);
+  fmt->availbytes = (dev->sectorsize>>2) - sizeof(struct smart_sect_header_s);
   fmt->nsectors = dev->totalsectors;
 
   fmt->nfreesectors = smart_get_freesectors(dev);
