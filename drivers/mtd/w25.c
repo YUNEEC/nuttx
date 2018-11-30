@@ -248,7 +248,7 @@ struct w25_dev_s
 
 #if !defined(CONFIG_W25_READONLY)
   uint8_t               flags;       /* Buffered sector flags */
-  uint16_t              esectno;     /* Erase sector number in the cache*/
+  off_t                 esectno;     /* Erase sector number in the cache*/
   FAR uint8_t           *block;      /* Allocated block data */
 #endif
 
@@ -1451,15 +1451,27 @@ static ssize_t w25_bread(FAR struct mtd_dev_s *dev, off_t startsector,
 
   /* On this device, we can handle the sector read just like the byte-oriented read */
 
-  for (int i=0; i<nsectors; i++)
+  for (int sector=0; sector<nsectors; sector++)
    {
-      FAR uint8_t *cache_buf;
-      ret = w25_cacheread(priv, startsector+i, &cache_buf);
-      if (ret != W25_SECTOR_SIZE)
-        goto errout;
+     int shift      = W25_BLOCK_SHIFT - W25_SECTOR_SHIFT;
+     off_t esectno  = sector >> shift;
 
-      memcpy(buffer + (i<<W25_SECTOR_SHIFT), cache_buf, W25_SECTOR_SIZE);
-    }
+     /* read from cache if hits, otherwise read from flash */
+     if (esectno == priv->esectno) {
+       FAR uint8_t *cache_buf;
+       ret = w25_cacheread(priv, startsector+sector, &cache_buf);
+       if (ret != W25_SECTOR_SIZE)
+         goto errout;
+
+       memcpy(buffer + (sector<<W25_SECTOR_SHIFT), cache_buf, W25_SECTOR_SIZE);
+     } else {
+       ret = w25_byteread(priv, (startsector+sector) << W25_SECTOR_SHIFT,
+                          W25_SECTOR_SIZE, buffer + (sector<<W25_SECTOR_SHIFT));
+       if (ret != W25_SECTOR_SIZE)
+         goto errout;
+     }
+   }
+
   ret = nsectors;
 
 errout:
@@ -1598,15 +1610,26 @@ static ssize_t w25_read(FAR struct mtd_dev_s *dev, off_t offset,
     uint16_t sector = offset >> W25_SECTOR_SHIFT;
     uint16_t buffer_offset = offset - (sector << W25_SECTOR_SHIFT);
     uint16_t read_count = W25_SECTOR_SIZE - buffer_offset;
+    int shift = W25_BLOCK_SHIFT - W25_SECTOR_SHIFT;
+    off_t esectno  = sector >> shift;
+
     if (read_count > nbytes)
-        read_count = nbytes;
+      read_count = nbytes;
 
-    FAR uint8_t *cache_buf;
-    ret = w25_cacheread(priv, sector, &cache_buf);
-    if (ret != W25_SECTOR_SIZE)
-      goto errout;
+    /* read from cache if hits, otherwise read from flash */
+    if (esectno == priv->esectno) {
+      FAR uint8_t *cache_buf;
+      ret = w25_cacheread(priv, sector, &cache_buf);
+      if (ret != W25_SECTOR_SIZE)
+        goto errout;
 
-    memcpy((FAR uint8_t *)buffer, cache_buf + buffer_offset, read_count);
+       memcpy(buffer, cache_buf + buffer_offset, read_count);
+    } else {
+       ret = w25_byteread(priv, offset, read_count, buffer);
+       if (ret != read_count)
+         goto errout;
+    }
+
     buffer += read_count;
     offset += read_count;
     nbytes -= read_count;
