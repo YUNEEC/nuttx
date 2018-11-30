@@ -63,6 +63,8 @@
 
 #include "smartfs.h"
 
+//#define SMARTFS_API_DEBUG
+
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
@@ -297,6 +299,10 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
   const char               *filename;
   struct smartfs_ofile_s   *sf;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   /* Sanity checks */
 
   DEBUGASSERT((filep->f_priv == NULL) && (filep->f_inode != NULL));
@@ -484,6 +490,10 @@ errout_with_semaphore:
       ret = -EIO;
     }
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -512,6 +522,10 @@ static int smartfs_close(FAR struct file *filep)
   /* Sync the file */
 
   smartfs_sync(filep);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Take the semaphore */
 
@@ -589,6 +603,11 @@ static int smartfs_close(FAR struct file *filep)
 
 okout:
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return OK;
 }
 
@@ -606,6 +625,10 @@ static ssize_t smartfs_read(FAR struct file *filep, char *buffer, size_t buflen)
   uint32_t                  bytesread;
   uint16_t                  bytestoread;
   uint16_t                  bytesinsector;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -710,6 +733,11 @@ static ssize_t smartfs_read(FAR struct file *filep, char *buffer, size_t buflen)
 
 errout_with_semaphore:
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -816,6 +844,10 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
   struct smartfs_chain_header_s *header;
   size_t                    byteswritten;
   int                       ret;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks.  I have seen the following assertion misfire if
    * CONFIG_DEBUG_MM is enabled while re-directing output to a
@@ -1096,6 +1128,11 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
 
 errout_with_semaphore:
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1256,6 +1293,10 @@ static off_t smartfs_seek(FAR struct file *filep, off_t offset, int whence)
   struct smartfs_ofile_s   *sf;
   int                       ret;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   /* Sanity checks */
 
   DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
@@ -1282,6 +1323,11 @@ static off_t smartfs_seek(FAR struct file *filep, off_t offset, int whence)
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1311,6 +1357,10 @@ static int smartfs_sync(FAR struct file *filep)
   struct smartfs_ofile_s   *sf;
   int                       ret;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   /* Sanity checks */
 
   DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
@@ -1330,6 +1380,11 @@ static int smartfs_sync(FAR struct file *filep)
   ret = smartfs_sync_internal(fs, sf);
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1381,6 +1436,10 @@ static int smartfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
   FAR struct smartfs_mountpt_s *fs;
   FAR struct smartfs_ofile_s *sf;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   DEBUGASSERT(filep != NULL && buf != NULL);
 
   /* Recover our private data from the struct file instance */
@@ -1400,6 +1459,11 @@ static int smartfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
 
   smartfs_stat_common(fs, &sf->entry, buf);
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return OK;
 }
 
@@ -1418,6 +1482,10 @@ static int smartfs_opendir(FAR struct inode *mountpt, FAR const char *relpath,
   struct smartfs_entry_s    entry;
   uint16_t                  poffset;
   const char               *filename;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -1460,6 +1528,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1476,8 +1549,11 @@ static int smartfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
   int                   ret;
   uint16_t              entrysize;
   uint16_t              namelen;
-  //struct                smartfs_chain_header_s *header;
   struct                smartfs_entry_header_s *entry;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -1573,6 +1649,11 @@ static int smartfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
 
 errout_with_semaphore:
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1616,17 +1697,23 @@ static int smartfs_bind(FAR struct inode *blkdriver, const void *data,
   struct smartfs_mountpt_s *fs;
   int ret;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   /* Open the block driver */
 
   if (!blkdriver || !blkdriver->u.i_bops)
     {
-      return -ENODEV;
+      ret = -ENODEV;
+      goto errout;
     }
 
   if (blkdriver->u.i_bops->open &&
       blkdriver->u.i_bops->open(blkdriver) != OK)
     {
-      return -ENODEV;
+      ret = -ENODEV;
+      goto errout;
     }
 
   /* Create an instance of the mountpt state structure */
@@ -1634,7 +1721,8 @@ static int smartfs_bind(FAR struct inode *blkdriver, const void *data,
   fs = (struct smartfs_mountpt_s *)kmm_zalloc(sizeof(struct smartfs_mountpt_s));
   if (!fs)
     {
-      return -ENOMEM;
+      ret = -ENOMEM;
+      goto errout;
     }
 
   /* If the global semaphore hasn't been initialized, then
@@ -1668,7 +1756,8 @@ static int smartfs_bind(FAR struct inode *blkdriver, const void *data,
     {
       smartfs_semgive(fs);
       kmm_free(fs);
-      return ret;
+
+      goto errout;
     }
 
   *handle = (FAR void *)fs;
@@ -1678,7 +1767,16 @@ static int smartfs_bind(FAR struct inode *blkdriver, const void *data,
 #endif
 
   smartfs_semgive(fs);
-  return OK;
+
+  ret = OK;
+
+errout:
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
+  return ret;
 }
 
 /****************************************************************************
@@ -1694,6 +1792,10 @@ static int smartfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
 {
   FAR struct smartfs_mountpt_s *fs = (FAR struct smartfs_mountpt_s *)handle;
   int ret;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   if (!fs)
     {
@@ -1729,6 +1831,11 @@ static int smartfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   kmm_free(fs);
   return ret;
 }
@@ -1744,6 +1851,10 @@ static int smartfs_statfs(struct inode *mountpt, struct statfs *buf)
 {
   struct smartfs_mountpt_s *fs;
   int ret;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -1778,6 +1889,11 @@ static int smartfs_statfs(struct inode *mountpt, struct statfs *buf)
   buf->f_ffree = fs->fs_llformat.nfreesectors;
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1795,6 +1911,10 @@ static int smartfs_unlink(struct inode *mountpt, const char *relpath)
   struct smartfs_entry_s    entry;
   const char               *filename;
   uint16_t                  poffset;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -1850,6 +1970,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1867,6 +1992,10 @@ static int smartfs_mkdir(struct inode *mountpt, const char *relpath, mode_t mode
   struct smartfs_entry_s    entry;
   uint16_t                  poffset;
   const char               *filename;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -1937,6 +2066,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -1954,6 +2088,10 @@ int smartfs_rmdir(struct inode *mountpt, const char *relpath)
   struct smartfs_entry_s    entry;
   const char               *filename;
   uint16_t                  poffset;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -2030,6 +2168,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -2054,6 +2197,10 @@ int smartfs_rename(struct inode *mountpt, const char *oldrelpath,
   mode_t                    mode;
   uint16_t                  type;
   struct smartfs_entry_header_s *direntry;
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
 
   /* Sanity checks */
 
@@ -2164,6 +2311,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
@@ -2224,6 +2376,10 @@ static int smartfs_stat(FAR struct inode *mountpt, FAR const char *relpath,
   uint16_t poffset;
   int ret;
 
+#ifdef SMARTFS_API_DEBUG
+  ferr("Enter\n");
+#endif
+
   /* Sanity checks */
 
   DEBUGASSERT(mountpt && mountpt->i_private);
@@ -2257,9 +2413,11 @@ errout_with_semaphore:
     }
 
   smartfs_semgive(fs);
+
+#ifdef SMARTFS_API_DEBUG
+  ferr("Exit\n");
+#endif
+
   return ret;
 }
 
-/****************************************************************************
- * Public Functions
- ****************************************************************************/

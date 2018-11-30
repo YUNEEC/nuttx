@@ -2081,7 +2081,9 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
                * What should we do?  Release it?
                */
 
-              ferr("ERROR: Error reading signature in physical sector %d.\n", physsector);
+              if (!is_format) {
+                ferr("ERROR: Error reading signature in physical sector %d.\n", physsector);
+              }
 
               /* The root sector is not formatted yet */
               dev->rootphyssector = physsector;

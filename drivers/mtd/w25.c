@@ -1414,8 +1414,9 @@ static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nbloc
       /* Erase each sector */
 
       ret = w25_blockerase(priv, startblock);
-      if (ret < 0)
+      if (ret < 0) {
         ferr("find bad block %d\n",startblock);
+      }
 
       startblock++;
     }
