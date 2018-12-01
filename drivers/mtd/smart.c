@@ -74,6 +74,8 @@
 
 #define SMART_FREECOUNT_BADBLOCK  0xee
 
+#define SMART_INTERNAL_VERSION     1
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -116,8 +118,9 @@
 #define SMART_FMT_SIG4            'T'
 
 #define SMART_FMT_VERSION_POS     (SMART_FMT_POS1 + 4)
-#define SMART_FMT_NAMESIZE_POS    (SMART_FMT_POS1 + 5)
-#define SMART_FMT_ROOTDIRS_POS    (SMART_FMT_POS1 + 6)
+#define SMART_FMT_INTERNAL_VERSION_POS     (SMART_FMT_POS1 + 5)
+#define SMART_FMT_NAMESIZE_POS    (SMART_FMT_POS1 + 7)
+#define SMART_FMT_ROOTDIRS_POS    (SMART_FMT_POS1 + 8)
 #define SMART_SIGNATURE_SIZE      (SMART_FMT_ROOTDIRS_POS+1)
 #define SMARTFS_FMT_WEAR_POS      36
 #define SMART_WEAR_LEVEL_FORMAT_SIG 32
@@ -2125,19 +2128,26 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
                 goto err_out;
             }
 
+          uint16_t smart_internal_version = *((uint16_t *)(headerbuf+SMART_FMT_INTERNAL_VERSION_POS));
+
           /* Validate the format signature */
 
           if (headerbuf[SMART_FMT_POS1] != SMART_FMT_SIG1 ||
               headerbuf[SMART_FMT_POS2] != SMART_FMT_SIG2 ||
               headerbuf[SMART_FMT_POS3] != SMART_FMT_SIG3 ||
-              headerbuf[SMART_FMT_POS4] != SMART_FMT_SIG4)
+              headerbuf[SMART_FMT_POS4] != SMART_FMT_SIG4 ||
+              smart_internal_version != SMART_INTERNAL_VERSION)
             {
               /* Invalid signature on a sector claiming to be sector 0!
                * What should we do?  Release it?
                */
 
               if (!is_format) {
-                ferr("ERROR: Error reading signature in physical sector %d.\n", physsector);
+                if (smart_internal_version != SMART_INTERNAL_VERSION)
+                  ferr("ERROR: Error reading internal version %d, expect %d.\n",
+                       smart_internal_version, SMART_INTERNAL_VERSION);
+                else
+                  ferr("ERROR: Error reading signature in physical sector %d.\n", physsector);
               }
 
               /* The root sector is not formatted yet */
@@ -3058,6 +3068,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   headerbuf[SMART_FMT_POS4] = SMART_FMT_SIG4;
 
   headerbuf[SMART_FMT_VERSION_POS] = SMART_FMT_VERSION;
+  *((uint16_t *)(headerbuf+SMART_FMT_INTERNAL_VERSION_POS)) = SMART_INTERNAL_VERSION;
   headerbuf[SMART_FMT_NAMESIZE_POS] = CONFIG_SMARTFS_MAXNAMLEN;
 
   /* Record the number of root directory entries we have */
