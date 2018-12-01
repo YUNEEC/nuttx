@@ -215,9 +215,9 @@ static void smartfs_dump_rootdirectory(FAR struct smartfs_mountpt_s *fs)
   entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
   headersize = sizeof(struct smartfs_chain_header_s);
 
-  int ret = smartfs_readsector(fs, fs->fs_rootsector);
+  int ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0) {
-    ferr("Read root directory sector error, ret = %d\n", ret);
+    ferr("Read directory entry sector error, ret = %d\n", ret);
     return;
   }
 
@@ -533,7 +533,7 @@ static int smartfs_close(FAR struct file *filep)
 
 #ifdef CONFIG_SMARTFS_ENTRY_DATLEN
   /* Write file size into directory entry */
-  smartfs_writesector(fs, fs->fs_rootsector, (uint8_t *)&sf->entry.datlen,
+  smartfs_writesector(fs, fs->fs_entrysector, (uint8_t *)&sf->entry.datlen,
                       sf->entry.doffset + offsetof(struct smartfs_entry_header_s, datlen), sizeof(uint32_t));
 #endif
 
@@ -1571,7 +1571,7 @@ static int smartfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
 
   entrysize = sizeof(struct smartfs_entry_header_s) + fs->fs_llformat.namesize;
 
-  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0)
     {
       goto errout_with_semaphore;
@@ -2244,11 +2244,11 @@ int smartfs_rename(struct inode *mountpt, const char *oldrelpath,
     {
       /* Now mark the old entry as inactive */
 
-      ret = smartfs_readsector(fs, fs->fs_rootsector);
+      ret = smartfs_readsector(fs, fs->fs_entrysector);
       if (ret < 0)
         {
           ferr("ERROR: Error %d reading sector %d data\n",
-               ret, fs->fs_rootsector);
+               ret, fs->fs_entrysector);
           goto errout_with_semaphore;
         }
 
@@ -2261,12 +2261,12 @@ int smartfs_rename(struct inode *mountpt, const char *oldrelpath,
 
       /* Now write the updated flags back to the device */
 
-      ret = smartfs_writesector(fs, fs->fs_rootsector, (uint8_t *) &direntry->flags,
+      ret = smartfs_writesector(fs, fs->fs_entrysector, (uint8_t *) &direntry->flags,
                                 oldentry.doffset, sizeof(direntry->flags));
       if (ret < 0)
         {
           ferr("ERROR: Error %d writing flag bytes for sector %d\n",
-               ret, fs->fs_rootsector);
+               ret, fs->fs_entrysector);
           goto errout_with_semaphore;
         }
 

@@ -106,6 +106,7 @@ struct smart_format_s
   uint8_t  nrootdirentries; /* Number of root directories on this device */
   uint8_t  rootdirnum;      /* Root directory number for this dev entry */
 #endif
+  uint16_t entrysector;     /* Diretory entry sector */
 };
 
 /* The following defines the information for writing a logical sector

@@ -328,7 +328,7 @@ int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable)
    * associated with this mount.
    */
 
-  fs->fs_rootsector = SMARTFS_ROOT_DIR_SECTOR + fs->fs_llformat.rootdirnum;
+  fs->fs_entrysector = SMARTFS_ROOT_DIR_SECTOR + fs->fs_llformat.rootdirnum;
 
 #else  /* CONFIG_SMARTFS_MULTI_ROOT_DIRS */
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_SMARTFS)
@@ -338,7 +338,7 @@ int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable)
   g_mounthead = fs;
 #endif
 
-  fs->fs_rootsector = SMARTFS_ROOT_DIR_SECTOR;
+  fs->fs_entrysector = fs->fs_llformat.entrysector;
 
 #endif /* CONFIG_SMARTFS_MULTI_ROOT_DIRS */
 
@@ -359,7 +359,7 @@ int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable)
 #ifdef CONFIG_SMARTFS_MULTI_ROOT_DIRS
   finfo("\t    RootDirEntries:  %d\n", fs->fs_llformat.nrootdirentries);
 #endif
-  finfo("\t    RootDirSector:   %d\n", fs->fs_rootsector);
+  finfo("\t    EntrySector:   %d\n", fs->fs_entrysector);
 
 errout:
   return ret;
@@ -558,7 +558,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
 
   if (*relpath == '\0')
     {
-      direntry->firstsector = fs->fs_rootsector;
+      direntry->firstsector = fs->fs_entrysector;
       direntry->flags = SMARTFS_DIRENT_TYPE_DIR | 0777;
       direntry->doffset = headersize;
       direntry->utc = 0;
@@ -581,7 +581,7 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
 
   /* Read the directory sector */
 
-  ret = smartfs_readsector(fs, SMARTFS_ROOT_DIR_SECTOR);//fs->fs_rootsector);
+  ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0)
     {
        goto errout;
@@ -885,7 +885,7 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   /* Read the root directory sector and find a place to insert
    * the new entry.
    */
-  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0)
     {
       goto errout;
@@ -1035,7 +1035,7 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
 
   /* Now write the new entry to the parent directory sector */
 
-  ret = smartfs_writesector(fs, fs->fs_rootsector, (uint8_t *) &fs->fs_rwbuffer[offset],
+  ret = smartfs_writesector(fs, fs->fs_entrysector, (uint8_t *) &fs->fs_rwbuffer[offset],
                             offset, entrysize);
   if (ret < 0)
     {
@@ -1124,11 +1124,11 @@ int smartfs_deleteentry(struct smartfs_mountpt_s *fs,
 
   /* Remove the entry from the directory tree */
 
-  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0)
     {
       ferr("ERROR: Error reading directory info at sector %d\n",
-           fs->fs_rootsector);
+           fs->fs_entrysector);
       goto errout;
     }
 
@@ -1151,12 +1151,12 @@ int smartfs_deleteentry(struct smartfs_mountpt_s *fs,
 
   /* Write the updated flags back to the sector */
 
-  ret = smartfs_writesector(fs, fs->fs_rootsector, (uint8_t *) &direntry->flags,
+  ret = smartfs_writesector(fs, fs->fs_entrysector, (uint8_t *) &direntry->flags,
                             entry->doffset, sizeof(uint16_t));
   if (ret < 0)
     {
       ferr("ERROR: Error marking entry inactive at sector %d\n",
-           fs->fs_rootsector);
+           fs->fs_entrysector);
       goto errout;
     }
 
@@ -1190,10 +1190,10 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
 
   /* Read root sector into our buffer */
 
-  ret = smartfs_readsector(fs, fs->fs_rootsector);
+  ret = smartfs_readsector(fs, fs->fs_entrysector);
   if (ret < 0)
     {
-      ferr("ERROR: Error reading sector %d\n", fs->fs_rootsector);
+      ferr("ERROR: Error reading sector %d\n", fs->fs_entrysector);
       goto errout;
     }
 
@@ -1202,7 +1202,7 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
   header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
   if (header->type != SMARTFS_SECTOR_TYPE_DIR)
     {
-      ferr("ERROR: Sector %d is not a DIR sector! type = %d\n", fs->fs_rootsector, header->type);
+      ferr("ERROR: Sector %d is not a DIR sector! type = %d\n", fs->fs_entrysector, header->type);
       goto errout;
     }
 

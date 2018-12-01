@@ -255,8 +255,9 @@ struct smart_struct_s
   FAR uint8_t          *freecount;        /* Count of free sectors per erase block */
   uint16_t              rootphyssector;   /* root physical sector */
 #ifdef CONFIG_SMART_MAP_METADATA
-  uint16_t              mapphyssector;        /* map physical sector */
+  uint16_t              mapphyssector;    /* map physical sector */
 #endif
+  uint16_t              entryphyssector;  /* directory entry physical sector */
 #ifndef CONFIG_MTD_BYTE_WRITE
   FAR char             *rwbuffer;         /* Our sector read/write buffer */
 #endif
@@ -2219,6 +2220,10 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
             if (!is_format)
               smart_load_meta(dev);
+
+            dev->entryphyssector = physsector+2;
+#else
+            dev->entryphyssector = physsector+1;
 #endif
 
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
@@ -2536,6 +2541,7 @@ static inline int smart_getformat(FAR struct smart_struct_s *dev,
   fmt->nrootdirentries = dev->rootdirentries;
   fmt->rootdirnum = rootdirnum;
 #endif
+  fmt->entrysector = dev->entryphyssector;
 
   /* Add the released sectors to the reported free sector count */
 

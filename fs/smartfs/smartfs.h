@@ -327,7 +327,7 @@ struct smartfs_mountpt_s
   char                       *fs_rwbuffer;  /* Read/Write working buffer */
   char                       *fs_chainbuffer; /* Chain header buffer */
   char                       *fs_workbuffer;/* Working buffer */
-  uint8_t                     fs_rootsector;/* Root directory sector num */
+  uint8_t                     fs_entrysector;/* Directory entry sector num */
 };
 
 /****************************************************************************
