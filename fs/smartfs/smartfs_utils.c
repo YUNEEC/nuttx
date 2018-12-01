@@ -982,38 +982,22 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
 
       /* Set the newly allocated sector's type (file or dir) */
 
-#ifdef CONFIG_SMARTFS_USE_SECTOR_BUFFER
-      if (sf)
+      if ((type & SMARTFS_DIRENT_TYPE) == SMARTFS_DIRENT_TYPE_DIR)
         {
-          /* Using sector buffer and we have an open file context.  Just update
-           * the sector buffer in the open file context.
-           */
-
-          memset(sf->buffer, CONFIG_SMARTFS_ERASEDSTATE, fs->fs_llformat.availbytes);
-          header = (struct smartfs_chain_header_s *) sf->buffer;
-          header->type = SMARTFS_SECTOR_TYPE_FILE;
-          sf->bflags = SMARTFS_BFLAG_DIRTY | SMARTFS_BFLAG_NEWALLOC;
+          header->type = SMARTFS_SECTOR_TYPE_DIR;
         }
       else
-#endif
         {
-          if ((type & SMARTFS_DIRENT_TYPE) == SMARTFS_DIRENT_TYPE_DIR)
-            {
-              header->type = SMARTFS_SECTOR_TYPE_DIR;
-            }
-          else
-            {
-              header->type = SMARTFS_SECTOR_TYPE_FILE;
-            }
+          header->type = SMARTFS_SECTOR_TYPE_FILE;
+        }
 
-          ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->type,
-                                    offsetof(struct smartfs_chain_header_s, type), 1);
-          if (ret < 0)
-            {
-              ferr("ERROR: Error %d setting new sector type for sector %d\n",
-                   ret, nextsector);
-              goto errout;
-            }
+      ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->type,
+                                offsetof(struct smartfs_chain_header_s, type), 1);
+      if (ret < 0)
+        {
+          ferr("ERROR: Error %d setting new sector type for sector %d\n",
+               ret, nextsector);
+          goto errout;
         }
     }
 
@@ -1286,14 +1270,6 @@ int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
 
       if (nextsector == entry->firstsector)
         {
-#ifdef CONFIG_SMARTFS_USE_SECTOR_BUFFER
-
-          /* When we have a sector buffer in use, simply skip the first sector */
-
-          nextsector = sector;
-          continue;
-
-#else
 
           /* Fill our buffer with erased data */
 
@@ -1312,7 +1288,6 @@ int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
           /* Set the entry's data length to zero ... we just truncated */
 
           entry->datlen = 0;
-#endif  /* CONFIG_SMARTFS_USE_SECTOR_BUFFER */
         }
       else
         {
@@ -1330,27 +1305,6 @@ int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
 
       nextsector = sector;
     }
-
-  /* Now deal with the first sector in the event we are using a sector buffer
-   * like we would be if CRC is enabled.
-   */
-
-#ifdef CONFIG_SMARTFS_USE_SECTOR_BUFFER
-  if (sf)
-    {
-      /* Using sector buffer and we have an open file context.  Just update
-       * the sector buffer in the open file context.
-       */
-
-      //smartfs_readchain(fs, entry->firstsector);
-
-      memset(sf->buffer, CONFIG_SMARTFS_ERASEDSTATE, fs->fs_llformat.availbytes);
-      header = (struct smartfs_chain_header_s *) sf->buffer;
-      header->type = SMARTFS_SECTOR_TYPE_FILE;
-      sf->bflags = SMARTFS_BFLAG_DIRTY;
-      entry->datlen = 0;
-    }
-#endif
 
   ret = OK;
 

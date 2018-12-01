@@ -207,10 +207,6 @@
 #define SMARTFS_NEXTSECTOR(h)    ( *((uint16_t *) h->nextsector))
 #define SMARTFS_USED(h)          ( *((uint16_t *) h->used))
 
-#ifdef CONFIG_MTD_SMART_ENABLE_CRC
-#define CONFIG_SMARTFS_USE_SECTOR_BUFFER
-#endif
-
 #define CONFIG_SMARTFS_ENTRY_DATLEN
 //#define CONFIG_SMARTFS_DUMP
 
@@ -261,28 +257,12 @@ struct smartfs_entry_header_s
  * sector.  It manages the sector chain and used bytes in the sector.
  */
 
-#if defined(CONFIG_MTD_SMART_ENABLE_CRC) && defined(CONFIG_SMART_CRC_32)
-struct smartfs_chain_header_s
-{
-  uint8_t           nextsector[4];/* Next logical sector in the chain */
-  uint8_t           used[4];      /* Number of bytes used in this sector */
-  uint8_t           type;         /* Type of sector entry (file or dir) */
-};
-#elif defined(CONFIG_MTD_SMART_ENABLE_CRC) && defined(CONFIG_SMART_CRC_16)
 struct smartfs_chain_header_s
 {
   uint8_t           type;         /* Type of sector entry (file or dir) */
   uint8_t           nextsector[2];/* Next logical sector in the chain */
   uint8_t           used[2];      /* Number of bytes used in this sector */
 };
-#else
-struct smartfs_chain_header_s
-{
-  uint8_t           type;         /* Type of sector entry (file or dir) */
-  uint8_t           nextsector[2];/* Next logical sector in the chain */
-  uint8_t           used[2];      /* Number of bytes used in this sector */
-};
-#endif
 
 /* This structure describes the state of one open file.  This structure
  * is protected by the volume semaphore.
@@ -291,10 +271,6 @@ struct smartfs_chain_header_s
 struct smartfs_ofile_s
 {
   struct smartfs_ofile_s   *fnext;      /* Supports a singly linked list */
-#ifdef CONFIG_SMARTFS_USE_SECTOR_BUFFER
-  uint8_t*                  buffer;     /* Sector buffer to reduce writes */
-  uint8_t                   bflags;     /* Buffer flags */
-#endif
   int16_t                   crefs;      /* Reference count */
   mode_t                    oflags;     /* Open mode */
   struct smartfs_entry_s    entry;      /* Describes the SMARTFS inode entry */

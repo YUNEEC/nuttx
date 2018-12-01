@@ -52,11 +52,7 @@
 //#define CONFIG_SMART_RELOCATE
 //#define CONFIG_SMART_DUMP
 
-#if ( CONFIG_SMARTFS_ERASEDSTATE == 0xff )
 #define SMART_SMAP_INVALID         0xffff
-#else
-#define SMART_SMAP_INVALID         0
-#endif
 #define SMART_SMAP_INVALID2        0xfffe
 
 /****************************************************************************
@@ -106,9 +102,6 @@ struct mtd_smart_procfs_data_s
 #ifdef CONFIG_MTD_SMART_ALLOC_DEBUG
   FAR const struct smart_alloc_s  *allocs; /* Array of allocations */
   uint16_t            alloccount;       /* Number of items in the array */
-#endif
-#ifdef CONFIG_MTD_SMART_WEAR_LEVEL
-  uint32_t            uneven_wearcount; /* Number of uneven block erases */
 #endif
 };
 
