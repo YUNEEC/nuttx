@@ -972,7 +972,7 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   else {
       /* Allocate a new sector for the file / dir */
 
-      ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID);
+      ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID2);
       if (ret < 0)
         {
           goto errout;
@@ -989,15 +989,6 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
       else
         {
           header->type = SMARTFS_SECTOR_TYPE_FILE;
-        }
-
-      ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->type,
-                                offsetof(struct smartfs_chain_header_s, type), 1);
-      if (ret < 0)
-        {
-          ferr("ERROR: Error %d setting new sector type for sector %d\n",
-               ret, nextsector);
-          goto errout;
         }
     }
 
@@ -1024,6 +1015,27 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   if (ret < 0)
     {
       goto errout;
+    }
+
+  /* A new sector is allocated */
+  if ((sectorno == 0xFFFF) && (nextsector != 0xFFFF))
+    {
+      ret = FS_IOCTL(fs, BIOC_ALLOCSECT2, nextsector);
+
+      if (ret < 0)
+        {
+          ferr("ERROR: Error %d writing head of sector %d\n", ret, nextsector);
+          goto errout;
+        }
+
+      ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->type,
+                                offsetof(struct smartfs_chain_header_s, type), sizeof(uint8_t));
+      if (ret < 0)
+        {
+          ferr("ERROR: Error %d setting new sector type for sector %d\n",
+               ret, nextsector);
+          goto errout;
+        }
     }
 
   /* Now fill in the entry */
