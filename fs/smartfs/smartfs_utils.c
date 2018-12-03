@@ -72,14 +72,24 @@ static struct smartfs_mountpt_s *g_mounthead = NULL;
 
 int smartfs_readsector(struct smartfs_mountpt_s *fs, uint16_t sector)
 {
+  static uint32_t last_sector = 0xffff;
+  static int last_ret = OK;
+
   struct smart_read_write_s readwrite;
   int ret;
 
-  readwrite.logsector = sector;
-  readwrite.count = fs->fs_llformat.availbytes;
-  readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
-  readwrite.offset = 0;
-  ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
+  if (sector != last_sector) {
+    readwrite.logsector = sector;
+    readwrite.count = fs->fs_llformat.availbytes;
+    readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
+    readwrite.offset = 0;
+    ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
+
+    last_sector = sector;
+    last_ret = ret;
+  } else {
+    ret = last_ret;
+  }
 
   return ret;
 }
