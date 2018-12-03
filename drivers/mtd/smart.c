@@ -352,7 +352,9 @@ static void smart_dump(FAR struct smart_struct_s *dev, char *message)
   for (uint16_t sector = 0; sector < dev->totalsectors; sector++)
     {
       if (dev->sMap[sector] != SMART_SMAP_INVALID)
+        {
           printf("logical -> physical : %d -> %d\n", sector, dev->sMap[sector]);
+        }
     }
 }
 #endif
@@ -1272,11 +1274,13 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
                */
 
               if (!is_format) {
-                if (smart_internal_version != SMART_INTERNAL_VERSION)
+                if (smart_internal_version != SMART_INTERNAL_VERSION) {
                   ferr("ERROR: Error reading internal version %d, expect %d.\n",
                        smart_internal_version, SMART_INTERNAL_VERSION);
-                else
+                }
+                else {
                   ferr("ERROR: Error reading signature in physical sector %d.\n", physsector);
+                }
               }
 
               /* The root sector is not formatted yet */
@@ -1622,10 +1626,12 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector, SMART_SIGNATURE_SIZE, headerbuf);
   if (wrcount != SMART_SIGNATURE_SIZE) {
       ferr("ERROR: write signature failed\n");
-      if (wrcount < 0)
+      if (wrcount < 0) {
         return wrcount;
-      else
+      }
+      else {
         return -EFAULT;
+      }
   }
 
 #else
@@ -1641,10 +1647,12 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
       /* Unlock the mutex if we add one */
 
-      if (wrcount < 0)
+      if (wrcount < 0) {
         return wrcount;
-      else
+      }
+      else {
         return -EFAULT;
+      }
     }
 #endif
 
