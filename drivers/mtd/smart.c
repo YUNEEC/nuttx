@@ -2158,6 +2158,10 @@ static inline int smart_allocsector(FAR struct smart_struct_s *dev,
 #else
     /* Find a free physical sector */
 
+    /* NOTE: This will read next free physical sector and result
+     * one more additional block erase. So if disable logical
+     * sector mapping, nand flash drive must read from flash directly
+     * instead of flush cache. */
     logsector  = smart_findfreephyssector(dev, requested);
     if (logsector == SMART_SMAP_INVALID) {
       ret = -ENOSPC;

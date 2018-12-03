@@ -261,6 +261,7 @@ struct smartfs_chain_header_s
 {
   uint8_t           type;         /* Type of sector entry (file or dir) */
   uint8_t           nextsector[2];/* Next logical sector in the chain */
+  uint16_t          doffset;      /* Offset of the file in the directory entry */
   uint8_t           used[2];      /* Number of bytes used in this sector */
 };
 
