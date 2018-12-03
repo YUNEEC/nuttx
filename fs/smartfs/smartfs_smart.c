@@ -1007,6 +1007,16 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
                   ferr("ERROR: Error %d writing head of sector %d\n", ret, sf->currsector);
                   goto errout_with_semaphore;
                 }
+
+              header->doffset = sf->entry.doffset;
+              ret = smartfs_writesector(fs, newsector, (uint8_t *) &header->doffset,
+                                    offsetof(struct smartfs_chain_header_s, doffset), sizeof(uint16_t));
+              if (ret < 0)
+                {
+                  ferr("ERROR: Error %d setting new sector type for sector %d\n",
+                       ret, newsector);
+                  goto errout_with_semaphore;
+                }
             }
         }
     }

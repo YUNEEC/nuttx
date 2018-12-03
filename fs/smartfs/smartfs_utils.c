@@ -709,49 +709,68 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
                      memset(direntry->name, 0, fs->fs_llformat.namesize + 1);
                      strncpy(direntry->name, entry->name, fs->fs_llformat.namesize);
 #ifdef CONFIG_SMARTFS_ENTRY_DATLEN
-                     direntry->datlen = entry->datlen;
-#else
-                     direntry->datlen = 0;
+                     if (entry->datlen)
+                       {
+                         direntry->datlen = entry->datlen;
+                       }
+                     else
+                       {
+#endif
+                         direntry->datlen = 0;
 
-                     /* Scan the file's sectors to calculate the length and perform
-                      * a rudimentary check.
-                      */
+                         /* Scan the file's sectors to calculate the length and perform
+                          * a rudimentary check.
+                          */
 
 #ifdef CONFIG_SMARTFS_ALIGNED_ACCESS
-                     if ((smartfs_rdle16(&entry->flags) & SMARTFS_DIRENT_TYPE) ==
-                         SMARTFS_DIRENT_TYPE_FILE)
-                       {
-                         dirsector = smartfs_rdle16(&entry->firstsector);
-#else
-                     if ((entry->flags & SMARTFS_DIRENT_TYPE) ==
-                              SMARTFS_DIRENT_TYPE_FILE)
-                       {
-                         dirsector = entry->firstsector;
-#endif
-                         header = (struct smartfs_chain_header_s *) fs->fs_chainbuffer;
-
-                         while (dirsector != SMARTFS_ERASEDSTATE_16BIT)
+                         if ((smartfs_rdle16(&entry->flags) & SMARTFS_DIRENT_TYPE) ==
+                             SMARTFS_DIRENT_TYPE_FILE)
                            {
-                             /* Read the next sector of the file */
+                             uint16_t dirsector = smartfs_rdle16(&entry->firstsector);
+#else
+                         if ((entry->flags & SMARTFS_DIRENT_TYPE) ==
+                                  SMARTFS_DIRENT_TYPE_FILE)
+                           {
+                             uint16_t dirsector = entry->firstsector;
+#endif
+                             struct smartfs_chain_header_s *header = (struct smartfs_chain_header_s *) fs->fs_chainbuffer;
 
-                             ret = smartfs_readchain(fs, dirsector);
-                             if (ret < 0)
+                             while (dirsector != SMARTFS_ERASEDSTATE_16BIT)
                                {
-                                 ferr("ERROR: Error in sector chain at %d!\n",
+                                 /* Read the next sector of the file */
+
+                                 ret = smartfs_readchain(fs, dirsector);
+                                 if (ret < 0)
+                                   {
+                                     ferr("ERROR: Error in sector chain at %d!\n",
                                            dirsector);
-                                 break;
+                                     break;
+                                   }
+
+                                 if (header->doffset != direntry->doffset)
+                                   {
+                                     //ferr("ERROR: header doffset %d is mismatched with direntry doffset %d\n",
+                                     //     header->doffset, direntry->doffset);
+                                     break;
+                                   }
+
+                                 /* Add used bytes to the total and point to next sector */
+
+                                 if (*((uint16_t *) header->used) != SMARTFS_ERASEDSTATE_16BIT)
+                                   {
+                                     direntry->datlen += *((uint16_t *) header->used);
+                                   }
+                                 else
+                                   {
+                                     //ferr("Sector %d is not used\n", dirsector);
+                                     break;
+                                   }
+
+                                 dirsector = SMARTFS_NEXTSECTOR(header);
                                }
-
-                             /* Add used bytes to the total and point to next sector */
-
-                             if (*((uint16_t *) header->used) != SMARTFS_ERASEDSTATE_16BIT)
-                               {
-                                 direntry->datlen += *((uint16_t *) header->used);
-                               }
-
-                            dirsector = SMARTFS_NEXTSECTOR(header);
                            }
-                       }
+#ifdef CONFIG_SMARTFS_ENTRY_DATLEN
+                       } /* if (entry->datlen) */
 #endif
 
                      *filename = segment;
@@ -1030,6 +1049,16 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
 
       ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->type,
                                 offsetof(struct smartfs_chain_header_s, type), sizeof(uint8_t));
+      if (ret < 0)
+        {
+          ferr("ERROR: Error %d setting new sector type for sector %d\n",
+               ret, nextsector);
+          goto errout;
+        }
+
+      header->doffset = offset;
+      ret = smartfs_writesector(fs, nextsector, (uint8_t *) &header->doffset,
+                                offsetof(struct smartfs_chain_header_s, doffset), sizeof(uint16_t));
       if (ret < 0)
         {
           ferr("ERROR: Error %d setting new sector type for sector %d\n",
