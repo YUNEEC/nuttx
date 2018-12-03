@@ -305,6 +305,8 @@ struct smartfs_mountpt_s
   char                       *fs_chainbuffer; /* Chain header buffer */
   char                       *fs_workbuffer;/* Working buffer */
   uint8_t                     fs_entrysector;/* Directory entry sector num */
+  uint16_t                    fs_currsector; /* Current sector read for fs_rwbuffer */
+  int                         fs_currsize;   /* Current data size of fs_rwbuffer */
 };
 
 /****************************************************************************

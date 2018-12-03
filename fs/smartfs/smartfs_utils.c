@@ -75,11 +75,18 @@ int smartfs_readsector(struct smartfs_mountpt_s *fs, uint16_t sector)
   struct smart_read_write_s readwrite;
   int ret;
 
-  readwrite.logsector = sector;
-  readwrite.count = fs->fs_llformat.availbytes;
-  readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
-  readwrite.offset = 0;
-  ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
+  if (sector != fs->fs_currsector) {
+     readwrite.logsector = sector;
+     readwrite.count = fs->fs_llformat.availbytes;
+     readwrite.buffer = (uint8_t *)fs->fs_rwbuffer;
+     readwrite.offset = 0;
+     ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long) &readwrite);
+
+     fs->fs_currsector = sector;
+     fs->fs_currsize = ret;
+  } else {
+     ret = fs->fs_currsize;
+  }
 
   return ret;
 }
@@ -343,6 +350,8 @@ int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable)
 #endif /* CONFIG_SMARTFS_MULTI_ROOT_DIRS */
 
   fs->fs_rwbuffer = (char *) kmm_malloc(fs->fs_llformat.availbytes);
+  fs->fs_currsector = 0xffff;
+  fs->fs_currsize = 0;
   fs->fs_chainbuffer = (char *)kmm_malloc(sizeof(struct smartfs_chain_header_s));
   fs->fs_workbuffer = (char *) kmm_malloc(256);
 
@@ -1316,6 +1325,10 @@ int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
 
           memset(fs->fs_rwbuffer, CONFIG_SMARTFS_ERASEDSTATE, fs->fs_llformat.availbytes);
           header->type = SMARTFS_SECTOR_TYPE_FILE;
+
+          /* invalidate cache in fs->fs_rwbuffer */
+          fs->fs_currsector = 0xffff;
+          fs->fs_currsize = 0;
 
           /* Now write the new sector data */
 
