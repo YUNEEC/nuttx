@@ -1182,8 +1182,9 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
   dev->mapphyssector = SMART_SMAP_INVALID;
 
   /* Initialize the freecount and releasecount arrays */
-
-  for (physsector = 0; physsector < dev->neraseblocks; physsector++)
+  if (!is_format)
+  {
+    for (physsector = 0; physsector < dev->neraseblocks; physsector++)
     {
       if (physsector == dev->neraseblocks - 1 && dev->totalsectors == 65534)
         {
@@ -1199,6 +1200,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
       dev->releasecount[physsector / dev->sectorsPerBlk] = prerelease;
 #endif
     }
+  }
 
   /* Initialize the sector map */
 
@@ -1556,9 +1558,31 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
       return -EINVAL;
     }
 
+  /* Initialize the released and free counts */
+
+  for (x = 0; x < dev->neraseblocks; x++)
+    {
+      /* Test for a geometry with 65536 sectors.  We allow this, though
+       * we never use the last two sectors in this mode.
+       */
+
+      if (x == dev->neraseblocks && dev->totalsectors == 65534)
+        {
+          prerelease = 2;
+        }
+      else
+        {
+          prerelease = 0;
+        }
+#ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
+      dev->releasecount[x] = prerelease;
+#endif
+      dev->freecount[x] = dev->availSectPerBlk-prerelease;
+    }
+
   /* Erase the MTD device */
 
-  ret = MTD_IOCTL(dev->mtd, MTDIOC_BULKERASE, 0);
+  ret = MTD_IOCTL(dev->mtd, MTDIOC_BULKERASE, (unsigned long)((uint8_t *)dev->freecount));
   if (ret < 0)
     {
       return ret;
@@ -1659,32 +1683,12 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   dev->formatstatus = SMART_FMT_STAT_UNKNOWN;
   dev->releasesectors = 0;
 
-  /* Initialize the released and free counts */
-
-  for (x = 0; x < dev->neraseblocks; x++)
-    {
-      /* Test for a geometry with 65536 sectors.  We allow this, though
-       * we never use the last two sectors in this mode.
-       */
-
-      if (x == dev->neraseblocks && dev->totalsectors == 65534)
-        {
-          prerelease = 2;
-        }
-      else
-        {
-          prerelease = 0;
-        }
-#ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
-      dev->releasecount[x] = prerelease;
-#endif
-      dev->freecount[x] = dev->availSectPerBlk-prerelease;
-    }
 
   /* Account for the format sector */
 
-  if (dev->freecount[dev->rootphyssector] > 0)
+  if ((dev->freecount[dev->rootphyssector] > 0) && (dev->freecount[dev->rootphyssector] != SMART_FREECOUNT_BADBLOCK)) {
     dev->freecount[dev->rootphyssector]--;
+  }
 
   /* Now initialize the logical to physical sector map */
 
@@ -1701,8 +1705,9 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
   dev->sMap[SMART_METADATA_SECTOR] = 1;
 #endif
-  if (dev->freecount[SMART_METADATA_SECTOR] > 0)
+  if ((dev->freecount[SMART_METADATA_SECTOR] > 0) && (dev->freecount[SMART_METADATA_SECTOR] != SMART_FREECOUNT_BADBLOCK)) {
     dev->freecount[SMART_METADATA_SECTOR]--;
+  }
 
   smart_save_meta(dev);
 
