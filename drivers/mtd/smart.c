@@ -70,8 +70,6 @@
 #define SMART_SIGNATURE_SECTOR     0
 #define SMART_METADATA_SECTOR      1
 
-#define SMART_FREECOUNT_BADBLOCK  0xee
-
 #define SMART_INTERNAL_VERSION     1
 
 /****************************************************************************
@@ -405,7 +403,7 @@ static uint16_t smart_get_freesectors(FAR struct smart_struct_s *dev)
         freesectors += dev->freecount[block];
     }
 #ifdef CONFIG_MTD_SMART_DEBUG
-    else if (dev->freecount[block] == SMART_FREECOUNT_BADBLOCK) {
+    else if (dev->freecount[block] == MTD_BADBLOCK_MARK) {
       ferr("Bad block: block %d\n", block);
     } else {
       ferr("Unknown freecount: block %d freecount %d\n", block, dev->freecount[block]);
@@ -686,7 +684,7 @@ static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer,
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
           dev->sMap[mtdStartBlock] = SMART_SMAP_INVALID;
 #endif
-          dev->freecount[mtdStartBlock] = SMART_FREECOUNT_BADBLOCK;
+          dev->freecount[mtdStartBlock] = MTD_BADBLOCK_MARK;
         }
     }
 
@@ -783,7 +781,7 @@ static ssize_t smart_write(FAR struct inode *inode,
               ferr("ERROR: Erase block %d ret %d\n", eraseblock, ret);
 
               if (ret == -EIO) {
-                dev->freecount[eraseblock] = SMART_FREECOUNT_BADBLOCK;
+                dev->freecount[eraseblock] = MTD_BADBLOCK_MARK;
               }
 
               /* Unlock the mutex if we add one */
@@ -816,7 +814,7 @@ static ssize_t smart_write(FAR struct inode *inode,
           ferr("ERROR: Write block %d ret = %d.\n", nextblock, nxfrd);
 
           if (nxfrd == -EIO) {
-            dev->freecount[nextblock] = SMART_FREECOUNT_BADBLOCK;
+            dev->freecount[nextblock] = MTD_BADBLOCK_MARK;
           }
 
           /* Unlock the mutex if we add one */
@@ -1182,8 +1180,9 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
   dev->mapphyssector = SMART_SMAP_INVALID;
 
   /* Initialize the freecount and releasecount arrays */
-
-  for (physsector = 0; physsector < dev->neraseblocks; physsector++)
+  if (!is_format)
+  {
+    for (physsector = 0; physsector < dev->neraseblocks; physsector++)
     {
       if (physsector == dev->neraseblocks - 1 && dev->totalsectors == 65534)
         {
@@ -1199,6 +1198,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
       dev->releasecount[physsector / dev->sectorsPerBlk] = prerelease;
 #endif
     }
+  }
 
   /* Initialize the sector map */
 
@@ -1243,7 +1243,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
               /* Skip current bad block */
               if (ret == -EIO) {
-                dev->freecount[physsector] = SMART_FREECOUNT_BADBLOCK;
+                dev->freecount[physsector] = MTD_BADBLOCK_MARK;
 
                 physsector++;
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
@@ -1322,7 +1322,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
         if ((dev->freecount[physsector / dev->sectorsPerBlk] >= 0) &&
             (dev->freecount[physsector / dev->sectorsPerBlk] <= dev->sectorsPerBlk)) {
           continue;
-        } else if (dev->freecount[physsector / dev->sectorsPerBlk] == SMART_FREECOUNT_BADBLOCK) {
+        } else if (dev->freecount[physsector / dev->sectorsPerBlk] == MTD_BADBLOCK_MARK) {
           continue;
         } else {
           /* There is problem in freecount of this block.
@@ -1347,7 +1347,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
         {
           ferr("Error: Read physical sector %d error, ret = %d\n", physsector, ret);
           if (ret == -EIO) {
-            dev->freecount[physsector / dev->sectorsPerBlk] = SMART_FREECOUNT_BADBLOCK;
+            dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
           }
           continue;
         }
@@ -1556,9 +1556,31 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
       return -EINVAL;
     }
 
+  /* Initialize the released and free counts */
+
+  for (x = 0; x < dev->neraseblocks; x++)
+    {
+      /* Test for a geometry with 65536 sectors.  We allow this, though
+       * we never use the last two sectors in this mode.
+       */
+
+      if (x == dev->neraseblocks && dev->totalsectors == 65534)
+        {
+          prerelease = 2;
+        }
+      else
+        {
+          prerelease = 0;
+        }
+#ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
+      dev->releasecount[x] = prerelease;
+#endif
+      dev->freecount[x] = dev->availSectPerBlk-prerelease;
+    }
+
   /* Erase the MTD device */
 
-  ret = MTD_IOCTL(dev->mtd, MTDIOC_BULKERASE, 0);
+  ret = MTD_IOCTL(dev->mtd, MTDIOC_BULKERASE, (unsigned long)((uint8_t *)dev->freecount));
   if (ret < 0)
     {
       return ret;
@@ -1659,32 +1681,13 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   dev->formatstatus = SMART_FMT_STAT_UNKNOWN;
   dev->releasesectors = 0;
 
-  /* Initialize the released and free counts */
-
-  for (x = 0; x < dev->neraseblocks; x++)
-    {
-      /* Test for a geometry with 65536 sectors.  We allow this, though
-       * we never use the last two sectors in this mode.
-       */
-
-      if (x == dev->neraseblocks && dev->totalsectors == 65534)
-        {
-          prerelease = 2;
-        }
-      else
-        {
-          prerelease = 0;
-        }
-#ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
-      dev->releasecount[x] = prerelease;
-#endif
-      dev->freecount[x] = dev->availSectPerBlk-prerelease;
-    }
 
   /* Account for the format sector */
 
-  if (dev->freecount[dev->rootphyssector] > 0)
+  if ((dev->freecount[dev->rootphyssector] > 0) &&
+      (dev->freecount[dev->rootphyssector] != MTD_BADBLOCK_MARK)) {
     dev->freecount[dev->rootphyssector]--;
+  }
 
   /* Now initialize the logical to physical sector map */
 
@@ -1701,8 +1704,10 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
   dev->sMap[SMART_METADATA_SECTOR] = 1;
 #endif
-  if (dev->freecount[SMART_METADATA_SECTOR] > 0)
+  if ((dev->freecount[SMART_METADATA_SECTOR] > 0) &&
+      (dev->freecount[SMART_METADATA_SECTOR] != MTD_BADBLOCK_MARK)) {
     dev->freecount[SMART_METADATA_SECTOR]--;
+  }
 
   smart_save_meta(dev);
 
@@ -1770,7 +1775,7 @@ retry:
 
       count = dev->freecount[block];
 
-      if ((count != SMART_FREECOUNT_BADBLOCK) && (count > allocfreecount))
+      if ((count != MTD_BADBLOCK_MARK) && (count > allocfreecount))
         {
           /* Assign this block to alloc from */
 
@@ -1824,7 +1829,7 @@ retry:
 
           if (ret == -EIO) {
             /* Mark it as bad block */
-            dev->freecount[x / dev->sectorsPerBlk] = SMART_FREECOUNT_BADBLOCK;
+            dev->freecount[x / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
           }
 
           /* Try next sector */
@@ -1922,7 +1927,7 @@ static int smart_write_alloc_sector(FAR struct smart_struct_s *dev,
   if (ret != 1)
     {
       if (ret == -EIO) {
-        dev->freecount[physical / dev->sectorsPerBlk] = SMART_FREECOUNT_BADBLOCK;
+        dev->freecount[physical / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
         dev->sMap[logical] = SMART_SMAP_INVALID;
 #endif
@@ -2010,7 +2015,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
       sizeof(struct smart_sect_header_s) + req->offset;
   ret = smart_bytewrite(dev, offset, req->count, req->buffer);
   if (ret == -EIO) {
-    dev->freecount[physsector / dev->sectorsPerBlk] = SMART_FREECOUNT_BADBLOCK;
+    dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
     dev->sMap[req->logsector] = SMART_SMAP_INVALID;
 #endif
@@ -2315,7 +2320,7 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
     {
       ferr("ERROR: Error updating physical sector %d status\n", physsector);
       if (ret == -EIO) {
-        dev->freecount[physsector / dev->sectorsPerBlk] = SMART_FREECOUNT_BADBLOCK;
+        dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
         dev->sMap[logicalsector] = SMART_SMAP_INVALID;
 #endif

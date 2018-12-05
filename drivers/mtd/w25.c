@@ -276,7 +276,7 @@ static ssize_t w25_byteread(FAR struct w25_dev_s *priv, off_t offset,
 static ssize_t w25_pageread(FAR struct w25_dev_s *priv, off_t address,
                           size_t nbytes, bool spare, FAR uint8_t *buffer);
 #ifndef CONFIG_W25_READONLY
-static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks);
+static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount);
 static int w25_blockerase(FAR struct w25_dev_s *priv, size_t block);
 static ssize_t w25_bytewrite(FAR struct w25_dev_s *priv, off_t address,
                              size_t nbytes, FAR const uint8_t *buffer);
@@ -1393,13 +1393,14 @@ errout:
 #endif
 }
 
-static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks)
+static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount)
 {
 #ifdef CONFIG_W25_READONLY
   return -EACESS
 #else
   size_t blocksleft = nblocks;
   int ret;
+  int shift = W25_BLOCK_SHIFT - W25_SECTOR_SHIFT;
 
 #ifdef CONFIG_W25_API_DEBUG
   ferr("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
@@ -1415,6 +1416,7 @@ static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nbloc
 
       ret = w25_blockerase(priv, startblock);
       if (ret < 0) {
+        memset(freecount + (startblock<<shift), MTD_BADBLOCK_MARK, (1<<shift));
         ferr("find bad block %d\n",startblock);
       }
 
@@ -1739,7 +1741,7 @@ static int w25_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         {
           /* Erase the entire device */
 
-          ret = w25_erase2(priv, 0, priv->nblocks);
+          ret = w25_erase2(priv, 0, priv->nblocks, (uint8_t *) arg);
           if (ret == priv->nblocks)
             ret = OK;
         }
