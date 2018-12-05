@@ -62,7 +62,6 @@
 //#define CONFIG_W25_CACHE_DEBUG
 //#define CONFIG_W25_API_DEBUG
 
-#define SMARTFS_FREECOUNT_BADBLOCK  0xee
 /************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************/
@@ -277,7 +276,7 @@ static ssize_t w25_byteread(FAR struct w25_dev_s *priv, off_t offset,
 static ssize_t w25_pageread(FAR struct w25_dev_s *priv, off_t address,
                           size_t nbytes, bool spare, FAR uint8_t *buffer);
 #ifndef CONFIG_W25_READONLY
-static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *pfreecount);
+static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount);
 static int w25_blockerase(FAR struct w25_dev_s *priv, size_t block);
 static ssize_t w25_bytewrite(FAR struct w25_dev_s *priv, off_t address,
                              size_t nbytes, FAR const uint8_t *buffer);
@@ -1394,7 +1393,7 @@ errout:
 #endif
 }
 
-static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *pfreecount)
+static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount)
 {
 #ifdef CONFIG_W25_READONLY
   return -EACESS
@@ -1417,10 +1416,7 @@ static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nbloc
 
       ret = w25_blockerase(priv, startblock);
       if (ret < 0) {
-        pfreecount[startblock << shift] = SMARTFS_FREECOUNT_BADBLOCK;
-        pfreecount[(startblock << shift) + 1] = SMARTFS_FREECOUNT_BADBLOCK;
-        pfreecount[(startblock << shift) + 2] = SMARTFS_FREECOUNT_BADBLOCK;
-        pfreecount[(startblock << shift) + 3] = SMARTFS_FREECOUNT_BADBLOCK;
+        memset(freecount + (startblock<<shift), SMART_FREECOUNT_BADBLOCK, (1<<shift));
         ferr("find bad block %d\n",startblock);
       }
 

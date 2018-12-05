@@ -70,8 +70,6 @@
 #define SMART_SIGNATURE_SECTOR     0
 #define SMART_METADATA_SECTOR      1
 
-#define SMART_FREECOUNT_BADBLOCK  0xee
-
 #define SMART_INTERNAL_VERSION     1
 
 /****************************************************************************
@@ -1686,7 +1684,8 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   /* Account for the format sector */
 
-  if ((dev->freecount[dev->rootphyssector] > 0) && (dev->freecount[dev->rootphyssector] != SMART_FREECOUNT_BADBLOCK)) {
+  if ((dev->freecount[dev->rootphyssector] > 0) &&
+      (dev->freecount[dev->rootphyssector] != SMART_FREECOUNT_BADBLOCK)) {
     dev->freecount[dev->rootphyssector]--;
   }
 
@@ -1705,7 +1704,8 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
   dev->sMap[SMART_METADATA_SECTOR] = 1;
 #endif
-  if ((dev->freecount[SMART_METADATA_SECTOR] > 0) && (dev->freecount[SMART_METADATA_SECTOR] != SMART_FREECOUNT_BADBLOCK)) {
+  if ((dev->freecount[SMART_METADATA_SECTOR] > 0) &&
+      (dev->freecount[SMART_METADATA_SECTOR] != SMART_FREECOUNT_BADBLOCK)) {
     dev->freecount[SMART_METADATA_SECTOR]--;
   }
 
