@@ -2235,6 +2235,7 @@ static void smartfs_stat_common(FAR struct smartfs_mountpt_s *fs,
       buf->st_size    = entry->datlen;
       buf->st_blksize = fs->fs_llformat.availbytes;
       buf->st_blocks  = (buf->st_size + buf->st_blksize - 1) / buf->st_blksize;
+      buf->st_mtime = entry->utc;
     }
 }
 
