@@ -329,7 +329,12 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
       goto errout_with_semaphore;
     }
 
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  sf->sectortable = NULL;
+#endif
+
   sf->entry.name = NULL;
+
   ret = smartfs_finddirentry(fs, &sf->entry, relpath, &poffset,
                              &filename);
 
@@ -420,6 +425,19 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
       goto errout_with_buffer;
     }
 
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  if ((oflags & O_RDONLY) && !(oflags & O_WRONLY))
+    {
+      sf->sectortable = (uint16_t *)kmm_malloc(fs->fs_llformat.nsectors * sizeof(uint16_t));
+      if (sf->sectortable == NULL)
+        {
+          ret = -ENOMEM;
+          goto errout_with_semaphore;
+        }
+      memset(sf->sectortable, SMART_SMAP_INVALID, fs->fs_llformat.nsectors * sizeof(uint16_t));
+    }
+#endif
+
   /* Now perform the "open" on the file in direntry */
 
   sf->oflags = oflags;
@@ -464,6 +482,14 @@ errout_with_buffer:
       kmm_free(sf->entry.name);
       sf->entry.name = NULL;
     }
+
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  if (sf->sectortable != NULL)
+    {
+      kmm_free(sf->sectortable);
+      sf->sectortable = NULL;
+    }
+#endif
 
   kmm_free(sf);
 
@@ -566,6 +592,14 @@ static int smartfs_close(FAR struct file *filep)
     }
 
   /* Now free the pointer */
+
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  if (sf->sectortable != NULL)
+    {
+      kmm_free(sf->sectortable);
+      sf->sectortable = NULL;
+    }
+#endif
 
   filep->f_priv = NULL;
   if (sf->entry.name != NULL)
@@ -682,6 +716,13 @@ static ssize_t smartfs_read(FAR struct file *filep, char *buffer, size_t buflen)
           bytesread += bytestoread;
           sf->filepos += bytestoread;
           sf->curroffset += bytestoread;
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+          if (sf->sectortable)
+            {
+              sf->sectortable[sf->filepos/(fs->fs_llformat.availbytes -
+                           sizeof(struct smartfs_chain_header_s))] = sf->currsector;
+            }
+#endif
         }
 
       /* Test if we are at the end of the data in this sector */
@@ -1115,6 +1156,17 @@ static off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs,
       return newpos;
     }
 
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  /* Search sector table */
+  uint16_t index = newpos / (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s));
+  if (sf->sectortable && (sf->sectortable[index] != SMARTFS_INVALID_OFFSET))
+    {
+      sf->currsector = sf->sectortable[index];
+      sf->filepos = index * (fs->fs_llformat.availbytes - sizeof(struct smartfs_chain_header_s));
+    }
+  else {
+#endif
+
   /* Nope, we have to search for the sector and offset.  If the new pos is greater
    * than the current pos, then we can start from the beginning of the current
    * sector, otherwise we have to start from the beginning of the file.
@@ -1137,6 +1189,13 @@ static off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs,
     {
       /* Read the sector's header */
 
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+      if (sf->sectortable)
+        {
+          sf->sectortable[index++] = sf->currsector;
+        }
+#endif
+
       ret = smartfs_readchain(fs, sf->currsector);
       if (ret < 0)
         {
@@ -1150,6 +1209,15 @@ static off_t smartfs_seek_internal(struct smartfs_mountpt_s *fs,
       sf->currsector = SMARTFS_NEXTSECTOR(header);
       sf->filepos += SMARTFS_USED(header);
     }
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  }
+
+  if (sf->sectortable && (sf->currsector != SMARTFS_ERASEDSTATE_16BIT))
+    {
+      sf->sectortable[index++] = sf->currsector;
+    }
+
+#endif
 
   /* Now calculate the offset */
 
