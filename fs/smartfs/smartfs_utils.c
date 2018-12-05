@@ -1216,7 +1216,6 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
   uint16_t                        entrysize;
   int                             count;
   struct smartfs_entry_header_s  *direntry;
-  struct smartfs_chain_header_s  *header;
 
   /* Walk through the directory's sectors and count entries */
 
@@ -1228,15 +1227,6 @@ int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
   if (ret < 0)
     {
       ferr("ERROR: Error reading sector %d\n", fs->fs_entrysector);
-      goto errout;
-    }
-
-  /* Validate this is a directory type sector */
-
-  header = (struct smartfs_chain_header_s *) fs->fs_rwbuffer;
-  if (header->type != SMARTFS_SECTOR_TYPE_DIR)
-    {
-      ferr("ERROR: Sector %d is not a DIR sector! type = %d\n", fs->fs_entrysector, header->type);
       goto errout;
     }
 
