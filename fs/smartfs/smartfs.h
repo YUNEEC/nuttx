@@ -208,6 +208,7 @@
 #define SMARTFS_USED(h)          ( *((uint16_t *) h->used))
 
 #define CONFIG_SMARTFS_ENTRY_DATLEN
+#define CONFIG_SMARTFS_SECTOR_TABLE
 //#define CONFIG_SMARTFS_DUMP
 
 /* entry offset */
@@ -284,6 +285,9 @@ struct smartfs_ofile_s
                                           * used field until the file is closed,
                                           * a seek, or more data is written that
                                           * causes the sector to change. */
+#ifdef CONFIG_SMARTFS_SECTOR_TABLE
+  uint16_t                 *sectortable; /* sector table cache */
+#endif
 };
 
 /* This structure represents the overall mountpoint state.  An instance of this
