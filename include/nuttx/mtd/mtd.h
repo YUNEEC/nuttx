@@ -104,7 +104,7 @@
 #  define CONFIG_MTD_REGISTRATION   1
 #endif
 
-#define SMART_FREECOUNT_BADBLOCK  0xee
+#define MTD_BADBLOCK_MARK  0xee
 
 /****************************************************************************
  * Public Types

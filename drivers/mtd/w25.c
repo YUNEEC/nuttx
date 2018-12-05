@@ -1416,7 +1416,7 @@ static int w25_erase2(FAR struct w25_dev_s *priv, off_t startblock, size_t nbloc
 
       ret = w25_blockerase(priv, startblock);
       if (ret < 0) {
-        memset(freecount + (startblock<<shift), SMART_FREECOUNT_BADBLOCK, (1<<shift));
+        memset(freecount + (startblock<<shift), MTD_BADBLOCK_MARK, (1<<shift));
         ferr("find bad block %d\n",startblock);
       }
 
