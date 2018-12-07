@@ -929,10 +929,25 @@ config SST39VF_BASE_ADDRESS
 
 endif # MTD_SST39FV
 
-config MTD_W25
-	bool "SPI-based W25 FLASH"
-	default n
+config MTD_SPI_FLASH
+	bool "SPI flash"
 	select SPI
+	default n
+
+choice
+        prompt "SPI flash chip selection"
+        depends on MTD_SPI_FLASH
+        default MTD_W25
+        ---help---
+                Select spi chip
+
+config MTD_W25
+        bool "W25 FLASH"
+
+config MTD_GIGADEVICE
+        bool "Gigadevice FLASH"
+
+endchoice # SPI flash chip selection
 
 if MTD_W25
 

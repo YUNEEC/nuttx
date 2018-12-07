@@ -507,7 +507,7 @@ FAR struct mtd_dev_s *sst26_initialize_spi(FAR struct spi_dev_s *dev);
 FAR struct mtd_dev_s *sst39vf_initialize(void);
 
 /****************************************************************************
- * Name: w25_initialize
+ * Name: spi_initialize
  *
  * Description:
  *   Initializes the driver for SPI-based W25x16, x32, and x64 and W25q16,
@@ -515,7 +515,7 @@ FAR struct mtd_dev_s *sst39vf_initialize(void);
  *
  ****************************************************************************/
 
-FAR struct mtd_dev_s *w25_initialize(FAR struct spi_dev_s *dev);
+FAR struct mtd_dev_s *spi_initialize(FAR struct spi_dev_s *dev);
 
 /****************************************************************************
  * Name: s25fl1_initialize
