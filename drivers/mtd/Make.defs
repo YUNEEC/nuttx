@@ -104,6 +104,10 @@ ifeq ($(CONFIG_MTD_SST39FV),y)
 CSRCS += sst39vf.c
 endif
 
+ifeq ($(CONFIG_MTD_SPI_FLASH),y)
+CSRCS += spi_flash.c
+endif
+
 ifeq ($(CONFIG_MTD_W25),y)
 CSRCS += w25.c
 endif

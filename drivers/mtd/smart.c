@@ -1378,10 +1378,14 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
         } else if (dev->freecount[physsector / dev->sectorsPerBlk] == MTD_BADBLOCK_MARK) {
           continue;
         } else {
+
           /* There is problem in freecount of this block.
              Reset freecount and do physical sector in following logic */
-          ferr("Abnormal freecount found: block %d count %d\n", physsector / dev->sectorsPerBlk,
+          if (dev->freecount[physsector / dev->sectorsPerBlk] != 0xff) {
+            ferr("Abnormal freecount found: block %d count %d\n", physsector / dev->sectorsPerBlk,
                 dev->freecount[physsector / dev->sectorsPerBlk]);
+          }
+
           dev->freecount[physsector / dev->sectorsPerBlk] = dev->availSectPerBlk;
         }
       }
@@ -1738,7 +1742,6 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   dev->formatstatus = SMART_FMT_STAT_UNKNOWN;
   dev->releasesectors = 0;
-
 
   /* Account for the format sector */
 
