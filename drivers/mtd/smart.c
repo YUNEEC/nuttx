@@ -370,6 +370,8 @@ static void smart_save_meta(FAR struct smart_struct_s *dev)
                  (FAR uint8_t *) dev->freecount);
 #endif
 
+  MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
+
 #ifdef CONFIG_MTD_SMART_DEBUG
   ferr("save meta\n");
 #endif
@@ -425,9 +427,6 @@ static void smart_clear_signature(FAR struct smart_struct_s *dev)
 #endif
 
   smart_save_meta(dev);
-
-  MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
-
 }
 
 static void smart_handle_badblock(FAR struct smart_struct_s *dev, ssize_t block)
@@ -486,12 +485,6 @@ static int smart_close(FAR struct inode *inode)
   dev = (struct smart_struct_s *)inode->i_private;
 
   smart_save_meta(dev);
-
-  int ret = MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
-  if (ret < 0)
-    {
-      return ret;
-    }
 
   return OK;
 }
@@ -1772,12 +1765,6 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   smart_save_meta(dev);
 
-  ret = MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
-  if (ret < 0)
-    {
-      return ret;
-    }
-
   return OK;
 }
 #endif /* CONFIG_FS_WRITABLE */
@@ -2442,8 +2429,6 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
   dev->sMap[logicalsector] = (uint16_t) SMART_SMAP_INVALID;
 #endif
 
-  smart_save_meta(dev);
-
   ret = OK;
 
 errout:
@@ -2602,11 +2587,6 @@ static int smart_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
 
     case BIOC_FLUSH:
       smart_save_meta(dev);
-      ret = MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
-      if (ret < 0)
-      {
-         return ret;
-      }
 
       ret = OK;
       goto ok_out;
