@@ -321,19 +321,10 @@ static int w25_mark_badblock(FAR struct w25_dev_s *priv, size_t block)
   off_t address = (block << W25_BLOCK_SHIFT);
   uint8_t spare_buf[W25_SPARE_SIZE];
 
-  ssize_t nbytes;
-
-  nbytes = w25_pageread(priv, address, W25_SPARE_SIZE, true, (FAR uint8_t *)spare_buf);
-  if (nbytes != W25_SPARE_SIZE) {
-    ret = -EFAULT;
-    goto errout;
-  }
-
   /* Mark bad block */
-  spare_buf[0] = 0;
-  spare_buf[1] = 0;
+  memset(spare_buf, 0, W25_SPARE_SIZE);
 
-  nbytes = w25_pagewrite(priv, address, W25_SPARE_SIZE, true, (FAR uint8_t *)spare_buf);
+  ssize_t nbytes = w25_pagewrite(priv, address, W25_SPARE_SIZE, true, (FAR uint8_t *)spare_buf);
   if (nbytes != W25_SPARE_SIZE) {
     ret = -EFAULT;
     goto errout;
