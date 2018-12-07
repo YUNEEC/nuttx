@@ -72,7 +72,6 @@
 
 #define SMART_INTERNAL_VERSION     1
 
-#define SMART_FIND_BAD_BLOCK    0xffee
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -396,7 +395,7 @@ static void smart_load_meta(FAR struct smart_struct_s *dev)
 
 static void smart_clear_signature(FAR struct smart_struct_s *dev)
 {
-size_t      wrcount;
+  size_t      wrcount;
 
 #ifdef CONFIG_MTD_BYTE_WRITE
   char headerbuf[SMART_SIGNATURE_SIZE];
@@ -405,7 +404,7 @@ size_t      wrcount;
   wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector, SMART_SIGNATURE_SIZE, headerbuf);
   if (wrcount != SMART_SIGNATURE_SIZE) {
       ferr("ERROR: write signature failed: %d.\n",wrcount);
-       if (wrcount == -EIO) {
+      if (wrcount == -EIO) {
             dev->freecount[dev->rootphyssector] = MTD_BADBLOCK_MARK;
           }
   }
@@ -429,6 +428,12 @@ size_t      wrcount;
 
   MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
 
+}
+
+static void smart_handle_badblock(FAR struct smart_struct_s *dev, ssize_t block)
+{
+  dev->freecount[block] = MTD_BADBLOCK_MARK;
+  smart_clear_signature(dev);
 }
 
 static uint16_t smart_get_freesectors(FAR struct smart_struct_s *dev)
@@ -722,8 +727,7 @@ static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer,
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
           dev->sMap[mtdStartBlock] = SMART_SMAP_INVALID;
 #endif
-          dev->freecount[mtdStartBlock] = MTD_BADBLOCK_MARK;
-	  smart_clear_signature(dev);
+          smart_handle_badblock(dev,mtdStartBlock);
         }
     }
 
@@ -820,8 +824,7 @@ static ssize_t smart_write(FAR struct inode *inode,
               ferr("ERROR: Erase block %d ret %d\n", eraseblock, ret);
 
               if (ret == -EIO) {
-                dev->freecount[eraseblock] = MTD_BADBLOCK_MARK;
-                smart_clear_signature(dev);
+                smart_handle_badblock(dev,eraseblock);
               }
 
               /* Unlock the mutex if we add one */
@@ -854,8 +857,7 @@ static ssize_t smart_write(FAR struct inode *inode,
           ferr("ERROR: Write block %d ret = %d.\n", nextblock, nxfrd);
 
           if (nxfrd == -EIO) {
-            dev->freecount[nextblock] = MTD_BADBLOCK_MARK;
-            smart_clear_signature(dev);
+            smart_handle_badblock(dev,nextblock);
           }
 
             return nxfrd;
@@ -1131,11 +1133,10 @@ static ssize_t smart_bytewrite(FAR struct smart_struct_s *dev, size_t offset,
   ret = MTD_WRITE(dev->mtd, offset, nbytes, buffer);
   if (ret != nbytes)
   {
-    ferr("ERROR:-1- Error %d writing to device\n", -ret);
+    ferr("ERROR: Error %d writing to device\n", ret);
     if(ret == -EIO)
     {
-      dev->freecount[offset / dev->geo.blocksize] = MTD_BADBLOCK_MARK;
-      smart_clear_signature(dev);
+      smart_handle_badblock(dev,offset / dev->geo.blocksize);
     }
     goto errout;
   }
@@ -1165,8 +1166,7 @@ static ssize_t smart_bytewrite(FAR struct smart_struct_s *dev, size_t offset,
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
           dev->sMap[startblock] = SMART_SMAP_INVALID;
 #endif
-          dev->freecount[startblock] = MTD_BADBLOCK_MARK;
-          smart_clear_signature(dev);
+          smart_handle_badblock(dev,startblock);
         }
         goto errout;
       }
@@ -1182,8 +1182,7 @@ static ssize_t smart_bytewrite(FAR struct smart_struct_s *dev, size_t offset,
       {
         ferr("ERROR: Error %d writing to device\n", -ret);
 	if (ret == -EIO) {
-          dev->freecount[startblock] = MTD_BADBLOCK_MARK;
-	  smart_clear_signature(dev);
+          smart_handle_badblock(dev,startblock);
         }
         goto errout;
       }
@@ -1298,8 +1297,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
               /* Skip current bad block */
               if (ret == -EIO) {
-                dev->freecount[physsector] = MTD_BADBLOCK_MARK;
-                smart_clear_signature(dev);
+                smart_handle_badblock(dev,physsector);
                 physsector++;
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
                 if (physsector >= totalsectors)
@@ -1402,8 +1400,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
         {
           ferr("Error: Read physical sector %d error, ret = %d\n", physsector, ret);
           if (ret == -EIO) {
-            dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
-	    smart_clear_signature(dev);
+            smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
           }
           continue;
         }
@@ -1705,8 +1702,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   if (wrcount != SMART_SIGNATURE_SIZE) {
       ferr("ERROR: write signature failed\n");
       if (ret == -EIO) {
-        dev->freecount[dev->rootphyssector] = MTD_BADBLOCK_MARK;
-	smart_clear_signature(dev);
+        smart_handle_badblock(dev,dev->rootphyssector);
       }
       if (wrcount < 0) {
         return wrcount;
@@ -1727,8 +1723,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
       ferr("ERROR: Write block 0 failed: %d.\n", wrcount);
       if (ret == -EIO) {
-        dev->freecount[dev->rootphyssector] = MTD_BADBLOCK_MARK;
-        smart_clear_signature(dev);
+        smart_handle_badblock(dev,dev->rootphyssector);
       }
       /* Unlock the mutex if we add one */
 
@@ -1892,8 +1887,7 @@ retry:
 
           if (ret == -EIO) {
             /* Mark it as bad block */
-            dev->freecount[x / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
-	    smart_clear_signature(dev);
+            smart_handle_badblock(dev,x / dev->sectorsPerBlk);
           }
 
           /* Try next sector */
@@ -1902,7 +1896,7 @@ retry:
 
 	if (ret == -EIO)
 	{
-		return SMART_FIND_BAD_BLOCK;
+          return SMART_SMAP_BADBLOCK;
 	}
       /* Use this sector, if it is not committed or it is released */
 
@@ -1991,11 +1985,10 @@ static int smart_write_alloc_sector(FAR struct smart_struct_s *dev,
  if(ret != sizeof(struct smart_sect_header_s))
  {
     if (ret == -EIO) {
-      dev->freecount[physical / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
+      smart_handle_badblock(dev,physical / dev->sectorsPerBlk);
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
       dev->sMap[logical] = SMART_SMAP_INVALID;
 #endif
-      smart_clear_signature(dev);
     }
 
     ferr("ERROR: Write block %d failed, ret = %d\n", physical *
@@ -2009,11 +2002,10 @@ static int smart_write_alloc_sector(FAR struct smart_struct_s *dev,
   if (ret != 1)
     {
       if (ret == -EIO) {
-        dev->freecount[physical / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
+        smart_handle_badblock(dev,physical / dev->sectorsPerBlk);
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
         dev->sMap[logical] = SMART_SMAP_INVALID;
 #endif
-	smart_clear_signature(dev);
       }
 
       ferr("ERROR: Write block %d failed, ret = %d\n", physical *
@@ -2087,8 +2079,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
       dev->sMap[mtdblock] = SMART_SMAP_INVALID;
 #endif
-      dev->freecount[mtdblock] = MTD_BADBLOCK_MARK;
-      smart_clear_signature(dev);
+      smart_handle_badblock(dev,mtdblock);
     }
     goto errout;
   }
@@ -2102,11 +2093,10 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
       sizeof(struct smart_sect_header_s) + req->offset;
   ret = smart_bytewrite(dev, offset, req->count, req->buffer);
   if (ret == -EIO) {
-    dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
+    smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
     dev->sMap[req->logsector] = SMART_SMAP_INVALID;
 #endif
-    smart_clear_signature(dev);
   }
 
   if (ret != req->count) {
@@ -2176,8 +2166,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev,
       ferr("ERROR: Error reading phys sector %d\n", physsector);
       if (ret == -EIO) {
         /* Mark it as bad block */
-        dev->freecount[readaddr / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
-        smart_clear_signature(dev);
+        smart_handle_badblock(dev,readaddr / dev->sectorsPerBlk);
       }
       goto errout;
     }
@@ -2271,7 +2260,7 @@ static inline int smart_allocsector(FAR struct smart_struct_s *dev,
     if (logsector == SMART_SMAP_INVALID) {
       ret = -ENOSPC;
       goto errout;
-    } else if (logsector == SMART_FIND_BAD_BLOCK) {
+    } else if (logsector == SMART_SMAP_BADBLOCK) {
       ret = -EIO;
       goto errout;
     }
@@ -2312,7 +2301,7 @@ static inline int smart_allocsector2(FAR struct smart_struct_s *dev, uint16_t lo
   if (physicalsector == SMART_SMAP_INVALID)
     {
       return -ENOSPC;
-    } else if (physicalsector == SMART_FIND_BAD_BLOCK) {
+    } else if (physicalsector == SMART_SMAP_BADBLOCK) {
       return -EIO;
     }
 
@@ -2391,8 +2380,7 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
     {
        if (ret == -EIO) {
             /* Mark it as bad block */
-            dev->freecount[readaddr / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
-	    smart_clear_signature(dev);
+            smart_handle_badblock(dev,readaddr / dev->sectorsPerBlk);
           }
       goto errout;
     }
@@ -2422,11 +2410,10 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
     {
       ferr("ERROR: Error updating physical sector %d status\n", physsector);
       if (ret == -EIO) {
-        dev->freecount[physsector / dev->sectorsPerBlk] = MTD_BADBLOCK_MARK;
+        smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
 #ifdef CONFIG_MTD_SMART_LOGICAL_SECTOR
         dev->sMap[logicalsector] = SMART_SMAP_INVALID;
 #endif
-        smart_clear_signature(dev);
       }
 
       goto errout;
