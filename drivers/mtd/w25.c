@@ -181,8 +181,6 @@
 
 #define W25_BLOCK_SHIFT            17        /* Sector size 1 << 17 = 128Kb */
 #define W25_BLOCK_SIZE             (1 << 17) /* Sector size 1 << 17 = 128Kb */
-#define W25_SECTOR_SHIFT           15        /* Sector size 1 << 15 = 32768 bytes */
-#define W25_SECTOR_SIZE            (1 << 15) /* Sector size 1 << 15 = 32768 bytes */
 #define W25_PAGE_SHIFT             11        /* Sector size 1 << 11 = 2048b */
 #define W25_PAGE_SIZE              (1 << 11)  /* Sector size 1 << 11 = 2048b */
 #define W25_DIE_SHIFT              27
@@ -793,8 +791,6 @@ FAR int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
 
   priv->block_size = W25_BLOCK_SIZE;
   priv->block_shift = W25_BLOCK_SHIFT;
-  priv->sector_size = W25_SECTOR_SIZE;
-  priv->sector_shift = W25_SECTOR_SHIFT;
   priv->page_size = W25_PAGE_SIZE;
   priv->page_shift = W25_PAGE_SHIFT;
   priv->spare_size = W25_SPARE_SIZE;
