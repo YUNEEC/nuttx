@@ -144,7 +144,6 @@ struct smart_struct_s
 #endif
   uint16_t              neraseblocks;     /* Number of erase blocks or sub-sectors */
   uint16_t              lastallocblock;   /* Last  block we allocated a sector from */
-  uint16_t              mtdBlksPerSector; /* Number of MTD blocks per SMART Sector */
   uint16_t              sectorsPerBlk;    /* Number of sectors per erase block */
   uint16_t              sectorsize;       /* Sector size on device */
   uint16_t              totalsectors;     /* Total number of sectors on device */
@@ -236,7 +235,7 @@ typedef uint32_t crc_t;
 static int     smart_open(FAR struct inode *inode);
 static int     smart_close(FAR struct inode *inode);
 static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer,
-                 off_t startblock, size_t nblocks);
+                 off_t start_sector, size_t nsectors);
 static ssize_t smart_read(FAR struct inode *inode, unsigned char *buffer,
                  size_t start_sector, unsigned int nsectors);
 #ifdef CONFIG_FS_WRITABLE
@@ -304,7 +303,7 @@ static void smart_save_meta(FAR struct smart_struct_s *dev)
 {
   /* save sMap at block 1 */
 
-  MTD_WRITE(dev->mtd, dev->mapphyssector * dev->geo.blocksize, (dev->neraseblocks << 1),
+  MTD_WRITE(dev->mtd, dev->mapphyssector * dev->sectorsize, (dev->neraseblocks << 1),
                  (FAR uint8_t *) dev->freecount);
 
   MTD_IOCTL(dev->mtd, MTDIOC_FLUSH, 0);
@@ -318,7 +317,7 @@ static void smart_load_meta(FAR struct smart_struct_s *dev)
 {
   /* load sMap at block 1 */
 
-  uint16_t readaddress = dev->mapphyssector * dev->geo.blocksize;
+  uint32_t readaddress = dev->mapphyssector * dev->sectorsize;
   MTD_READ(dev->mtd, readaddress, (dev->neraseblocks << 1), (FAR uint8_t *) dev->freecount);
 
 #ifdef CONFIG_MTD_SMART_DEBUG
@@ -414,18 +413,18 @@ static int smart_close(FAR struct inode *inode)
  ****************************************************************************/
 
 static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer,
-                            off_t startblock, size_t nblocks)
+                            off_t start_sector, size_t nsectors)
 {
   ssize_t nread;
   ssize_t mtdBlocks, mtdStartBlock;
 
   /* Calculate the number of MTD blocks to read */
 
-  mtdBlocks = nblocks * dev->mtdBlksPerSector;
+  mtdBlocks = nsectors / dev->sectorsPerBlk;
 
   /* Calculate the first MTD block number */
 
-  mtdStartBlock = startblock * dev->mtdBlksPerSector;
+  mtdStartBlock = start_sector / dev->sectorsPerBlk;
 
   /* Read the full erase block into the buffer */
 
@@ -434,8 +433,8 @@ static ssize_t smart_reload(struct smart_struct_s *dev, FAR uint8_t *buffer,
   nread = MTD_BREAD(dev->mtd, mtdStartBlock, mtdBlocks, buffer);
   if (nread != mtdBlocks)
     {
-      ferr("ERROR: Read %d blocks starting at block %d failed: %d\n",
-           nblocks, startblock, nread);
+      ferr("ERROR: Read %d sectors starting at sector %d failed: %d\n",
+           nsectors, start_sector, nread);
 
       if (nread == -EIO)
         {
@@ -484,7 +483,6 @@ static ssize_t smart_write(FAR struct inode *inode,
   off_t  blkstowrite;
   off_t  offset;
   off_t  nextblock;
-  off_t  mtdBlksPerErase;
   off_t  eraseblock;
   size_t remaining;
   size_t nxfrd;
@@ -504,13 +502,12 @@ static ssize_t smart_write(FAR struct inode *inode,
    */
 
   mask         = dev->sectorsPerBlk - 1;
-  alignedblock = ((start_sector + mask) & ~mask) * dev->mtdBlksPerSector;
+  alignedblock = ((start_sector + mask) & ~mask) / dev->sectorsPerBlk;
 
   /* Convert SMART blocks into MTD blocks */
 
-  mtdstartblock = start_sector * dev->mtdBlksPerSector;
-  mtdblockcount = nsectors * dev->mtdBlksPerSector;
-  mtdBlksPerErase = dev->mtdBlksPerSector * dev->sectorsPerBlk;
+  mtdstartblock = start_sector / dev->sectorsPerBlk;
+  mtdblockcount = nsectors / dev->sectorsPerBlk;
 
   finfo("mtdsector: %d mtdnsectors: %d\n", mtdstartblock, mtdblockcount);
 
@@ -530,7 +527,7 @@ static ssize_t smart_write(FAR struct inode *inode,
         {
           /* Erase the erase block */
 
-          eraseblock = alignedblock / mtdBlksPerErase;
+          eraseblock = alignedblock;
           ret = MTD_ERASE(dev->mtd, eraseblock, 1);
           if (ret < 0)
             {
@@ -549,7 +546,7 @@ static ssize_t smart_write(FAR struct inode *inode,
 
       /* Calculate the number of blocks to write. */
 
-      blkstowrite = mtdBlksPerErase;
+      blkstowrite = 1;
       if (nextblock != alignedblock)
         {
           blkstowrite = alignedblock - nextblock;
@@ -583,7 +580,7 @@ static ssize_t smart_write(FAR struct inode *inode,
       nextblock += blkstowrite;
       remaining -= blkstowrite;
       offset += blkstowrite * dev->geo.blocksize;
-      alignedblock += mtdBlksPerErase;
+      alignedblock += 1;
     }
 
   return nsectors;
@@ -662,7 +659,6 @@ static int smart_setsectorsize(FAR struct smart_struct_s *dev, uint16_t size)
   dev->neraseblocks     = dev->geo.neraseblocks;
   dev->erasesize        = erasesize;
   dev->sectorsize       = size;
-  dev->mtdBlksPerSector = dev->sectorsize / dev->geo.blocksize;
 
   if (erasesize / dev->sectorsize > 256)
     {
@@ -784,15 +780,13 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
   int       physsector;
   int       ret;
   uint16_t  totalsectors;
-  uint16_t  sectorsize;
   uint16_t  prerelease;
   uint32_t  readaddress;
   struct    smart_sect_header_s header;
 
   finfo("Entry\n");
 
-  sectorsize = CONFIG_MTD_SMART_SECTOR_SIZE;
-  ret = smart_setsectorsize(dev, sectorsize);
+  ret = smart_setsectorsize(dev, CONFIG_MTD_SMART_SECTOR_SIZE);
   if (ret != OK)
     {
       goto err_out;
@@ -856,7 +850,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
           /* Read the sector data */
           FAR uint8_t headerbuf[SMART_SIGNATURE_SIZE];
 
-          readaddress = physsector * dev->mtdBlksPerSector * dev->geo.blocksize;
+          readaddress = physsector * dev->sectorsize;
 
           ret = MTD_READ(dev->mtd, readaddress, SMART_SIGNATURE_SIZE,
                          (FAR uint8_t *)headerbuf);
@@ -956,7 +950,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
       /* Calculate the read address for this sector */
 
-      readaddress = physsector * dev->mtdBlksPerSector * dev->geo.blocksize;
+      readaddress = physsector * dev->sectorsize;
 
       /* Read the header for this sector */
 
@@ -965,9 +959,10 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
       if (ret != sizeof(struct smart_sect_header_s))
         {
           ferr("Error: Read physical sector %d error, ret = %d\n", physsector, ret);
-          if (ret == -EIO) {
-            smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
-          }
+          if (ret == -EIO)
+            {
+              smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
+            }
           continue;
         }
 
@@ -1012,13 +1007,11 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
   ferr("   Erase size:   %10d\n", dev->sectorsPerBlk * dev->sectorsize);
   ferr("   Erase count:  %10d\n", dev->neraseblocks);
   ferr("   Sect/block:   %10d\n", dev->sectorsPerBlk);
-  ferr("   MTD Blk/Sect: %10d\n", dev->mtdBlksPerSector);
-  ferr("   Free setors:  %10d\n", smart_get_freesectors(dev));
+  ferr("   Free sectors:  %10d\n", smart_get_freesectors(dev));
 
   /* Validate the geometry */
 
-  if (dev->mtdBlksPerSector == 0 || dev->sectorsPerBlk == 0 ||
-      dev->sectorsPerBlk == 0 || dev->sectorsize == 0)
+  if (dev->sectorsPerBlk == 0 || dev->sectorsize == 0)
     {
       ferr("ERROR: Invalid Geometry!\n");
       ret = -EINVAL;
@@ -1117,7 +1110,6 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
   int         x;
   int         ret;
   uint8_t     sectsize, prerelease;
-  uint16_t    sectorsize = CONFIG_MTD_SMART_SECTOR_SIZE;
 
   finfo("Entry\n");
 
@@ -1188,7 +1180,7 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   /* Set the sector size of this sector */
 
-  sectsize = (sectorsize >> 9) << 2;
+  sectsize = (dev->sectorsize >> 9) << 2;
 
   /* Set the sector logical sector to zero and setup the header status */
 
@@ -1260,11 +1252,12 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 static uint16_t smart_findfreephyssector(FAR struct smart_struct_s *dev,
                            uint16_t requested)
 {
-  uint16_t  count, allocfreecount, allocblock;
+  uint16_t  count, allocblock;
   uint16_t  physicalsector;
-  uint16_t  x, block;
+  uint16_t  block;
   uint32_t  readaddr;
   struct    smart_sect_header_s header;
+  uint16_t  i;
   int       ret;
 
   /* Determine which erase block we should allocate the new
@@ -1273,21 +1266,16 @@ static uint16_t smart_findfreephyssector(FAR struct smart_struct_s *dev,
    */
 
 retry:
-  allocfreecount = 0;
   allocblock = 0xffff;
   physicalsector = SMART_SMAP_INVALID;
 
   if (requested >= SMART_SMAP_INVALID2) {
-    if (++dev->lastallocblock >= dev->neraseblocks)
-      {
-        dev->lastallocblock = SMART_FIRST_ALLOC_SECTOR/dev->sectorsPerBlk - 1;
-      }
-
     block = dev->lastallocblock;
   } else {
     block = requested;
   }
-  for (x = SMART_FIRST_ALLOC_SECTOR/dev->sectorsPerBlk; x < dev->neraseblocks; x++)
+
+  for (i = SMART_FIRST_ALLOC_SECTOR/dev->sectorsPerBlk; i < dev->neraseblocks; i++)
     {
       /* Test if this block has more free blocks than the
        * currently selected block
@@ -1295,14 +1283,16 @@ retry:
 
       count = dev->freecount[block];
 
-      if ((count != MTD_BADBLOCK_MARK) && (count > allocfreecount))
+      if (count != MTD_BADBLOCK_MARK)
         {
           /* Assign this block to alloc from */
 
-          if (x < dev->neraseblocks - 1 || !allocfreecount)
+          if (i < dev->neraseblocks - 1)
             {
               allocblock = block;
-              allocfreecount = count;
+#ifdef CONFIG_MTD_SMART_DEBUG
+              ferr("allocblock = %d, freecount = %d\n", allocblock, count);
+#endif
               break;
             }
         }
@@ -1329,24 +1319,25 @@ retry:
   /* Now find a free physical sector within this selected
    * erase block to allocate. */
 
-  for (x = allocblock * dev->sectorsPerBlk;
-       x < allocblock * dev->sectorsPerBlk + dev->availSectPerBlk; x++)
+  for (i = allocblock * dev->sectorsPerBlk;
+       i < allocblock * dev->sectorsPerBlk + dev->availSectPerBlk; i++)
     {
       /* Check if this physical sector is available. */
 
       /* Now check on the physical media */
 
-      readaddr = x * dev->mtdBlksPerSector * dev->geo.blocksize;
+      readaddr = i * dev->sectorsize;
       ret = MTD_READ(dev->mtd, readaddr, sizeof(struct smart_sect_header_s),
               (FAR uint8_t *) &header);
       if (ret != sizeof(struct smart_sect_header_s))
         {
           ferr("ERROR: Error reading phys sector %d, ret = %d\n", physicalsector, ret);
 
-          if (ret == -EIO) {
-            /* Mark it as bad block */
-            smart_handle_badblock(dev,x / dev->sectorsPerBlk);
-          }
+          if (ret == -EIO)
+            {
+              /* Mark it as bad block */
+              smart_handle_badblock(dev,i / dev->sectorsPerBlk);
+            }
 
           /* Try next sector */
           continue;
@@ -1367,12 +1358,12 @@ retry:
 #ifdef CONFIG_MTD_SMART_DEBUG
           if ((header.status & SMART_STATUS_COMMITTED) ==
            (CONFIG_SMARTFS_ERASEDSTATE & SMART_STATUS_COMMITTED)) {
-            ferr("choose uncommited physical sector %d\n", x);
+            ferr("choose uncommited physical sector %d\n", i);
           } else {
-            ferr("choose released physical sector %d\n", x);
+            ferr("choose released physical sector %d\n", i);
           }
 #endif
-          physicalsector = x;
+          physicalsector = i;
           if (requested >= SMART_SMAP_INVALID2) {
             dev->lastallocblock = allocblock;
           }
@@ -1408,10 +1399,9 @@ errout:
  ****************************************************************************/
 
 #ifdef CONFIG_FS_WRITABLE
-static int smart_write_alloc_sector(FAR struct smart_struct_s *dev,
-                    uint16_t logical, uint16_t physical)
+static int smart_write_alloc_sector(FAR struct smart_struct_s *dev, uint16_t sector)
 {
-  int       ret = 1;
+  int       ret;
   uint8_t   sectsize;
   FAR struct smart_sect_header_s  *header;
 
@@ -1430,19 +1420,28 @@ static int smart_write_alloc_sector(FAR struct smart_struct_s *dev,
 
   /* Write the header to the physical sector location */
 
- ret = MTD_WRITE(dev->mtd, physical * dev->mtdBlksPerSector * dev->geo.blocksize,
+  ret = MTD_WRITE(dev->mtd, sector * dev->sectorsize,
             sizeof(struct smart_sect_header_s), (FAR uint8_t *)header);
- if(ret != sizeof(struct smart_sect_header_s))
- {
-    if (ret == -EIO) {
-      smart_handle_badblock(dev,physical / dev->sectorsPerBlk);
+  if(ret != sizeof(struct smart_sect_header_s))
+    {
+      if (ret == -EIO)
+        {
+          smart_handle_badblock(dev, sector / dev->sectorsPerBlk);
+        }
+
+      ferr("ERROR: Write sector %d failed, ret = %d\n", sector, ret);
+
+      if (ret < 0)
+        {
+          return ret;
+        }
+      else
+        {
+          return -EFAULT;
+        }
     }
 
-    ferr("ERROR: Write block %d failed, ret = %d\n", physical *
-           dev->mtdBlksPerSector, ret);
-  }
-
-  return ret;
+  return OK;
 }
 #endif
 
@@ -1462,7 +1461,6 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
                     FAR struct smart_read_write_s *req)
 {
   int         ret;
-  uint32_t    mtdblock;
   uint16_t    physsector;
   size_t      offset;
 
@@ -1488,13 +1486,11 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
       goto errout;
     }
 
-  mtdblock = physsector * dev->mtdBlksPerSector;
-
   /* Not relocated.  Just write the portion of the sector that needs
    * to be written.
    */
 
-  offset = mtdblock * dev->geo.blocksize +
+  offset = physsector * dev->sectorsize +
       sizeof(struct smart_sect_header_s) + req->offset;
   ret = smart_bytewrite(dev, offset, req->count, req->buffer);
   if (ret == -EIO)
@@ -1556,7 +1552,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev,
 
   /* Read the sector data into the buffer */
 
-  readaddr = (uint32_t) physsector * dev->mtdBlksPerSector * dev->geo.blocksize +
+  readaddr = (uint32_t) physsector * dev->sectorsize +
     req->offset + sizeof(struct smart_sect_header_s);
 
   ret = MTD_READ(dev->mtd, readaddr, req->count, (FAR uint8_t *)
@@ -1619,42 +1615,48 @@ errout:
   return ret;
 }
 
-static inline int smart_allocsector2(FAR struct smart_struct_s *dev, uint16_t logsector)
+static inline int smart_allocsector2(FAR struct smart_struct_s *dev, uint16_t sector)
 {
-  uint16_t  physicalsector;     /* The selected physical sector */
-  int       ret=OK;
+  int ret;
 
-  if (logsector == SMART_SMAP_INVALID)
+  if (sector == SMART_SMAP_INVALID)
      return -ENOSPC;
 
-  /* Find a free physical sector */
+  finfo("Alloc: sector=%d, erase block=%d, free=%d\n",
+          sector, physicalsector / dev->sectorsPerBlk, smart_get_freesectors(dev));
 
-  physicalsector = logsector;
-  finfo("Alloc: log=%d, phys=%d, erase block=%d, free=%d, released=%d\n",
-          logsector, physicalsector, physicalsector /
-          dev->sectorsPerBlk, smart_get_freesectors(dev), dev->releasecount);
-
-  if (physicalsector == SMART_SMAP_INVALID)
+  if (sector == SMART_SMAP_INVALID)
     {
       return -ENOSPC;
-    } else if (physicalsector == SMART_SMAP_BADBLOCK) {
+    }
+  else if (sector == SMART_SMAP_BADBLOCK)
+    {
       return -EIO;
     }
 
-
   /* Write the logical sector to the flash.  We will fill it in with data later. */
 
-  ret = smart_write_alloc_sector(dev, logsector, physicalsector);
-  if (ret != 1)
+  ret = smart_write_alloc_sector(dev, sector);
+  if (ret != OK)
     {
       /* Error writing sector, return error */
 
       return ret;
     }
 
-  dev->freecount[physicalsector / dev->sectorsPerBlk]--;
+  dev->freecount[sector / dev->sectorsPerBlk]--;
+  if (dev->freecount[dev->lastallocblock] == 0)
+    {
+      dev->lastallocblock++;
+      if (dev->lastallocblock >= dev->neraseblocks)
+        {
+          dev->lastallocblock = SMART_FIRST_ALLOC_SECTOR/dev->sectorsPerBlk - 1;
+        }
+    }
+
 #ifdef CONFIG_MTD_SMART_DEBUG
-  ferr("freecount --: logical %d physical %d freecount = %d\n", logsector, physicalsector, dev->freecount[physicalsector / dev->sectorsPerBlk]);
+  ferr("freecount --: sector = %d, dev->freecount[%d] = %d\n",
+       sector, sector / dev->sectorsPerBlk, dev->freecount[sector / dev->sectorsPerBlk]);
 #endif
 
   return OK;
@@ -1683,15 +1685,16 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
 
   physsector = logicalsector;
 
-  readaddr = physsector * dev->mtdBlksPerSector * dev->geo.blocksize;
+  readaddr = physsector * dev->sectorsize;
   ret = MTD_READ(dev->mtd, readaddr, sizeof(struct smart_sect_header_s),
                  (FAR uint8_t *) &header);
   if (ret != sizeof(struct smart_sect_header_s))
     {
-       if (ret == -EIO) {
+       if (ret == -EIO)
+         {
             /* Mark it as bad block */
             smart_handle_badblock(dev,readaddr / dev->sectorsPerBlk);
-          }
+         }
       goto errout;
     }
 
@@ -1706,9 +1709,10 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
   if (ret != 1)
     {
       ferr("ERROR: Error updating physical sector %d status\n", physsector);
-      if (ret == -EIO) {
-        smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
-      }
+      if (ret == -EIO)
+        {
+          smart_handle_badblock(dev,physsector / dev->sectorsPerBlk);
+        }
 
       goto errout;
     }

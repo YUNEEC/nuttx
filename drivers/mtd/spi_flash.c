@@ -79,14 +79,13 @@
 
 static ssize_t spi_byteread(FAR struct spi_flash_dev_s *priv, off_t offset,
                           size_t nbytes, FAR uint8_t *buffer);
-static int spi_blockerase(FAR struct spi_flash_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount);
+static int spi_bulkerase(FAR struct spi_flash_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount);
 static ssize_t spi_bytewrite(FAR struct spi_flash_dev_s *priv, off_t address,
                              size_t nbytes, FAR const uint8_t *buffer);
 
 static int spi_cacheflush(struct spi_flash_dev_s *priv);
-static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t sector, FAR uint8_t **buffer);
-static int spi_cacheerase(struct spi_flash_dev_s *priv, size_t sector);
-static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t sector, FAR const uint8_t *buffer);
+static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t block, FAR uint8_t **buffer);
+static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t block, FAR const uint8_t *buffer);
 #ifdef CONFIG_MTD_BYTE_WRITE
 static ssize_t spi_cachebytewrite(FAR struct spi_flash_dev_s *priv, size_t offset,
                                size_t nbytes, FAR const uint8_t *buffer);
@@ -94,11 +93,11 @@ static ssize_t spi_cachebytewrite(FAR struct spi_flash_dev_s *priv, size_t offse
 
 /* MTD driver methods */
 
-static int spi_berase(FAR struct mtd_dev_s *dev, off_t startsector, size_t nsectors);
-static ssize_t spi_bread(FAR struct mtd_dev_s *dev, off_t startsector,
-                           size_t nsectors, FAR uint8_t *buf);
-static ssize_t spi_bwrite(FAR struct mtd_dev_s *dev, off_t startsector,
-                            size_t nsectors, FAR const uint8_t *buf);
+static int spi_erase(FAR struct mtd_dev_s *dev, off_t startblock, size_t nblocks);
+static ssize_t spi_bread(FAR struct mtd_dev_s *dev, off_t startblock,
+                           size_t nblocks, FAR uint8_t *buf);
+static ssize_t spi_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
+                            size_t nblocks, FAR const uint8_t *buf);
 static ssize_t spi_read(FAR struct mtd_dev_s *dev, off_t offset,
                         size_t nbytes, FAR uint8_t *buffer);
 static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg);
@@ -160,8 +159,8 @@ static void spi_dump(FAR struct mtd_dev_s *dev)
   FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
   uint8_t buffer[256];
 
-  for (int sector = 0; sector < priv->nblocks; sector ++) {
-      spi_byteread(priv, sector << priv->sector_shift, 256, buffer);
+  for (int block = 0; block < priv->nblocks; block++) {
+      spi_byteread(priv, block << priv->block_shift, 256, buffer);
 
       bool hasdata = false;
       for (int i=0; i<256; i++) {
@@ -172,7 +171,7 @@ static void spi_dump(FAR struct mtd_dev_s *dev)
 
       if (!hasdata) continue;
 
-      printf("** block %d:\n", sector);
+      printf("** block %d:\n", block);
       for (int i=0; i<256; i++) {
           printf("%02x ", buffer[i]);
           if ((i&15)==15)
@@ -293,22 +292,12 @@ errout:
   return ret;
 }
 
-static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t sector, FAR uint8_t **buffer)
+static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t block, FAR uint8_t **buffer)
 {
-  off_t block;
-  int   shift;
-  int   index;
   ssize_t ret;
 
-  /* Convert from the 512 byte sector to the erase sector size of the device.  For
-   * exmample, if the actual erase sector size if 4Kb (1 << 12), then we first
-   * shift to the right by 3 to get the sector number in 4096 increments.
-   */
-
-  shift    = priv->block_shift - priv->sector_shift;
-  block  = sector >> shift;
 #ifdef CONFIG_SPI_CACHE_DEBUG
-  ferr("sector: %ld block: %d shift=%d\n", sector, block, shift);
+  ferr("block: %d shift=%d\n", block, shift);
 #endif
 
   /* Check if the requested erase block is already in the cache */
@@ -336,83 +325,31 @@ static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t sector, FAR ui
       CLR_ERASED(priv);         /* The underlying FLASH has not been erased */
     }
 
-    ret = priv->sector_size;
+    ret = priv->block_size;
 
 errout:
-
-  /* Get the index to the 512 sector in the erase block that holds the argument */
-
-  index = sector & ((1 << shift) - 1);
 
   /* Return the address in the cache that holds this sector */
 
-  *buffer = &priv->block_buf[index << priv->sector_shift];
+  *buffer = (FAR uint8_t *)priv->block_buf;
 
   return ret;
 }
 
-static int spi_cacheerase(struct spi_flash_dev_s *priv, size_t sector)
-{
-  FAR uint8_t *cache_buf;
-  int ret;
-
-#ifdef CONFIG_SPI_CACHE_DEBUG
-  ferr("sector = %d\n", sector);
-#endif
-
-  /* First, make sure that the erase block containing the 512 byte sector is in
-   * the cache.
-   */
-
-  ret = spi_cacheread(priv, sector, &cache_buf);
-  if (ret != priv->sector_size)
-    goto errout;
-
-  /* Erase the block containing this sector if it is not already erased.
-   * The erased indicated will be cleared when the data from the erase sector
-   * is read into the cache and set here when we erase the block.
-   */
-
-  if (!IS_ERASED(priv))
-    {
-      off_t block  = sector >> (priv->block_shift - priv->sector_shift);
-      finfo("sector: %ld block: %d\n", sector, block);
-
-      ret = priv->blockerase(priv, block);
-      if (ret < 0)
-        goto errout;
-
-      SET_ERASED(priv);
-    }
-
-  /* Put the cached sector data into the erase state and mart the cache as dirty
-   * (but don't update the FLASH yet.  The caller will do that at a more optimal
-   * time).
-   */
-
-  memset(cache_buf, SPI_ERASED_STATE, priv->sector_size);
-  SET_DIRTY(priv);
-
-  ret = OK;
-
-errout:
-  return ret;
-}
-
-static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t sector, FAR const uint8_t *buffer)
+static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t block, FAR const uint8_t *buffer)
 {
   FAR uint8_t *cache_buf;
   ssize_t ret;
 
 #ifdef CONFIG_SPI_CACHE_DEBUG
-  ferr("sector = %d\n", sector);
+  ferr("block = %d\n", block);
 #endif
   /* First, make sure that the erase block containing 512 byte sector is in
    * memory.
    */
 
-  ret = spi_cacheread(priv, sector, &cache_buf);
-  if (ret != priv->sector_size)
+  ret = spi_cacheread(priv, block, &cache_buf);
+  if (ret != priv->block_size)
     goto errout;
 
   /* Erase the block containing this sector if it is not already erased.
@@ -422,9 +359,8 @@ static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t sector, F
 
   if (!IS_ERASED(priv))
     {
-      off_t block  = sector >> (priv->block_shift - priv->sector_shift);
 #ifdef CONFIG_SPI_CACHE_DEBUG
-      ferr("sector: %ld block: %d\n", sector, block);
+      ferr("block: %d\n", block);
 #endif
 
       ret = priv->blockerase(priv, block);
@@ -436,10 +372,10 @@ static ssize_t spi_cachewrite(FAR struct spi_flash_dev_s *priv, size_t sector, F
 
   /* Copy the new sector data into cached erase block */
 
-  memcpy(cache_buf, buffer, priv->sector_size);
+  memcpy(cache_buf, buffer, priv->block_size);
   SET_DIRTY(priv);
 
-  ret = priv->sector_size;
+  ret = priv->block_size;
 
 errout:
   return ret;
@@ -450,8 +386,8 @@ static ssize_t spi_cachebytewrite(FAR struct spi_flash_dev_s *priv, size_t offse
                                size_t nbytes, FAR const uint8_t *buffer)
 {
   FAR uint8_t *cache_buf;
-  off_t sector = offset >> priv->sector_shift;
-  off_t buff_offset = offset - (sector << priv->sector_shift);
+  off_t block = offset >> priv->block_shift;
+  off_t buff_offset = offset - (block << priv->block_shift);
   ssize_t ret;
 
 #ifdef CONFIG_SPI_CACHE_DEBUG
@@ -462,8 +398,8 @@ static ssize_t spi_cachebytewrite(FAR struct spi_flash_dev_s *priv, size_t offse
    * memory.
    */
 
-  ret = spi_cacheread(priv, sector, &cache_buf);
-  if (ret != priv->sector_size)
+  ret = spi_cacheread(priv, block, &cache_buf);
+  if (ret != priv->block_size)
     goto errout;
 
   cache_buf += buff_offset;
@@ -475,9 +411,8 @@ static ssize_t spi_cachebytewrite(FAR struct spi_flash_dev_s *priv, size_t offse
 
   if (!IS_ERASED(priv))
     {
-      off_t block  = sector >> (priv->block_shift - priv->sector_shift);
 #ifdef CONFIG_SPI_CACHE_DEBUG
-      ferr("sector: %ld block: %d\n", sector, block);
+      ferr("block: %d\n", block);
 #endif
 
       ret = priv->blockerase(priv, block);
@@ -499,122 +434,124 @@ errout:
 }
 #endif
 
-static int spi_berase(FAR struct mtd_dev_s *dev, off_t startsector, size_t nsectors)
+static int spi_erase_internal(FAR struct spi_flash_dev_s *priv,
+                              off_t startblock, size_t nblocks, uint8_t *freecount)
 {
-  FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
-  size_t sectorleft = nsectors;
+  size_t blockleft = nblocks;
   int ret;
 
-#ifdef CONFIG_SPI_API_DEBUG
-  ferr("startsector: %08lx nsectors: %d\n", (long)startsector, (int)nsectors);
-#endif
-
-  while (sectorleft-- > 0)
+  while (blockleft-- > 0)
     {
-      /* Erase each sector */
+      /* Erase each block */
 
-      ret = spi_cacheerase(priv, startsector);
-      if (ret < 0)
-        goto errout;
+      ret = priv->blockerase(priv, startblock);
+      if (ret < 0) {
+        if (freecount) {
+          freecount[startblock] = MTD_BADBLOCK_MARK;
+          ferr("find bad block %d\n", startblock);
+        } else {
+          goto errout;
+        }
+      }
 
-      startsector++;
+      if (startblock == priv->block)
+        {
+          memset(priv->block_buf, SPI_ERASED_STATE, priv->block_size);
+          SET_ERASED(priv);
+        }
+
+      startblock++;
     }
 
-  ret = (int)nsectors;
+  ret = (int)nblocks;
 
 errout:
   return ret;
 }
 
-static int spi_blockerase(FAR struct spi_flash_dev_s *priv, off_t startblock, size_t nblocks, uint8_t *freecount)
+static int spi_erase(FAR struct mtd_dev_s *dev, off_t startblock, size_t nblocks)
 {
+  FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
   int ret;
-  size_t blocksleft = nblocks;
-  int shift = priv->block_shift - priv->sector_shift;
 
 #ifdef CONFIG_SPI_API_DEBUG
   ferr("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 #endif
 
-  while (blocksleft-- > 0)
-    {
-      /* Erase each sector */
-
-      ret = priv->blockerase(priv, startblock);
-      if (ret < 0) {
-        memset(freecount + (startblock<<shift), MTD_BADBLOCK_MARK, (1<<shift));
-        ferr("find bad block %d\n",startblock);
-      }
-
-      startblock++;
-    }
-
-  memset(priv->block_buf, SPI_ERASED_STATE, priv->block_size);
-  SET_ERASED(priv);
-
-  ret = (int)nblocks;
+  ret = spi_erase_internal(priv, startblock, nblocks, 0);
 
   return ret;
 }
 
-static ssize_t spi_bread(FAR struct mtd_dev_s *dev, off_t startsector,
-                         size_t nsectors, FAR uint8_t *buffer)
+static int spi_bulkerase(FAR struct spi_flash_dev_s *priv,
+                         off_t startblock, size_t nblocks, uint8_t *freecount)
+{
+  int ret;
+
+#ifdef CONFIG_SPI_API_DEBUG
+  ferr("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
+#endif
+
+  ret = spi_erase_internal(priv, startblock, nblocks, freecount);
+
+  return ret;
+}
+
+static ssize_t spi_bread(FAR struct mtd_dev_s *dev, off_t startblock,
+                         size_t nblocks, FAR uint8_t *buffer)
 {
   ssize_t ret;
   FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
 
 #ifdef CONFIG_SPI_API_DEBUG
-  ferr("startsector: %08lx nsectors: %d\n", (long)startsector, (int)nsectors);
+  ferr("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 #endif
 
   /* On this device, we can handle the sector read just like the byte-oriented read */
 
-  for (int sector=0; sector<nsectors; sector++)
+  for (int block=0; block<nblocks; block++)
    {
-     int shift      = priv->block_shift - priv->sector_shift;
-     off_t block  = sector >> shift;
-
      /* read from cache if hits, otherwise read from flash */
      if (block == priv->block) {
        FAR uint8_t *cache_buf;
-       ret = spi_cacheread(priv, startsector+sector, &cache_buf);
-       if (ret != priv->sector_size)
+       ret = spi_cacheread(priv, startblock+block, &cache_buf);
+       if (ret != priv->block_size)
          goto errout;
 
-       memcpy(buffer + (sector<<priv->sector_shift), cache_buf, priv->sector_size);
+       memcpy(buffer + (block<<priv->block_shift), cache_buf, priv->block_size);
      } else {
-       ret = spi_byteread(priv, (startsector+sector) << priv->sector_shift,
-                          priv->sector_size, buffer + (sector<<priv->sector_shift));
-       if (ret != priv->sector_size)
+       ret = spi_byteread(priv, (startblock+block) << priv->block_shift,
+                          priv->block_size, buffer + (block<<priv->block_shift));
+       if (ret != priv->block_size)
          goto errout;
      }
    }
 
-  ret = nsectors;
+  ret = nblocks;
 
 errout:
 
   return ret;
 }
 
-static ssize_t spi_bwrite(FAR struct mtd_dev_s *dev, off_t startsector,
-                          size_t nsectors, FAR const uint8_t *buffer)
+static ssize_t spi_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
+                          size_t nblocks, FAR const uint8_t *buffer)
 {
   FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
   ssize_t ret;
 
 #ifdef CONFIG_SPI_API_DEBUG
-  ferr("startsector: %08lx nsectors: %d\n", (long)startsector, (int)nsectors);
+  ferr("startblock: %08lx nblocks: %d\n", (long)startblock, (int)nblocks);
 #endif
 
-  for (int i=0; i<nsectors; i++)
+  for (int i=0; i<nblocks; i++)
    {
-    ret = spi_cachewrite(priv, startsector+i, buffer);
-    if (ret != priv->sector_size)
+    ret = spi_cachewrite(priv, startblock+i, buffer);
+    if (ret != priv->block_size)
       goto errout;
    }
 
-  ret = nsectors;
+  ret = nblocks;
 
 errout:
 
@@ -702,11 +639,9 @@ static ssize_t spi_read(FAR struct mtd_dev_s *dev, off_t offset,
 
   ssize_t nread = nbytes;
   while (nbytes > 0) {
-    uint16_t sector = offset >> priv->sector_shift;
-    uint16_t buffer_offset = offset - (sector << priv->sector_shift);
-    uint16_t read_count = priv->sector_size - buffer_offset;
-    int shift = priv->block_shift - priv->sector_shift;
-    off_t block  = sector >> shift;
+    uint16_t block = offset >> priv->block_shift;
+    size_t buffer_offset = offset - (block << priv->block_shift);
+    size_t read_count = priv->block_size - buffer_offset;
 
     if (read_count > nbytes)
       read_count = nbytes;
@@ -714,8 +649,8 @@ static ssize_t spi_read(FAR struct mtd_dev_s *dev, off_t offset,
     /* read from cache if hits, otherwise read from flash */
     if (block == priv->block) {
       FAR uint8_t *cache_buf;
-      ret = spi_cacheread(priv, sector, &cache_buf);
-      if (ret != priv->sector_size)
+      ret = spi_cacheread(priv, block, &cache_buf);
+      if (ret != priv->block_size)
         goto errout;
 
        memcpy(buffer, cache_buf + buffer_offset, read_count);
@@ -735,7 +670,6 @@ errout:
   return ret;
 }
 
-
 #if defined(CONFIG_MTD_BYTE_WRITE)
 static ssize_t spi_write(FAR struct mtd_dev_s *dev, off_t offset,
                          size_t nbytes, FAR const uint8_t *buffer)
@@ -749,9 +683,10 @@ static ssize_t spi_write(FAR struct mtd_dev_s *dev, off_t offset,
 
   ssize_t nwritten = nbytes;
   while (nbytes > 0) {
-    uint16_t sector = offset >> priv->sector_shift;
-    uint16_t buffer_offset = offset - (sector << priv->sector_shift);
-    uint16_t write_count = priv->sector_size - buffer_offset;
+    uint16_t block = offset >> priv->block_shift;
+    size_t buffer_offset = offset - (block << priv->block_shift);
+    size_t write_count = priv->block_size - buffer_offset;
+
     if (write_count > nbytes)
       write_count = nbytes;
 
@@ -796,9 +731,9 @@ static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
                * appear so.
                */
 
-              geo->blocksize    = (1 << priv->sector_shift);
-              geo->erasesize    = (1 << priv->sector_shift);
-              geo->neraseblocks = priv->nblocks << (priv->block_shift - priv->sector_shift);
+              geo->blocksize    = (1 << priv->block_shift);
+              geo->erasesize    = (1 << priv->block_shift);
+              geo->neraseblocks = priv->nblocks;
               ret               = OK;
 
               finfo("blocksize: %d erasesize: %d neraseblocks: %d\n",
@@ -814,7 +749,7 @@ static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         {
           /* Erase the entire device */
 
-          ret = spi_blockerase(priv, 0, priv->nblocks, (uint8_t *) arg);
+          ret = spi_bulkerase(priv, 0, priv->nblocks, (uint8_t *) arg);
           if (ret == priv->nblocks)
             ret = OK;
         }
@@ -854,7 +789,7 @@ FAR struct mtd_dev_s *spi_initialize(FAR struct spi_dev_s *spi)
        * nullified by kmm_zalloc).
        */
 
-      priv->mtd.erase  = spi_berase;
+      priv->mtd.erase  = spi_erase;
       priv->mtd.bread  = spi_bread;
       priv->mtd.bwrite = spi_bwrite;
       priv->mtd.read   = spi_read;

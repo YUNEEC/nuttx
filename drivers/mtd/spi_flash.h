@@ -49,8 +49,8 @@ struct spi_flash_dev_s
   uint16_t              nblocks;     /* Number of erase blocks */
   uint8_t               prev_instr;  /* Previous instruction given to W25 device */
 
-  uint8_t               flags;       /* Buffered sector flags */
-  off_t                 block;       /* Erase sector number in the cache*/
+  uint8_t               flags;       /* Buffered block flags */
+  off_t                 block;       /* Erase block number in the cache*/
   FAR uint8_t           *block_buf;  /* Allocated block data */
 
   uint32_t              lastaddr;    /* Last erase or program address */
@@ -59,8 +59,6 @@ struct spi_flash_dev_s
   /* information filled by SPI device driver */
   int                   block_size;
   int                   block_shift;
-  int                   sector_size;
-  int                   sector_shift;
   int                   page_size;
   int                   page_shift;
   int                   spare_size;
