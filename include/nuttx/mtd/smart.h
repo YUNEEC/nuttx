@@ -47,9 +47,6 @@
 #include <stdint.h>
 
 #define CONFIG_SMART_MAP_METADATA
-//#define CONFIG_SMART_CACHE
-//#define CONFIG_SMART_LOCAL_CHECKFREE
-//#define CONFIG_SMART_RELOCATE
 //#define CONFIG_SMART_DUMP
 
 #define SMART_SMAP_INVALID         0xffff
@@ -68,17 +65,6 @@
  * Public Types
  ****************************************************************************/
 
-/* Structure to track SMART allocations for debugging */
-
-#ifdef CONFIG_MTD_SMART_ALLOC_DEBUG
-struct smart_alloc_s
-{
-  size_t                size;             /* Size of the allocation */
-  void*                 ptr;              /* Pointer to the data */
-  const char*           name;             /* Name of the allocation */
-};
-#endif
-
 /* The following defines the procfs data passed from the SMART MTD layer
  * from a BIOC_GETPROCFSD ioctl command.
  */
@@ -96,15 +82,6 @@ struct mtd_smart_procfs_data_s
   uint8_t             formatversion;    /* Version of the volume format */
   uint32_t            unusedsectors;    /* Number of unused sectors (free when erased) */
   uint32_t            blockerases;      /* Number block erase operations */
-
-#ifdef CONFIG_MTD_SMART_SECTOR_ERASE_DEBUG
-  FAR const uint8_t*  erasecounts;      /* Array of erase counts per erase block */
-  size_t              neraseblocks;     /* Number of erase blocks */
-#endif
-#ifdef CONFIG_MTD_SMART_ALLOC_DEBUG
-  FAR const struct smart_alloc_s  *allocs; /* Array of allocations */
-  uint16_t            alloccount;       /* Number of items in the array */
-#endif
 };
 
 /* The following defines debug command data passed from the procfs layer to
