@@ -50,8 +50,6 @@
 //#define CONFIG_SMART_DUMP
 
 #define SMART_SMAP_INVALID         0xffff
-#define SMART_SMAP_INVALID2        0xfffe
-
 #define SMART_SMAP_BADBLOCK        0xffee
 
 /****************************************************************************
