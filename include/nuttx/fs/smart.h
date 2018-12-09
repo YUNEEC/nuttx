@@ -107,6 +107,7 @@ struct smart_format_s
   uint8_t  rootdirnum;      /* Root directory number for this dev entry */
 #endif
   uint16_t entrysector;     /* Diretory entry sector */
+  uint16_t sectorsperblk;   /* Number of sectors per block */
 };
 
 /* The following defines the information for writing a logical sector

@@ -204,8 +204,8 @@
 #define offsetof(type, member)   ( (size_t) &( ( (type *) 0)->member))
 #endif
 
-#define SMARTFS_NEXTSECTOR(h)    ( *((uint16_t *) h->nextsector))
-#define SMARTFS_USED(h)          ( *((uint16_t *) h->used))
+#define SMARTFS_NEXTSECTOR(h)    ( h->nextsector )
+#define SMARTFS_USED(h)          ( h->used )
 
 #define CONFIG_SMARTFS_ENTRY_DATLEN
 #define CONFIG_SMARTFS_SECTOR_TABLE
@@ -261,9 +261,9 @@ struct smartfs_entry_header_s
 struct smartfs_chain_header_s
 {
   uint8_t           type;         /* Type of sector entry (file or dir) */
-  uint8_t           nextsector[2];/* Next logical sector in the chain */
+  uint16_t          nextsector;   /* Next logical sector in the chain */
   uint16_t          doffset;      /* Offset of the file in the directory entry */
-  uint8_t           used[2];      /* Number of bytes used in this sector */
+  uint16_t          used;         /* Number of bytes used in this sector */
 };
 
 /* This structure describes the state of one open file.  This structure

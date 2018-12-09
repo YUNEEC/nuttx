@@ -252,14 +252,9 @@ static void smartfs_dump_sector(FAR struct smartfs_mountpt_s *fs, uint16_t secto
   printf("dump sector %04x\n", sector);
   printf("=================\n");
   printf("type: %02x ", header->type);
-  printf("next sector: ");
-  for (int i=sizeof(header->nextsector)-1; i >= 0; i--) {
-     printf("%02x", header->nextsector[i]);
-  }
-  printf(" used: ");
-  for (int i=sizeof(header->used)-1; i>=0; i--) {
-     printf("%02x", header->used[i]);
-  }
+  printf("next sector: %02x", header->nextsector[i]);
+  printf(" used: %02x", header->used);
+
   printf("\n");
 
   if ((sector != SMARTFS_ROOT_DIR_SECTOR) &&
@@ -690,7 +685,7 @@ static ssize_t smartfs_read(FAR struct file *filep, char *buffer, size_t buflen)
 
       /* Get number of used bytes in this sector */
 
-      bytesinsector = *((uint16_t *) header->used);
+      bytesinsector = header->used;
       if (bytesinsector == SMARTFS_ERASEDSTATE_16BIT)
         {
           /* No bytes to read from this sector */
@@ -797,13 +792,13 @@ static int smartfs_sync_internal(struct smartfs_mountpt_s *fs,
       /* Add new byteswritten to existing value */
 
       header = (struct smartfs_chain_header_s *) fs->fs_chainbuffer;
-      if (*((uint16_t *) header->used) == SMARTFS_ERASEDSTATE_16BIT)
+      if (header->used == SMARTFS_ERASEDSTATE_16BIT)
         {
-          *((uint16_t *) header->used) = sf->byteswritten;
+          header->used = sf->byteswritten;
         }
       else
         {
-          *((uint16_t *) header->used) += sf->byteswritten;
+          header->used += sf->byteswritten;
         }
 
       ret = smartfs_writesector(fs, sf->currsector, (uint8_t *)&header->used,
@@ -1011,7 +1006,11 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
             {
               /* Allocate a new sector */
 
-              ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID2);
+              if ((sf->currsector % fs->fs_llformat.sectorsperblk) ==
+                   (fs->fs_llformat.sectorsperblk -1))
+                ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID);
+              else
+                ret = FS_IOCTL(fs, BIOC_ALLOCSECT, sf->currsector + 1);
               if (ret < 0)
                 {
                   ferr("ERROR: Error %d allocating new sector\n", ret);
@@ -1021,10 +1020,7 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
               uint16_t newsector = (uint16_t)ret;
 
               /* Copy the new sector to the old one and chain it */
-
-              header = (struct smartfs_chain_header_s *) fs->fs_chainbuffer;
-              *((uint16_t *) header->nextsector) = newsector;
-              ret = smartfs_writesector(fs, sf->currsector, (uint8_t *) header->nextsector,
+              ret = smartfs_writesector(fs, sf->currsector, (uint8_t *) &newsector,
                                         offsetof(struct smartfs_chain_header_s, nextsector), sizeof(uint16_t));
               if (ret < 0)
                 {
@@ -1036,14 +1032,14 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
                * reset the offset to "zero".
                */
 
-              if (sf->currsector == SMARTFS_NEXTSECTOR(header))
+              if (sf->currsector == newsector)
                 {
                   /* Error allocating logical sector! */
 
                   ferr("ERROR: Duplicate logical sector %d\n", sf->currsector);
                 }
 
-              sf->currsector = SMARTFS_NEXTSECTOR(header);
+              sf->currsector = newsector;
               sf->curroffset = sizeof(struct smartfs_chain_header_s);
 
               ret = FS_IOCTL(fs, BIOC_ALLOCSECT2, newsector);
@@ -1053,8 +1049,7 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
                   goto errout_with_semaphore;
                 }
 
-              header->doffset = sf->entry.doffset;
-              ret = smartfs_writesector(fs, newsector, (uint8_t *) &header->doffset,
+              ret = smartfs_writesector(fs, newsector, (uint8_t *) &sf->entry.doffset,
                                     offsetof(struct smartfs_chain_header_s, doffset), sizeof(uint16_t));
               if (ret < 0)
                 {
