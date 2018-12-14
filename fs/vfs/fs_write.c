@@ -104,7 +104,7 @@ ssize_t file_write(FAR struct file *filep, FAR const void *buf, size_t nbytes)
 
 errout:
   set_errno(errcode);
-  return ERROR;
+  return ret;
 }
 
 /****************************************************************************
