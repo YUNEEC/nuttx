@@ -835,6 +835,7 @@ static size_t smartfs_status_read(FAR struct file *filep, FAR char *buffer,
                                          "Free Sectors:      %d\nReleased Sectors:  %d\n"
                                          "Unused Sectors:    %d\nBlock Erases:      %d\n"
                                          "Sectors Per Block: %d\nSector Utilization:%d%%\n"
+                                         "Bad Blocks :       %d\n"
 #ifdef CONFIG_MTD_SMART_WEAR_LEVEL
                                          "Uneven Wear Count: %d\n"
 #endif
@@ -844,7 +845,8 @@ static size_t smartfs_status_read(FAR struct file *filep, FAR char *buffer,
                   procfs_data.formatsector, procfs_data.dirsector,
                   procfs_data.freesectors, procfs_data.releasesectors,
                   procfs_data.unusedsectors, procfs_data.blockerases,
-                  procfs_data.sectorsperblk, utilization
+                  procfs_data.sectorsperblk, utilization,
+                  procfs_data.badblocks
 #ifdef CONFIG_MTD_SMART_WEAR_LEVEL
                   , procfs_data.uneven_wearcount
 #endif

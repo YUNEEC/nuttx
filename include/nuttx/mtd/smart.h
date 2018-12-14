@@ -80,6 +80,7 @@ struct mtd_smart_procfs_data_s
   uint8_t             formatversion;    /* Version of the volume format */
   uint32_t            unusedsectors;    /* Number of unused sectors (free when erased) */
   uint32_t            blockerases;      /* Number block erase operations */
+  uint16_t            badblocks;        /* Number of bad blocks */
 };
 
 /* The following defines debug command data passed from the procfs layer to

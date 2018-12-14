@@ -403,6 +403,19 @@ static uint16_t smart_get_freesectors(FAR struct smart_struct_s *dev)
   return freesectors;
 }
 
+static uint16_t smart_get_badblocks(FAR struct smart_struct_s *dev)
+{
+  uint16_t badblocks = 0;
+
+  for (int block = 0; block < dev->neraseblocks; block++)
+  {
+    if (dev->freecount[block] == MTD_BADBLOCK_MARK) {
+      badblocks++;
+    }
+  }
+  return badblocks;
+}
+
 /****************************************************************************
  * Name: smart_open
  *
@@ -1023,7 +1036,8 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
   ferr("   Erase size:   %10d\n", dev->sectorsPerBlk * dev->sectorsize);
   ferr("   Erase count:  %10d\n", dev->neraseblocks);
   ferr("   Sect/block:   %10d\n", dev->sectorsPerBlk);
-  ferr("   Free sectors:  %10d\n", smart_get_freesectors(dev));
+  ferr("   Free sectors: %10d\n", smart_get_freesectors(dev));
+  ferr("   Bad blocks:   %10d\n", smart_get_badblocks(dev));
 
   /* Validate the geometry */
 
@@ -1784,6 +1798,7 @@ static int smart_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
       procfs_data->unusedsectors = dev->unusedsectors;
       procfs_data->blockerases = dev->blockerases;
       procfs_data->sectorsperblk = dev->sectorsPerBlk;
+      procfs_data->badblocks = smart_get_badblocks(dev);
 
       procfs_data->formatsector = dev->rootphyssector;
       procfs_data->dirsector = SMARTFS_ROOT_DIR_SECTOR;
