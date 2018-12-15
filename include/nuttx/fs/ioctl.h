@@ -234,7 +234,7 @@
 #define BIOC_FLUSH      _BIOC(0x000C)     /* Flush write cachee
                                            * IN:  None
                                            * OUT: None.  */
-#define BIOC_ALLOCSECT2 _BIOC(0x000D)     /* Allocate a logical sector step 2
+#define BIOC_WRITEHEADER _BIOC(0x000D)    /* Write alloc sector header
                                            * IN:  Logical sector
                                            * OUT: None.  */
 

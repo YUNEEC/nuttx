@@ -325,7 +325,7 @@ static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t block, FAR uin
       CLR_ERASED(priv);         /* The underlying FLASH has not been erased */
     }
 
-    ret = priv->block_size;
+  ret = priv->block_size;
 
 errout:
 
@@ -822,17 +822,17 @@ FAR struct mtd_dev_s *spi_initialize(FAR struct spi_dev_s *spi)
               return NULL;
             }
         }
-    }
 
-  priv->lastaddr = 0xffffffff;
+      priv->lastaddr = 0xffffffff;
 
-  priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
+      priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
 
-  /* Register the MTD with the procfs system if enabled */
+      /* Register the MTD with the procfs system if enabled */
 
 #ifdef CONFIG_MTD_REGISTRATION
-  mtd_register(&priv->mtd, "spi");
+      mtd_register(&priv->mtd, "spi");
 #endif
+    }
 
   /* Return the implementation-specific state structure as the MTD device */
 

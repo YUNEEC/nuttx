@@ -49,8 +49,8 @@
 #define CONFIG_SMART_MAP_METADATA
 //#define CONFIG_SMART_DUMP
 
-#define SMART_SMAP_INVALID         0xffff
-#define SMART_SMAP_BADBLOCK        0xffee
+#define SMART_SECTOR_INVALID         0xffff
+#define SMART_SECTOR_BADBLOCK        0xffee
 
 /****************************************************************************
  * Pre-processor Definitions

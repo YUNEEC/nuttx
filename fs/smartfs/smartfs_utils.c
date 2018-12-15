@@ -1009,7 +1009,7 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   else {
       /* Allocate a new sector for the file / dir */
 
-      ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID);
+      ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SECTOR_INVALID);
       if (ret < 0)
         {
           goto errout;
@@ -1057,7 +1057,7 @@ int smartfs_createentry(FAR struct smartfs_mountpt_s *fs,
   /* A new sector is allocated */
   if ((sectorno == 0xFFFF) && (nextsector != 0xFFFF))
     {
-      ret = FS_IOCTL(fs, BIOC_ALLOCSECT2, nextsector);
+      ret = FS_IOCTL(fs, BIOC_WRITEHEADER, nextsector);
 
       if (ret < 0)
         {
