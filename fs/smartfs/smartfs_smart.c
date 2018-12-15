@@ -401,7 +401,7 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
 
           ret = smartfs_createentry(fs, poffset, 0, filename,
                                     SMARTFS_DIRENT_TYPE_FILE, mode,
-                                    &sf->entry, SMART_SMAP_INVALID, sf);
+                                    &sf->entry, SMART_SECTOR_INVALID, sf);
           if (ret != OK)
             {
               goto errout_with_buffer;
@@ -429,7 +429,7 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
           ret = -ENOMEM;
           goto errout_with_semaphore;
         }
-      memset(sf->sectortable, SMART_SMAP_INVALID, fs->fs_llformat.nsectors * sizeof(uint16_t));
+      memset(sf->sectortable, SMART_SECTOR_INVALID, fs->fs_llformat.nsectors * sizeof(uint16_t));
     }
 #endif
 
@@ -1008,7 +1008,7 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
 
               if ((sf->currsector % fs->fs_llformat.sectorsperblk) ==
                    (fs->fs_llformat.sectorsperblk -1))
-                ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SMAP_INVALID);
+                ret = FS_IOCTL(fs, BIOC_ALLOCSECT, SMART_SECTOR_INVALID);
               else
                 ret = FS_IOCTL(fs, BIOC_ALLOCSECT, sf->currsector + 1);
               if (ret < 0)
@@ -1042,7 +1042,7 @@ static ssize_t smartfs_write(FAR struct file *filep, const char *buffer,
               sf->currsector = newsector;
               sf->curroffset = sizeof(struct smartfs_chain_header_s);
 
-              ret = FS_IOCTL(fs, BIOC_ALLOCSECT2, newsector);
+              ret = FS_IOCTL(fs, BIOC_WRITEHEADER, newsector);
               if (ret < 0)
                 {
                   ferr("ERROR: Error %d writing head of sector %d\n", ret, sf->currsector);
@@ -1991,7 +1991,7 @@ static int smartfs_mkdir(struct inode *mountpt, const char *relpath, mode_t mode
       /* Create the directory */
 
       ret = smartfs_createentry(fs, poffset, 0, filename,
-          SMARTFS_DIRENT_TYPE_DIR, mode, &entry, SMART_SMAP_INVALID, NULL);
+          SMARTFS_DIRENT_TYPE_DIR, mode, &entry, SMART_SECTOR_INVALID, NULL);
       if (ret != OK)
         {
           goto errout_with_semaphore;

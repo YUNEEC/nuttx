@@ -253,8 +253,6 @@ static uint16_t smart_findfreephyssector(FAR struct smart_struct_s *dev, uint16_
 static int smart_writesector(FAR struct smart_struct_s *dev, FAR struct smart_read_write_s *req);
 static inline int smart_allocsector(FAR struct smart_struct_s *dev,
                  uint16_t requested);
-static inline int smart_allocsector2(FAR struct smart_struct_s *dev,
-                 uint16_t logsector);
 #endif
 static int smart_readsector(FAR struct smart_struct_s *dev, FAR struct smart_read_write_s *req);
 
@@ -303,12 +301,22 @@ static void inline smart_mark_free(FAR struct smart_struct_s *dev, uint16_t sect
 {
   int index = sector % dev->sectorsPerBlk;
   dev->freecount[sector/dev->sectorsPerBlk] |= (1<<index);
+
+#ifdef CONFIG_MTD_SMART_DEBUG
+  ferr("freecount ++: block %d sector %d freecount %02x\n",
+        block, sector, dev->freecount[block]);
+#endif
 }
 
 static void inline smart_mark_used(FAR struct smart_struct_s *dev, uint16_t sector)
 {
   int index = sector % dev->sectorsPerBlk;
   dev->freecount[sector/dev->sectorsPerBlk] &= ~(1<<index);
+
+#ifdef CONFIG_MTD_SMART_DEBUG
+  ferr("freecount --: sector = %d, freecount[%d] = %02x\n",
+       sector, sector / dev->sectorsPerBlk, dev->freecount[sector / dev->sectorsPerBlk]);
+#endif
 }
 
 static bool inline smart_is_free(FAR struct smart_struct_s *dev, uint16_t sector)
@@ -413,6 +421,7 @@ static uint16_t smart_get_badblocks(FAR struct smart_struct_s *dev)
       badblocks++;
     }
   }
+
   return badblocks;
 }
 
@@ -506,6 +515,7 @@ static ssize_t smart_read(FAR struct inode *inode, unsigned char *buffer,
 
   DEBUGASSERT(inode && inode->i_private);
   dev = (struct smart_struct_s *)inode->i_private;
+
   return smart_reload(dev, buffer, start_sector, nsectors);
 }
 
@@ -772,8 +782,8 @@ static int smart_setsectorsize(FAR struct smart_struct_s *dev, uint16_t size)
   allocsize = dev->neraseblocks << 1;
   dev->freecount = (FAR uint8_t *) smart_malloc(dev, allocsize, "Release count");
 
-  dev->rootphyssector = SMART_SMAP_INVALID;
-  dev->mapphyssector = SMART_SMAP_INVALID;
+  dev->rootphyssector = SMART_SECTOR_INVALID;
+  dev->mapphyssector = SMART_SECTOR_INVALID;
 
   return OK;
 
@@ -839,8 +849,8 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
   totalsectors = dev->totalsectors;
   dev->formatstatus = SMART_FMT_STAT_NOFMT;
-  dev->rootphyssector = SMART_SMAP_INVALID;
-  dev->mapphyssector = SMART_SMAP_INVALID;
+  dev->rootphyssector = SMART_SECTOR_INVALID;
+  dev->mapphyssector = SMART_SECTOR_INVALID;
 
   /* Initialize the freecount and releasecount arrays */
   if (!is_format)
@@ -859,7 +869,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
 
       /* Find root sector from sector 0 */
 
-      while (dev->rootphyssector == SMART_SMAP_INVALID)
+      while (dev->rootphyssector == SMART_SECTOR_INVALID)
         {
           /* Read the sector data */
           FAR uint8_t headerbuf[SMART_SIGNATURE_SIZE];
@@ -1271,10 +1281,10 @@ static uint16_t smart_findfreephyssector(FAR struct smart_struct_s *dev,
 
 retry:
   allocblock = 0xffff;
-  physicalsector = SMART_SMAP_INVALID;
+  physicalsector = SMART_SECTOR_INVALID;
 
   /* Check whether requested sector is specified */
-  if (requested == SMART_SMAP_INVALID) {
+  if (requested == SMART_SECTOR_INVALID) {
     nextblock = dev->lastallocblock + 1;
 
     for (i = SMART_FIRST_ALLOC_SECTOR/dev->sectorsPerBlk; i < dev->neraseblocks; i++)
@@ -1319,7 +1329,7 @@ retry:
 
       /* No free sectors found!  Bug? */
 
-      physicalsector = SMART_SMAP_INVALID;
+      physicalsector = SMART_SECTOR_INVALID;
 
       goto errout;
     }
@@ -1358,7 +1368,7 @@ retry:
 
       if (ret == -EIO)
         {
-          return SMART_SMAP_BADBLOCK;
+          return SMART_SECTOR_BADBLOCK;
         }
 
       /* Use this sector, if it is not committed or it is released */
@@ -1386,7 +1396,7 @@ retry:
         }
     }
 
-  if (physicalsector == SMART_SMAP_INVALID)
+  if (physicalsector == SMART_SECTOR_INVALID)
     {
       ferr("Cannot find free sector in alloc block %d, try next block\n", allocblock);
       goto retry;
@@ -1402,7 +1412,7 @@ errout:
 }
 
 /****************************************************************************
- * Name: smart_write_alloc_sector
+ * Name: smart_write_header
  *
  * Description:  Writes a newly allocated sector's header to the RW buffer
  *               and updates sector mapping variables.  If CRC isn't enabled
@@ -1411,7 +1421,7 @@ errout:
  ****************************************************************************/
 
 #ifdef CONFIG_FS_WRITABLE
-static int smart_write_alloc_sector(FAR struct smart_struct_s *dev, uint16_t sector)
+static int smart_write_header(FAR struct smart_struct_s *dev, uint16_t sector)
 {
   int       ret;
   uint8_t   sectsize;
@@ -1491,7 +1501,7 @@ static int smart_writesector(FAR struct smart_struct_s *dev,
     }
 
   physsector = req->logsector;
-  if (physsector == SMART_SMAP_INVALID)
+  if (physsector == SMART_SECTOR_INVALID)
     {
       ferr("ERROR: Logical sector %d not allocated\n", req->logsector);
       ret = -EINVAL;
@@ -1553,7 +1563,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev,
     }
 
   physsector = req->logsector;
-  if (physsector == SMART_SMAP_INVALID)
+  if (physsector == SMART_SECTOR_INVALID)
     {
 #ifndef CONFIG_SMART_DUMP
       ferr("ERROR: Logical sector %d not allocated\n", req->logsector);
@@ -1597,7 +1607,7 @@ static inline int smart_allocsector(FAR struct smart_struct_s *dev,
                     uint16_t requested)
 {
   int       ret;
-  uint16_t  logsector = SMART_SMAP_INVALID; /* Logical sector number selected */
+  uint16_t  sector = SMART_SECTOR_INVALID; /* Logical sector number selected */
 
   /* Find a free physical sector */
 
@@ -1605,44 +1615,22 @@ static inline int smart_allocsector(FAR struct smart_struct_s *dev,
    * one more additional block erase. So if disable logical
    * sector mapping, nand flash drive must read from flash directly
    * instead of flush cache. */
-  logsector  = smart_findfreephyssector(dev, requested);
-  if (logsector == SMART_SMAP_INVALID) {
+  sector  = smart_findfreephyssector(dev, requested);
+  if (sector == SMART_SECTOR_INVALID) {
     ret = -ENOSPC;
     goto errout;
-  } else if (logsector == SMART_SMAP_BADBLOCK) {
+  } else if (sector == SMART_SECTOR_BADBLOCK) {
     ret = -EIO;
     goto errout;
   }
 
-  /* Return the logical sector number */
-  ret = (int)logsector;
-
-errout:
-  return ret;
-}
-
-static inline int smart_allocsector2(FAR struct smart_struct_s *dev, uint16_t sector)
-{
-  int ret;
-
-  /* Write the logical sector to the flash.  We will fill it in with data later. */
-
-  ret = smart_write_alloc_sector(dev, sector);
-  if (ret != OK)
-    {
-      /* Error writing sector, return error */
-
-      return ret;
-    }
+  /* Return the sector number */
+  ret = (int)sector;
 
   smart_mark_used(dev, sector);
 
-#ifdef CONFIG_MTD_SMART_DEBUG
-  ferr("freecount --: sector = %d, freecount[%d] = %02x\n",
-       sector, sector / dev->sectorsPerBlk, dev->freecount[sector / dev->sectorsPerBlk]);
-#endif
-
-  return OK;
+errout:
+  return ret;
 }
 #endif /* CONFIG_FS_WRITABLE */
 
@@ -1674,11 +1662,6 @@ static inline int smart_freesector(FAR struct smart_struct_s *dev,
     {
       smart_mark_free(dev, i);
     }
-
-#ifdef CONFIG_MTD_SMART_DEBUG
-  ferr("freecount ++: block %d sector %d freecount %02x\n",
-        block, sector, dev->freecount[block]);
-#endif
 
   ret = OK;
 
@@ -1829,8 +1812,8 @@ static int smart_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
       ret = OK;
       goto ok_out;
 
-    case BIOC_ALLOCSECT2:
-      ret = smart_allocsector2(dev, (uint16_t)arg);
+    case BIOC_WRITEHEADER:
+      ret = smart_write_header(dev, (uint16_t)arg);
       goto ok_out;
     }
 
