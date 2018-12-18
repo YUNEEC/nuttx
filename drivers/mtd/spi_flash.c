@@ -706,6 +706,114 @@ errout:
 }
 #endif
 
+int spi_test_rwe(struct mtd_dev_s *dev, uint16_t *nbadblock)
+{
+  int ret = OK;
+  uint8_t *buf;
+  uint16_t value = 0xAA;
+  uint16_t block = 10;
+  uint16_t i = 0;
+  uint16_t badblock_num = 0;
+
+  FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
+  off_t offset = block << priv->block_shift;
+  uint16_t pagesperblk = priv->block_size / priv->page_size;
+
+  buf = (FAR uint8_t *)kmm_malloc(priv->page_size);
+  if(!buf) {
+    ferr("malloc buffer error...");
+    kmm_free(buf);
+    ret = 4;
+    goto errout;
+  }
+
+  for(i=0; i<priv->nblocks; i++) {
+    ret = spi_erase(dev, i, 1);
+    if(ret != 1) {
+      if(ret == -EIO) {
+        ferr("Find bad block %d , ret: %d\n", i, ret);
+        badblock_num++;
+      } else {
+        ferr("Erase error, ret: %d\n", ret);
+        ret = 3;
+         goto errout;
+      }
+    }
+  }
+  *nbadblock = badblock_num;
+  ret = OK;
+  ferr("Find bad blocks %d / %d\n", *nbadblock, priv->nblocks);
+
+  memset(buf, value, priv->page_size);
+  for(i=0; i<pagesperblk; i++) {
+    ret = priv->pagewrite(priv, offset + (priv->page_size * i), priv->page_size, false, buf);
+    if(ret != priv->page_size) {
+      ferr("Write page %d error, ret:%d\n", i, ret);
+      ret = 2;
+      goto errout;
+    }
+  }
+  ret = OK;
+
+  for(i=0; i<pagesperblk; i++) {
+    memset(buf, 0xFF, priv->page_size);
+
+    ret = priv->pageread(priv, offset + (priv->page_size * i), priv->page_size,false, buf);
+    if(ret != priv->page_size) {
+      ferr("Read page %d error, ret:%d\n", i, ret);
+      ret = 1;
+      goto errout;
+    }
+
+    uint16_t j=0;
+    for(j=0; j<priv->page_size; j++) {
+      if(buf[j] !=value) {
+        ferr("Compare data error, 0x%x / 0x%x\n",buf[j], value);
+        ret=1;
+        goto errout;
+      }
+    }
+  }
+  ret = OK;
+
+  for(i=0; i<priv->nblocks; i++) {
+    ret = spi_erase(dev, i, 1);
+    if(ret != 1) {
+      if(ret == -EIO) {
+        ferr("Find bad block %d , ret: %d\n", i, ret);
+      } else {
+        ferr("Erase error, ret: %d\n", ret);
+        ret = 3;
+        goto errout;
+      }
+    }
+  }
+  ret = OK;
+
+  for(i=0; i<pagesperblk; i++) {
+    ret = priv->pageread(priv, offset + (priv->page_size * i), priv->page_size,false, buf);
+    if(ret != priv->page_size) {
+      ferr("Read page %d error, ret:%d\n", i, ret);
+      ret = 1;
+      goto errout;
+    }
+
+    uint16_t j=0;
+    for(j=0; j<priv->page_size; j++) {
+      if(buf[j] !=0xFF) {
+        ferr("Compare data error, 0x%x / 0x%x\n",buf[j], 0xFF);
+        ret=1;
+        goto errout;
+      }
+    }
+  }
+  ret = OK;
+
+errout:
+  kmm_free(buf);
+  return ret;
+}
+
 static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 {
   FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)dev;
@@ -760,6 +868,23 @@ static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
         ret = spi_cacheflush(priv);
         break;
       }
+
+      case MTDIOC_GETID:
+        {
+          uint16_t *id = (uint16_t *)((uintptr_t)arg);
+          id[0] = priv->manufacturer;
+          id[1] = priv->memory;
+          id[2] = priv->capacity;
+          ret = OK;
+          break;
+        }
+
+      case MTDIOC_TESTRWE:
+        {
+          uint16_t *num = (uint16_t *)((uintptr_t)arg);
+          ret = spi_test_rwe(dev, num);
+          break;
+        }
 
       case MTDIOC_XIPBASE:
       default:

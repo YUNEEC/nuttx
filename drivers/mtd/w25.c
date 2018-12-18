@@ -327,6 +327,10 @@ static inline int w25_readid(struct spi_flash_dev_s *priv)
   SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
   w25_unlock(priv->spi);
 
+  priv->manufacturer = manufacturer;
+  priv->memory = memory;
+  priv->capacity = capacity;
+
   finfo("manufacturer: %02x memory: %02x capacity: %02x\n",
         manufacturer, memory, capacity);
 

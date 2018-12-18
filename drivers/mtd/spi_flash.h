@@ -63,6 +63,10 @@ struct spi_flash_dev_s
   int                   page_shift;
   int                   spare_size;
 
+  uint16_t              manufacturer;
+  uint16_t              memory;
+  uint16_t              capacity;
+
   int (*blockerase)(struct spi_flash_dev_s *priv, size_t block);
   ssize_t (*pageread)(FAR struct spi_flash_dev_s *priv, off_t address, size_t nbytes,
                             bool spare, FAR uint8_t *buffer);
