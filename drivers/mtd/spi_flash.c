@@ -706,6 +706,13 @@ errout:
 }
 #endif
 
+enum spi_rwe_err {
+  SPI_READ_ERR = 1,
+  SPI_WRITE_ERR,
+  SPI_ERASE_ERR,
+  SPI_OTHER_ERR
+};
+
 int spi_test_rwe(struct mtd_dev_s *dev, uint16_t *nbadblock)
 {
   int ret = OK;
@@ -720,89 +727,83 @@ int spi_test_rwe(struct mtd_dev_s *dev, uint16_t *nbadblock)
   uint16_t pagesperblk = priv->block_size / priv->page_size;
 
   buf = (FAR uint8_t *)kmm_malloc(priv->page_size);
-  if(!buf) {
+  if (!buf) {
     ferr("malloc buffer error...");
     kmm_free(buf);
-    ret = 4;
+    ret = SPI_OTHER_ERR;
     goto errout;
   }
 
-  for(i=0; i<priv->nblocks; i++) {
+  for (i=0; i<priv->nblocks; i++) {
     ret = spi_erase(dev, i, 1);
-    if(ret != 1) {
+    if (ret != 1) {
       if(ret == -EIO) {
         ferr("Find bad block %d , ret: %d\n", i, ret);
         badblock_num++;
       } else {
         ferr("Erase error, ret: %d\n", ret);
-        ret = 3;
-         goto errout;
+        ret = SPI_ERASE_ERR;
+        goto errout;
       }
     }
   }
   *nbadblock = badblock_num;
-  ret = OK;
   ferr("Find bad blocks %d / %d\n", *nbadblock, priv->nblocks);
 
   memset(buf, value, priv->page_size);
-  for(i=0; i<pagesperblk; i++) {
+  for (i=0; i<pagesperblk; i++) {
     ret = priv->pagewrite(priv, offset + (priv->page_size * i), priv->page_size, false, buf);
-    if(ret != priv->page_size) {
+    if (ret != priv->page_size) {
       ferr("Write page %d error, ret:%d\n", i, ret);
-      ret = 2;
+      ret = SPI_WRITE_ERR;
       goto errout;
     }
   }
-  ret = OK;
 
-  for(i=0; i<pagesperblk; i++) {
+  for (i=0; i<pagesperblk; i++) {
     memset(buf, 0xFF, priv->page_size);
 
     ret = priv->pageread(priv, offset + (priv->page_size * i), priv->page_size,false, buf);
-    if(ret != priv->page_size) {
+    if (ret != priv->page_size) {
       ferr("Read page %d error, ret:%d\n", i, ret);
-      ret = 1;
+      ret = SPI_READ_ERR;
       goto errout;
     }
 
-    uint16_t j=0;
-    for(j=0; j<priv->page_size; j++) {
-      if(buf[j] !=value) {
-        ferr("Compare data error, 0x%x / 0x%x\n",buf[j], value);
-        ret=1;
+    for (uint16_t j=0; j<priv->page_size; j++) {
+      if (buf[j] != value) {
+        ferr("Compare data error, actual/expect: 0x%x / 0x%x\n",buf[j], value);
+        ret = SPI_READ_ERR;
         goto errout;
       }
     }
   }
-  ret = OK;
 
-  for(i=0; i<priv->nblocks; i++) {
+  for (i=0; i<priv->nblocks; i++) {
     ret = spi_erase(dev, i, 1);
-    if(ret != 1) {
-      if(ret == -EIO) {
+    if (ret != 1) {
+      if (ret == -EIO) {
         ferr("Find bad block %d , ret: %d\n", i, ret);
       } else {
         ferr("Erase error, ret: %d\n", ret);
-        ret = 3;
+        ret = SPI_ERASE_ERR;
         goto errout;
       }
     }
   }
-  ret = OK;
 
-  for(i=0; i<pagesperblk; i++) {
+  for (i=0; i<pagesperblk; i++) {
     ret = priv->pageread(priv, offset + (priv->page_size * i), priv->page_size,false, buf);
-    if(ret != priv->page_size) {
+    if (ret != priv->page_size) {
       ferr("Read page %d error, ret:%d\n", i, ret);
-      ret = 1;
+      ret = SPI_READ_ERR;
       goto errout;
     }
 
-    uint16_t j=0;
-    for(j=0; j<priv->page_size; j++) {
-      if(buf[j] !=0xFF) {
-        ferr("Compare data error, 0x%x / 0x%x\n",buf[j], 0xFF);
-        ret=1;
+    for (uint16_t j=0; j<priv->page_size; j++) {
+      if (buf[j] != 0xFF) {
+        ferr("Compare data error, actual/expect: 0x%x / 0x%x\n",buf[j], 0xFF);
+        ret = SPI_READ_ERR;
         goto errout;
       }
     }
@@ -810,7 +811,9 @@ int spi_test_rwe(struct mtd_dev_s *dev, uint16_t *nbadblock)
   ret = OK;
 
 errout:
-  kmm_free(buf);
+  if (!buf) {
+    kmm_free(buf);
+  }
   return ret;
 }
 

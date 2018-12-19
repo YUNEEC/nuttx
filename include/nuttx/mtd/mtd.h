@@ -84,7 +84,7 @@
                                            * OUT: None */
 #define MTDIOC_GETID      _MTDIOC(0x0009) /* IN:  None
                                            * OUT: Device ID */
-#define MTDIOC_TESTRWE    _MTDIOC(0x0010) /* IN:  None
+#define MTDIOC_TESTRWE    _MTDIOC(0x0010) /* IN:  Pointer of bad block number
                                            * OUT: Number of bad blocks */
 
 /* Macros to hide implementation */
