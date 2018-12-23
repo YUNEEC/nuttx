@@ -50,6 +50,14 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#ifdef NDEBUG
+
+#define PANIC()
+#define ASSERT(f)
+#define VERIFY(f)
+
+#else
+
 /* Macro Name: PANIC, ASSERT, VERIFY, et al. */
 
 #undef PANIC        /* Unconditional abort */
@@ -67,6 +75,8 @@
 
 #define ASSERT(f)        do { if (!(f)) PANIC(); } while (0)
 #define VERIFY(f)        do { if ((f) < 0) PANIC(); } while (0)
+
+#endif
 
 #ifdef CONFIG_DEBUG_ASSERTIONS
 #  define DEBUGPANIC()   PANIC()
