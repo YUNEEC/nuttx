@@ -117,7 +117,12 @@ int sem_post(FAR sem_t *sem)
 
       ASSERT(sem->semcount < SEM_VALUE_MAX);
       sem_releaseholder(sem);
-      sem->semcount++;
+
+      /* For signaling semaphore, sem_post may increase count quicker
+         than decreaing by sem_wait. In such case, we should not let the
+         count overflow. Otherwise, it beccomes -32767 after overflow. */
+      if ((sem->semcount+1) < SEM_VALUE_MAX)
+          sem->semcount++;
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
       /* Don't let any unblocked tasks run until we complete any priority
