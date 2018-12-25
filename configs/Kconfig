@@ -1478,7 +1478,7 @@ config ARCH_BOARD_SIM
 		This port does not support interrupts or a real timer (and hence no
 		round robin scheduler)  Otherwise, it is complete.
 
-config ARCH_BOARD_TAP_V3
+config ARCH_BOARD_TAP_H520C
 	bool "H520C board"
 	depends on ARCH_CHIP_STM32F7
 	select ARCH_HAVE_LEDS
@@ -1487,7 +1487,7 @@ config ARCH_BOARD_TAP_V3
 	---help---
 		Select this option for H520C board
 
-config ARCH_BOARD_TAP_V3_2
+config ARCH_BOARD_TAP_V18S
 	bool "V18S board"
 	depends on ARCH_CHIP_STM32F7
 	select ARCH_HAVE_LEDS
@@ -1496,7 +1496,7 @@ config ARCH_BOARD_TAP_V3_2
 	---help---
 		Select this option for V18S board
 
-config ARCH_BOARD_TAP_V3_3
+config ARCH_BOARD_TAP_V18S02
         bool "V18S02 board"
         depends on ARCH_CHIP_STM32F7
         select ARCH_HAVE_LEDS
@@ -1504,6 +1504,15 @@ config ARCH_BOARD_TAP_V3_3
         select ARCH_HAVE_IRQBUTTONS
         ---help---
                 Select this option for V18S02 board
+
+config ARCH_BOARD_TAP_H3
+	bool "H3 board"
+	depends on ARCH_CHIP_STM32F7
+	select ARCH_HAVE_LEDS
+	select ARCH_HAVE_BUTTONS
+	select ARCH_HAVE_IRQBUTTONS
+	---help---
+		Select this option for H3 board
 
 config ARCH_BOARD_CUSTOM
 	bool "Custom development board"
@@ -1718,9 +1727,10 @@ config ARCH_BOARD
 	default "zkit-arm-1769"            if ARCH_BOARD_ZKITARM
 	default "sim"                      if ARCH_BOARD_SIM
 	default "moxa"                     if ARCH_BOARD_MOXA
-	default "tap-v3"                   if ARCH_BOARD_TAP_V3
-	default "tap-v3-2"                 if ARCH_BOARD_TAP_V3_2
-	default "tap-v3-3"                 if ARCH_BOARD_TAP_V3_3
+	default "tap-h520c"                if ARCH_BOARD_TAP_H520C
+	default "tap-v18s"                 if ARCH_BOARD_TAP_V18S
+	default "tap-v18s02"               if ARCH_BOARD_TAP_V18S02
+	default "tap-h3"                   if ARCH_BOARD_TAP_H3
 
 comment "Common Board Options"
 
