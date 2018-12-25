@@ -80,8 +80,12 @@
                                            *      0=Use normal memory region
                                            *      1=Use alternate/extended memory
                                            * OUT: None */
-#define MTDIOC_FLUSH      _MTDIOC(0x0008)  /* IN: None
-                                              OUT: None */
+#define MTDIOC_FLUSH      _MTDIOC(0x0008) /* IN:  None
+                                           * OUT: None */
+#define MTDIOC_GETID      _MTDIOC(0x0009) /* IN:  None
+                                           * OUT: Device ID */
+#define MTDIOC_TESTRWE    _MTDIOC(0x0010) /* IN:  Pointer of bad block number
+                                           * OUT: Number of bad blocks */
 
 /* Macros to hide implementation */
 
