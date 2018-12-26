@@ -331,6 +331,10 @@ static bool inline smart_is_free(FAR struct smart_struct_s *dev, uint16_t sector
 static void smart_save_meta(FAR struct smart_struct_s *dev)
 {
   /* save sMap at block 1 */
+  if (dev->mapphyssector == SMART_SECTOR_INVALID) {
+    ferr("mapphyssector is invalid.\n");
+    return;
+  }
 
   MTD_WRITE(dev->mtd, dev->mapphyssector * dev->sectorsize, (dev->neraseblocks << 1),
                  (FAR uint8_t *) dev->freecount);
@@ -345,6 +349,10 @@ static void smart_save_meta(FAR struct smart_struct_s *dev)
 static void smart_load_meta(FAR struct smart_struct_s *dev)
 {
   /* load sMap at block 1 */
+  if (dev->mapphyssector == SMART_SECTOR_INVALID) {
+    ferr("mapphyssector is invalid.\n");
+    return;
+  }
 
   uint32_t readaddress = dev->mapphyssector * dev->sectorsize;
   MTD_READ(dev->mtd, readaddress, (dev->neraseblocks << 1), (FAR uint8_t *) dev->freecount);
@@ -359,9 +367,15 @@ static void smart_clear_signature(FAR struct smart_struct_s *dev)
   size_t      wrcount;
 
   char headerbuf[SMART_SIGNATURE_SIZE];
+
+  if (dev->rootphyssector == SMART_SECTOR_INVALID) {
+    ferr("rootphyssector is invalid.\n");
+    return;
+  }
+
   memset(headerbuf, CONFIG_SMARTFS_ERASEDSTATE, SMART_SIGNATURE_SIZE);
 
-  wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector, SMART_SIGNATURE_SIZE, headerbuf);
+  wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector * dev->sectorsize, SMART_SIGNATURE_SIZE, headerbuf);
   if (wrcount != SMART_SIGNATURE_SIZE)
     {
       ferr("ERROR: write signature failed: %d.\n",wrcount);
@@ -885,7 +899,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
               /* Skip current bad block */
               if (ret == -EIO)
                 {
-                  smart_handle_badblock(dev, physsector);
+                  smart_handle_badblock(dev, physsector / dev->sectorsPerBlk);
                   physsector++;
                   if (physsector >= (SMART_FIRST_ALLOC_SECTOR-1))
                     goto err_out;
@@ -1001,7 +1015,7 @@ static int smart_scan(FAR struct smart_struct_s *dev, bool is_format)
           ferr("Error: Read physical sector %d error, ret = %d\n", physsector, ret);
           if (ret == -EIO)
             {
-              smart_handle_badblock(dev, block);
+              smart_handle_badblock(dev, physsector / dev->sectorsPerBlk );
             }
           continue;
         }
@@ -1231,13 +1245,13 @@ static inline int smart_llformat(FAR struct smart_struct_s *dev, unsigned long a
 
   headerbuf[SMART_FMT_ROOTDIRS_POS] = (uint8_t) (arg & 0xff);
 
-  wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector, SMART_SIGNATURE_SIZE, headerbuf);
+  wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector * dev->sectorsize, SMART_SIGNATURE_SIZE, headerbuf);
   if (wrcount != SMART_SIGNATURE_SIZE)
     {
       ferr("ERROR: write signature failed\n");
-      if (ret == -EIO)
+      if (wrcount == -EIO)
         {
-          smart_handle_badblock(dev, dev->rootphyssector);
+          smart_handle_badblock(dev, dev->rootphyssector / dev->sectorsPerBlk);
         }
       if (wrcount < 0)
         {
@@ -1359,7 +1373,7 @@ retry:
           if (ret == -EIO)
             {
               /* Mark it as bad block */
-              smart_handle_badblock(dev, i / dev->sectorsPerBlk);
+              smart_handle_badblock(dev, sector / dev->sectorsPerBlk);
             }
 
           /* Try next sector */
@@ -1585,7 +1599,7 @@ static int smart_readsector(FAR struct smart_struct_s *dev,
       if (ret == -EIO) 
         {
           /* Mark it as bad block */
-          smart_handle_badblock(dev, readaddr / dev->sectorsPerBlk);
+          smart_handle_badblock(dev, physsector / dev->sectorsPerBlk);
         }
       goto errout;
     }
