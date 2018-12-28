@@ -330,11 +330,6 @@ static bool inline smart_is_free(FAR struct smart_struct_s *dev, uint16_t sector
 
 static void smart_save_meta(FAR struct smart_struct_s *dev)
 {
-  /* save sMap at block 1 */
-  if (dev->mapphyssector == SMART_SECTOR_INVALID) {
-    ferr("mapphyssector is invalid.\n");
-    return;
-  }
 
   MTD_WRITE(dev->mtd, dev->mapphyssector * dev->sectorsize, (dev->neraseblocks << 1),
                  (FAR uint8_t *) dev->freecount);
@@ -348,11 +343,6 @@ static void smart_save_meta(FAR struct smart_struct_s *dev)
 
 static void smart_load_meta(FAR struct smart_struct_s *dev)
 {
-  /* load sMap at block 1 */
-  if (dev->mapphyssector == SMART_SECTOR_INVALID) {
-    ferr("mapphyssector is invalid.\n");
-    return;
-  }
 
   uint32_t readaddress = dev->mapphyssector * dev->sectorsize;
   MTD_READ(dev->mtd, readaddress, (dev->neraseblocks << 1), (FAR uint8_t *) dev->freecount);
@@ -367,12 +357,6 @@ static void smart_clear_signature(FAR struct smart_struct_s *dev)
   size_t      wrcount;
 
   char headerbuf[SMART_SIGNATURE_SIZE];
-
-  if (dev->rootphyssector == SMART_SECTOR_INVALID) {
-    ferr("rootphyssector is invalid.\n");
-    return;
-  }
-
   memset(headerbuf, CONFIG_SMARTFS_ERASEDSTATE, SMART_SIGNATURE_SIZE);
 
   wrcount = MTD_WRITE(dev->mtd, dev->rootphyssector * dev->sectorsize, SMART_SIGNATURE_SIZE, headerbuf);

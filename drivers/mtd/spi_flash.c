@@ -136,7 +136,6 @@ bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block)
 
   ssize_t nbytes;
 
-  memset(spare_buf, SPI_ERASED_STATE, priv->spare_size);
   nbytes = priv->pageread(priv, address, priv->spare_size, true, (FAR uint8_t *)spare_buf);
   if (nbytes == -EIO) {
     ret = true;
