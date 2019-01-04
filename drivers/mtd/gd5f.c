@@ -84,19 +84,19 @@
 /* GD5F Registers ********************************************************************/
 /* Read ID (RDID) register values */
 
-#define GD5F_MANUFACTURER             0xC8   /* Winbond Serial Flash */
-#define GD5F2GQ4U_DEVID               0xD2   /* GD5F2GQ4U device ID (0xD2) */
-#define GD5F2GQ4R_DEVID               0xC2   /* GD5F2GQ4U device ID (0xC2) */
+#define GD5F_MANUFACTURER           0xC8   /* Winbond Serial Flash */
+#define GD5F2GQ4U_DEVID             0xD2   /* GD5F2GQ4U device ID (0xD2) */
+#define GD5F2GQ4R_DEVID             0xC2   /* GD5F2GQ4U device ID (0xC2) */
 
-#define NBLOCKS_2048MBIT          2048  /* 2048 blocks x 128K bytes/block = 256Mb */
+#define NBLOCKS_2048MBIT            2048   /* 2048 blocks x 128K bytes/block = 256Mb */
 
 /* Status register bit definitions */
 
-#define GD5F_SR_BUSY                        0x01  /* Bit 0: Write in progress */
-#define GD5F_SR_WEL                         0x02  /* Bit 1: Write enable latch bit */
-#define GD5F_SR_ERR_ERASE              0x04  /* Bit 2: Erase failure bit */
+#define GD5F_SR_BUSY                0x01  /* Bit 0: Write in progress */
+#define GD5F_SR_WEL                 0x02  /* Bit 1: Write enable latch bit */
+#define GD5F_SR_ERR_ERASE           0x04  /* Bit 2: Erase failure bit */
 #define GD5F_SR_ERR_PROGRAM         0x08  /* Bit 3: Program failure bit */
-#define GD5F_SR_ERR_ECC                  0x20   /* Bit 4-5: Bit5=1,Bit4=0: Bits errors greater than ECC capability */
+#define GD5F_SR_ERR_ECC             0x20  /* Bit 4-5: Bit5=1,Bit4=0: Bits errors greater than ECC capability */
 
 #define GD5F_DUMMY                  0x00
 
@@ -213,7 +213,7 @@ static inline int gd5f_readid(struct spi_flash_dev_s *priv)
   SPI_SEND(priv->spi, GD5F_DUMMY);
   manufacturer = SPI_SEND(priv->spi, GD5F_DUMMY);
   memory       = SPI_SEND(priv->spi, GD5F_DUMMY);
-  capacity     = 0x00;//SPI_SEND(priv->spi, GD5F_DUMMY);
+  capacity     = 0x00;
 
   /* Deselect the FLASH and unlock the bus */
 
@@ -448,13 +448,8 @@ static ssize_t gd5f_pageread(FAR struct spi_flash_dev_s *priv, off_t address, si
   ferr("address: %08lx nbytes: %d\n", (long)address, (int)nbytes);
 #endif
 
-//ferr("address=%d, spare=%d, nbytes=%d\n",address, spare, nbytes);
-
   if ((spare && (nbytes != priv->spare_size)) || (nbytes > priv->page_size))
     return -EFAULT;
-
-
-
   
   gd5f_lock(priv->spi);
 
