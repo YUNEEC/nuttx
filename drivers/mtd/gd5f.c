@@ -79,7 +79,6 @@
 #define GD5F_RDPAGE                 0x13    /* Read page                             */
 #define GD5F_WRPAGE                 0x10    /* Program execute in page address       */
 #define GD5F_RESET                  0xff    /* Reset                                 */
-#define GD5F_ECC_ADDR               0xa9    /* Last ECC address                      */
 
 /* GD5F Registers ********************************************************************/
 /* Read ID (RDID) register values */
