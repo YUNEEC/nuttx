@@ -1514,6 +1514,15 @@ config ARCH_BOARD_TAP_H3
 	---help---
 		Select this option for H3 board
 
+config ARCH_BOARD_TAP_H600
+	bool "H600 board"
+	depends on ARCH_CHIP_STM32F7
+	select ARCH_HAVE_LEDS
+	select ARCH_HAVE_BUTTONS
+	select ARCH_HAVE_IRQBUTTONS
+	---help---
+		Select this option for H600 board
+
 config ARCH_BOARD_CUSTOM
 	bool "Custom development board"
 	---help---
@@ -1731,6 +1740,7 @@ config ARCH_BOARD
 	default "tap-v18s"                 if ARCH_BOARD_TAP_V18S
 	default "tap-v18s02"               if ARCH_BOARD_TAP_V18S02
 	default "tap-h3"                   if ARCH_BOARD_TAP_H3
+	default "tap-h600"                 if ARCH_BOARD_TAP_H600
 
 comment "Common Board Options"
 
