@@ -115,8 +115,8 @@ int spi_mark_badblock(FAR struct spi_flash_dev_s *priv, size_t block)
   /* Mark bad block */
   memset(spare_buf, 0, priv->spare_size);
 
-  ssize_t nbytes = priv->pagewrite(priv, address, priv->spare_size, true, (FAR uint8_t *)spare_buf);
-  if (nbytes != priv->spare_size) {
+  ssize_t nbytes = priv->pagewrite(priv, address, 2, true, (FAR uint8_t *)spare_buf);
+  if (nbytes != 2) {
     ret = -EFAULT;
     goto errout;
   }
@@ -130,14 +130,17 @@ errout:
 
 bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block)
 {
-  bool ret;
+  bool ret = false;
   off_t address = (block << priv->block_shift);
   uint8_t *spare_buf = kmm_malloc(priv->spare_size);
 
   ssize_t nbytes;
 
   nbytes = priv->pageread(priv, address, priv->spare_size, true, (FAR uint8_t *)spare_buf);
-  if (nbytes != priv->spare_size) {
+  if (nbytes == -EIO) {
+    ret = true;
+    goto errout;
+  } else if (nbytes != priv->spare_size) {
     //TODO: Check whether set block as good or bad when read spare data failed
     ret = false;
     goto errout;
@@ -297,7 +300,7 @@ static ssize_t spi_cacheread(struct spi_flash_dev_s *priv, size_t block, FAR uin
   ssize_t ret;
 
 #ifdef CONFIG_SPI_CACHE_DEBUG
-  ferr("block: %d shift=%d\n", block, shift);
+  ferr("block: %d\n", block);
 #endif
 
   /* Check if the requested erase block is already in the cache */

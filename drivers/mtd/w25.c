@@ -647,7 +647,7 @@ static ssize_t w25_pageread(FAR struct spi_flash_dev_s *priv, off_t address, siz
     w25_read_last_ecc_address(priv->spi, &ecc_page);
     ferr("ecc error block = %08x, page = %04x, last ecc page = %04x, status = (%02x, %02x, %02x)\n", address>>priv->block_shift, page, ecc_page, status2, status3, status);
 #else
-    ferr("ecc error block = %08x, status = %02x\n", address>>priv->block_shift, page, status);
+    ferr("ecc error block = %08x, page = %04x, status = %02x\n", address>>priv->block_shift, page, status);
 #endif
     return -EIO;
   }
