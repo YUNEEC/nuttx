@@ -944,12 +944,15 @@ choice
 config MTD_W25
         bool "W25 FLASH"
 
+config MTD_W25_QSPI
+        bool "W25 QSPI FLASH"
+
 config MTD_GIGADEVICE
         bool "Gigadevice FLASH"
 
 endchoice # SPI flash chip selection
 
-if MTD_W25
+if MTD_W25 || MTD_W25_QSPI
 
 config W25_SPIMODE
 	int "W25 SPI Mode"
@@ -961,10 +964,6 @@ config W25_SPIFREQUENCY
 
 config W25_READONLY
 	bool "W25 Read-Only FLASH"
-	default n
-
-config W25_SECTOR512
-	bool "Simulate 512 byte Erase Blocks"
 	default n
 
 config W25_SLOWREAD

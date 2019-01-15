@@ -625,7 +625,7 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
   return ret;
 }
 
-FAR int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
+int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
 {
   int ret;
   if (!priv)

@@ -53,7 +53,7 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/ioctl.h>
-#include <nuttx/spi/spi.h>
+#include <nuttx/spi/qspi.h>
 #include <nuttx/mtd/mtd.h>
 
 #include "spi_flash.h"
@@ -61,6 +61,8 @@
 #define CONFIG_W25_SYNC_WRITE
 //#define CONFIG_W25_DEBUG
 //#define CONFIG_W25_SPI_DEBUG
+//#define CONFIG_W25_COMMAND_DEBUG
+//#define CONFIG_W25_TEST
 
 /* Status bitmask */
 #define W25_ERR_ERASE              0x04
@@ -192,10 +194,10 @@
 #define W25_DIE_SHIFT              27
 #define W25_SPARE_SIZE             64        /* 16*4 bytes spare size */
 
-#define CONFIG_W25_SPIMODE 0
-#define CONFIG_W25_SPI_FREQUENCY 104000000
+#define CONFIG_W25_QSPIMODE 0
+#define CONFIG_W25_QSPI_FREQUENCY 72000000
 
-static void w25_lock(FAR struct spi_dev_s *spi)
+static void w25_lock(FAR struct qspi_dev_s *spi)
 {
     /* On SPI busses where there are multiple devices, it will be necessary to
     * lock SPI to have exclusive access to the busses for a sequence of
@@ -205,264 +207,246 @@ static void w25_lock(FAR struct spi_dev_s *spi)
     * the SPI buss.  We will retain that exclusive access until the bus is unlocked.
     */
 
-    (void)SPI_LOCK(spi, true);
+    (void)QSPI_LOCK(spi, true);
 }
 
-static void w25_unlock(FAR struct spi_dev_s *spi)
+static void w25_unlock(FAR struct qspi_dev_s *spi)
 {
-    (void)SPI_LOCK(spi, false);
+    (void)QSPI_LOCK(spi, false);
 }
 
-static inline void w25_wren_locked(FAR struct spi_dev_s *spi)
+static int w25_command_read(FAR struct qspi_dev_s *spi, uint8_t cmd,
+                            FAR void *buffer, size_t buflen,
+                            off_t addr, uint8_t addrlen)
 {
-    /* Select this FLASH part */
+    struct qspi_cmdinfo_s cmdinfo;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
+    cmdinfo.flags = 0;
 
-    /* Send "Write Enable (WREN)" command */
+    if (buflen) {
+        cmdinfo.flags |= QSPICMD_READDATA;
+    } else {
+        buffer = NULL;
+    }
 
-    (void)SPI_SEND(spi, W25_WREN);
+    if (addrlen) {
+        cmdinfo.flags |=  QSPICMD_ADDRESS;
+    } else {
+        addr = 0;
+    }
 
-    /* Deselect the FLASH */
+    cmdinfo.cmd     = cmd;
+    cmdinfo.buflen  = buflen;
+    cmdinfo.buffer  = (FAR void *)buffer;
+    cmdinfo.addrlen = addrlen;
+    cmdinfo.addr    = addr;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+    int ret = QSPI_COMMAND(spi, &cmdinfo);
+
+#ifdef CONFIG_W25_COMMAND_DEBUG
+    ferr("CMD: %02x buflen: %d addr: %08lx addrlen: %d ret: %d\n",
+          cmd, buflen, addr, addrlen, ret);
+#endif
+
+    return ret;
 }
 
-static inline void w25_wrdi_locked(FAR struct spi_dev_s *spi)
+static int w25_data_read(FAR struct qspi_dev_s *spi, FAR int8_t *buffer,
+                        size_t buflen, off_t addr, uint8_t addrlen)
 {
-    /* Select this FLASH part */
+    struct qspi_meminfo_s meminfo;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
+    meminfo.flags   = QSPIMEM_READ | QSPIMEM_QUADIO;
+    meminfo.cmd     = W25_FRDQIO;
+    meminfo.dummies = 2;
+    meminfo.buflen  = buflen;
+    meminfo.buffer  = buffer;
+    meminfo.addrlen = addrlen;
+    meminfo.addr    = addr;
 
-    /* Send "Write Disable (WRDI)" command */
+    int ret = QSPI_MEMORY(spi, &meminfo);
 
-    (void)SPI_SEND(spi, W25_WRDI);
+#ifdef CONFIG_W25_COMMAND_DEBUG
+    ferr("addr: %08lx addrlen: %d nbytes: %d ret: %d\n", addr, addrlen, (int)buflen, ret);
+#endif
 
-    /* Deselect the FLASH */
-
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+    return ret;
 }
 
-static void w25_select_die_locked(FAR struct spi_dev_s *spi, uint8_t die)
+static int w25_command_write(FAR struct qspi_dev_s *spi, uint8_t cmd,
+                             FAR const void *buffer, size_t buflen,
+                             off_t addr, uint8_t addrlen)
 {
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
+    struct qspi_cmdinfo_s cmdinfo;
 
-    (void)SPI_SEND(spi, W25_DIE_SEL);
-    (void)SPI_SEND(spi, die);
+    cmdinfo.flags = 0;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+    if (buflen) {
+        cmdinfo.flags |= QSPICMD_WRITEDATA;
+    } else {
+        buffer = NULL;
+    }
+
+    if (addrlen) {
+        cmdinfo.flags |=  QSPICMD_ADDRESS;
+    } else {
+        addr = 0;
+    }
+
+    cmdinfo.cmd     = cmd;
+    cmdinfo.buflen  = buflen;
+    cmdinfo.buffer  = (FAR void *)buffer;
+    cmdinfo.addrlen = addrlen;
+    cmdinfo.addr    = addr;
+
+    int ret = QSPI_COMMAND(spi, &cmdinfo);
+
+#ifdef CONFIG_W25_COMMAND_DEBUG
+    ferr("CMD: %02x buflen: %d addr: %08lx addrlen: %d ret: %d\n",
+          cmd, buflen, addr, addrlen, ret);
+#endif
+
+    return ret;
 }
 
-static void w25_reset(FAR struct spi_dev_s *spi)
+static int w25_command(FAR struct qspi_dev_s *spi, uint8_t cmd,
+                       off_t addr, uint8_t addrlen)
 {
-    w25_lock(spi);
+    struct qspi_cmdinfo_s cmdinfo;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
+    cmdinfo.flags   = 0;
+    if (addrlen) {
+        cmdinfo.flags = QSPICMD_ADDRESS;
+    } else {
+        addr = 0;
+    }
 
-    (void)SPI_SEND(spi, W25_RESET);
+    cmdinfo.cmd     = cmd;
+    cmdinfo.buflen  = 0;
+    cmdinfo.buffer  = NULL;
+    cmdinfo.addr    = addr;
+    cmdinfo.addrlen = addrlen;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+    int ret = QSPI_COMMAND(spi, &cmdinfo);
 
-    w25_unlock(spi);
+#ifdef CONFIG_W25_COMMAND_DEBUG
+    ferr("CMD: %02x addr: %08lx addrlen: %d ret: %d\n",
+          cmd, addr, addrlen, ret);
+#endif
+
+    return ret;
 }
 
-static uint8_t w25_read_status_locked(FAR struct spi_dev_s *spi, uint8_t regaddr)
+static int w25_data_write(FAR struct qspi_dev_s *spi, const FAR int8_t *buffer,
+                        size_t buflen, off_t addr, uint8_t addrlen)
 {
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
-    (void)SPI_SEND(spi, W25_RDSR);
-    (void)SPI_SEND(spi, regaddr);
+    struct qspi_meminfo_s meminfo;
 
-    uint8_t status = SPI_SEND(spi, W25_DUMMY);
+    meminfo.flags   = QSPIMEM_WRITE | QSPIMEM_QUADIO;
+    meminfo.cmd     = W25_PPQ;
 
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
+    meminfo.dummies = 0;
+    meminfo.buflen  = buflen;
+    meminfo.buffer  = (FAR void *)buffer;
+    meminfo.addrlen = addrlen;
+    meminfo.addr    = addr;
 
-    return status;
+    int ret = QSPI_MEMORY(spi, &meminfo);
+
+#ifdef CONFIG_W25_COMMAND_DEBUG
+    ferr("addr: %08lx addrlen: %d nbytes: %d ret: %d\n", addr, addrlen, (int)buflen, ret);
+#endif
+
+    return ret;
+}
+
+static inline void w25_wren_locked(struct qspi_dev_s *spi)
+{
+    w25_command(spi, W25_WREN, 0, 0);
+}
+
+static inline void w25_wrdi_locked(FAR struct qspi_dev_s *spi)
+{
+    w25_command(spi, W25_WRDI, 0, 0);
+}
+
+static void w25_select_die_locked(struct spi_flash_dev_s *priv, uint8_t die)
+{
+    w25_command(priv->spi, W25_DIE_SEL, die, 1);
+
+    priv->cmdbuf[0] = 0;
+    w25_command_write(priv->spi, W25_WRSR, priv->cmdbuf, 1, W25_STATUS1, 1);
+}
+
+static void w25_reset(FAR struct qspi_dev_s *spi)
+{
+    w25_command(spi, W25_RESET, 0, 0);
 }
 
 #ifdef CONFIG_W25_DEBUG
-static void w25_read_last_ecc_address(FAR struct spi_dev_s *spi, uint16_t *page)
+static void w25_read_last_ecc_address(FAR struct qspi_dev_s *spi, uint16_t *page)
 {
-    uint8_t buf[2];
-
-    w25_lock(spi);
-
-    SPI_SELECT(spi, SPIDEV_FLASH(0), true);
-
-    /* Select die */
-    (void)SPI_SEND(spi, W25_ECC_ADDR);
-    (void)SPI_SEND(spi, W25_DUMMY);
-
-    SPI_RECVBLOCK(spi, buf, 2);
-
-    SPI_SELECT(spi, SPIDEV_FLASH(0), false);
-
-    w25_unlock(spi);
-
-    *page = ((uint16_t)buf[0] << 8) + (uint16_t)buf[1];
 }
 #endif
+
+static uint8_t w25_read_status_locked(struct spi_flash_dev_s *priv, uint8_t regaddr)
+{
+     w25_command_read(priv->spi, W25_RDSR, priv->cmdbuf, 1, regaddr, 1);
+     return priv->cmdbuf[0];
+}
 
 static inline int w25_readid(struct spi_flash_dev_s *priv)
 {
     uint16_t manufacturer;
     uint16_t memory;
     uint16_t capacity;
-    int ret;
 
-    finfo("priv: %p\n", priv);
+    /* Lock the QuadSPI bus and configure the bus. */
 
     w25_lock(priv->spi);
 
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
+    /* Read the JEDEC ID */
 
-    (void)w25_waitcomplete_locked(priv);
-#endif
+    w25_command_read(priv->spi, W25_JEDEC_ID, priv->cmdbuf, 4, 0, 1);
 
-    /* Select this FLASH part. */
+    manufacturer = priv->cmdbuf[0];
+    memory = priv->cmdbuf[1];
+    capacity = priv->cmdbuf[2];
 
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
+    /* Unlock the bus */
 
-    /* Send the "Read ID (RDID)" command and read the first three ID bytes */
-
-    (void)SPI_SEND(priv->spi, W25_JEDEC_ID);
-    SPI_SEND(priv->spi, W25_DUMMY);
-    manufacturer = SPI_SEND(priv->spi, W25_DUMMY);
-    memory       = SPI_SEND(priv->spi, W25_DUMMY);
-    capacity     = SPI_SEND(priv->spi, W25_DUMMY);
-
-    /* Deselect the FLASH and unlock the bus */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
     w25_unlock(priv->spi);
+
+    finfo("Manufacturer: %02x Device Type %02x, Capacity: %02x\n",
+            manufacturer, memory, capacity);
+
+    /* Check for W25 chip */
+
+    if (manufacturer != W25_JEDEC_MANUFACTURER ||
+        memory != W25Q_JEDEC_MEMORY_TYPE_D) {
+        ferr("ERROR: Unrecognized device type: 0x%02x 0x%02x 0x%02x\n",
+            manufacturer, memory, capacity);
+        return -ENODEV;
+    }
 
     priv->manufacturer = manufacturer;
     priv->memory = memory;
     priv->capacity = capacity;
 
-    finfo("manufacturer: %02x memory: %02x capacity: %02x\n",
-          manufacturer, memory, capacity);
+    /* Check for a supported capacity */
 
-    /* Check for a valid manufacturer and memory type */
-
-    if (manufacturer == W25_JEDEC_MANUFACTURER &&
-        (memory == W25X_JEDEC_MEMORY_TYPE   ||
-        memory == W25Q_JEDEC_MEMORY_TYPE_A ||
-        memory == W25Q_JEDEC_MEMORY_TYPE_B ||
-        memory == W25Q_JEDEC_MEMORY_TYPE_C ||
-        memory == W25Q_JEDEC_MEMORY_TYPE_D))
-      {
-        /* Okay.. is it a FLASH capacity that we understand? If so, save
-        * the FLASH capacity.
-        */
-
-        /* 8M-bit / 1M-byte
-        *
-        * W25Q80BV
-        */
-
-        if (capacity == W25_JEDEC_CAPACITY_8MBIT)
-          {
-            priv->nblocks = NBLOCKS_8MBIT;
-          }
-
-        /* 16M-bit / 2M-byte (2,097,152)
-        *
-        * W24X16, W25Q16BV, W25Q16CL, W25Q16CV, W25Q16DW
-        */
-
-        else if (capacity == W25_JEDEC_CAPACITY_16MBIT)
-          {
-            priv->nblocks = NBLOCKS_16MBIT;
-          }
-
-        /* 32M-bit / M-byte (4,194,304)
-        *
-        * W25X32, W25Q32BV, W25Q32DW
-        */
-
-        else if (capacity == W25_JEDEC_CAPACITY_32MBIT)
-          {
-            priv->nblocks = NBLOCKS_32MBIT;
-          }
-
-        /* 64M-bit / 8M-byte (8,388,608)
-        *
-        * W25X64,  W25Q64BV, W25Q64CV, W25Q64DW
-        */
-
-        else if (capacity == W25_JEDEC_CAPACITY_64MBIT)
-          {
-            priv->nblocks = NBLOCKS_64MBIT;
-          }
-
-        /* 128M-bit / 16M-byte (16,777,216)
-        *
-        * W25Q128BV
-        */
-
-        else if (capacity == W25_JEDEC_CAPACITY_128MBIT)
-          {
-            priv->nblocks = NBLOCKS_128MBIT;
-          }
-        else if (capacity == W25_JEDEC_CAPACITY_2048MBIT)
-          {
+    switch (capacity)
+    {
+        case W25_JEDEC_CAPACITY_2048MBIT:
             priv->nblocks = NBLOCKS_2048MBIT;
-          }
-        else
-          {
-            /* Nope.. we don't understand this capacity. */
+            break;
 
-            ret =  -ENODEV;
-            goto errout;
-          }
+        default:
+            ferr("ERROR: Unsupported memory capacity: %02x\n", capacity);
+            return -ENODEV;
+    }
 
-        ret = OK;
-        goto errout;
-      }
-
-    /* We don't understand the manufacturer or the memory type */
-
-    ret = -ENODEV;
-
-errout:
-    return ret;
-}
-
-static void w25_unprotect(FAR struct spi_flash_dev_s *priv, int die)
-{
-    w25_lock(priv->spi);
-
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)w25_waitcomplete_locked(priv);
-#endif
-
-    w25_select_die_locked(priv->spi, die);
-
-    /* Send "Write enable (WREN)" */
-
-    w25_wren_locked(priv->spi);
-
-    /* Select this FLASH part */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
-
-    /* Send "Write enable status (EWSR)" */
-
-    SPI_SEND(priv->spi, W25_WRSR);
-    SPI_SEND(priv->spi, W25_STATUS1);
-
-    /* Following by the new status value */
-
-    SPI_SEND(priv->spi, 0);
-
-    /* Deselect the FLASH and unlock the bus */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
-
-    w25_unlock(priv->spi);
+    return OK;
 }
 
 static uint8_t w25_waitcomplete_locked(struct spi_flash_dev_s *priv)
@@ -476,8 +460,8 @@ static uint8_t w25_waitcomplete_locked(struct spi_flash_dev_s *priv)
      */
 
     do
-      {
-        status = w25_read_status_locked(priv->spi, W25_STATUS3);
+    {
+        status = w25_read_status_locked(priv, W25_STATUS3);
 
         if (!(status & W25_SR_BUSY))
             break;
@@ -490,36 +474,35 @@ static uint8_t w25_waitcomplete_locked(struct spi_flash_dev_s *priv)
 
 #if 0
         if (priv->prev_instr != W25_WRPAGE && (status & W25_SR_BUSY) != 0)
-          {
+        {
             w25_unlock(priv->spi);
             usleep(1000);
             w25_lock(priv->spi);
-          }
+        }
 #endif
         usleep(500);
-      }
-    while (1);
+    } while (1);
 
     if (status & W25_ERR_ERASE) {
-      w25_unlock(priv->spi);
+        w25_unlock(priv->spi);
 
 #ifdef CONFIG_W25_DEBUG
-      ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
+        ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
 #endif
-      spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
+        spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
 
-      w25_lock(priv->spi);
+        w25_lock(priv->spi);
     }
 
     if (status & W25_ERR_PROGRAM) {
-      w25_unlock(priv->spi);
+        w25_unlock(priv->spi);
 
 #ifdef CONFIG_W25_DEBUG
-      ferr("program error block = %08x\n", priv->lastaddr >> priv->block_shift);
+        ferr("program error block = %08x\n", priv->lastaddr >> priv->block_shift);
 #endif
-      spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
+        spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
 
-      w25_lock(priv->spi);
+        w25_lock(priv->spi);
     }
 
     return status;
@@ -535,9 +518,9 @@ static int w25_blockerase(struct spi_flash_dev_s *priv, size_t block)
 #endif
 
     if (spi_is_badblock(priv, block)) {
-      ferr("bad block %d\n", block);
-      ret = -EIO;
-      goto errout;
+        ferr("bad block %d\n", block);
+        ret = -EIO;
+        goto errout;
     }
 
     /* Lock and configure the SPI bus */
@@ -545,40 +528,28 @@ static int w25_blockerase(struct spi_flash_dev_s *priv, size_t block)
     w25_lock(priv->spi);
 
 #ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
+  /* Wait for any preceding write or erase operation to complete. */
 
     (void)w25_waitcomplete_locked(priv);
 #endif
-
     priv->lastaddr = address;
 
-    w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
+    w25_select_die_locked(priv, (uint8_t)(address>>W25_DIE_SHIFT));
 
     /* Send write enable instruction */
 
     w25_wren_locked(priv->spi);
 
-    /* Select this FLASH part */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
-
-    /* Send the "Sector Erase (SE)" instruction */
-
-    (void)SPI_SEND(priv->spi, W25_BE);
-    priv->prev_instr = W25_BE;
-
     /* Send the sector address high byte first. Only the most significant bits (those
-    * corresponding to the sector) have any meaning.
-    */
+     * corresponding to the sector) have any meaning.
+     */
     uint16_t page = address >> priv->page_shift;
 
-    (void)SPI_SEND(priv->spi, W25_DUMMY);
-    (void)SPI_SEND(priv->spi, (page >> 8) & 0xff);
-    (void)SPI_SEND(priv->spi, page & 0xff);
+    off_t commandaddr = (off_t)page;
 
-    /* Deselect the FLASH */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
+    /* Send the "Sector Erase (SE)" instruction */
+    w25_command(priv->spi, W25_BE, commandaddr, 3);
+    priv->prev_instr = W25_BE;
 
 #ifdef CONFIG_W25_SYNC_WRITE
     /* Wait for any preceding write or erase operation to complete. */
@@ -592,10 +563,10 @@ static int w25_blockerase(struct spi_flash_dev_s *priv, size_t block)
 #ifdef CONFIG_W25_SYNC_WRITE
     if (status & W25_ERR_ERASE) {
 #ifdef CONFIG_W25_DEBUG
-      ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
+        ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
 #endif
-      spi_mark_badblock(priv, address >> priv->block_shift);
-      ret = -EIO;
+        spi_mark_badblock(priv, address >> priv->block_shift);
+        ret = -EIO;
     }
 #endif
 
@@ -611,7 +582,7 @@ static ssize_t w25_pageread(FAR struct spi_flash_dev_s *priv, off_t address, siz
 #endif
 
     if ((spare && (nbytes != priv->spare_size)) || (nbytes > priv->page_size))
-      return -EFAULT;
+        return -EFAULT;
 
     w25_lock(priv->spi);
 
@@ -621,7 +592,7 @@ static ssize_t w25_pageread(FAR struct spi_flash_dev_s *priv, off_t address, siz
     (void)w25_waitcomplete_locked(priv);
 #endif
 
-    w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
+    w25_select_die_locked(priv, (uint8_t)(address>>W25_DIE_SHIFT));
 
     /* Make sure that writing is disabled */
 
@@ -631,76 +602,55 @@ static ssize_t w25_pageread(FAR struct spi_flash_dev_s *priv, off_t address, siz
 
     uint16_t page = address >> priv->page_shift;
 
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
-    (void)SPI_SEND(priv->spi, W25_RDPAGE);
-    priv->prev_instr = W25_RDPAGE;
+    off_t commandaddr = (off_t)page;
 
-    (void)SPI_SEND(priv->spi, W25_DUMMY);
-    (void)SPI_SEND(priv->spi, (page >> 8) & 0xff);
-    (void)SPI_SEND(priv->spi, page & 0xff);
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
+    w25_command(priv->spi, W25_RDPAGE, commandaddr, 3);
+    priv->prev_instr = W25_RDPAGE;
 
     uint8_t status = w25_waitcomplete_locked(priv);
     if (status & W25_ERR_ECC ) {
 #ifdef CONFIG_W25_DEBUG
-      uint8_t status1 = w25_read_status_locked(priv->spi, W25_STATUS1);
-      uint8_t status2 = w25_read_status_locked(priv->spi, W25_STATUS2);
+        uint8_t status1 = w25_read_status_locked(priv, W25_STATUS1);
+        uint8_t status2 = w25_read_status_locked(priv, W25_STATUS2);
 #endif
 
-      w25_unlock(priv->spi);
+        w25_unlock(priv->spi);
 
-      spi_mark_badblock(priv, address >> priv->block_shift);
+        spi_mark_badblock(priv, address >> priv->block_shift);
 
 #ifdef CONFIG_W25_DEBUG
-      uint16_t ecc_page;
-      w25_read_last_ecc_address(priv->spi, &ecc_page);
-      ferr("ecc error block = %08x, page = %04x, last ecc page = %04x, status = (%02x, %02x, %02x)\n", address>>priv->block_shift, page, ecc_page, status1, status2, status);
+        uint16_t ecc_page;
+        w25_read_last_ecc_address(priv->spi, &ecc_page);
+        ferr("ecc error block = %08x, page = %04x, last ecc page = %04x, status = (%02x, %02x, %02x)\n", address>>priv->block_shift, page, ecc_page, status1, status2, status);
 #else
-      ferr("ecc error block = %08x, page = %04x, status = %02x\n", address>>priv->block_shift, page, status);
+        ferr("ecc error block = %08x, page = %04x, status = %02x\n", address>>priv->block_shift, page, status);
 #endif
-      return -EIO;
+        return -EIO;
     }
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
 
     /* Send "Read from Memory " instruction */
 
-#ifdef CONFIG_W25_SLOWREAD
-    (void)SPI_SEND(priv->spi, W25_RDDATA);
-    priv->prev_instr = W25_RDDATA;
-#else
-    (void)SPI_SEND(priv->spi, W25_FRD);
-    priv->prev_instr = W25_FRD;
-#endif
+    off_t readaddr = 0;
+    w25_data_read(priv->spi, priv->page_buf, priv->page_size+priv->spare_size, readaddr<<8, 3);
 
-    /* Send the address high byte first. */
-
-    (void)SPI_SEND(priv->spi, 0);
-    (void)SPI_SEND(priv->spi, 0);
-    (void)SPI_SEND(priv->spi, W25_DUMMY);
-
-    /* Then read all of the requested bytes */
-
-    SPI_RECVBLOCK(priv->spi, priv->page_buf, priv->page_size+priv->spare_size);
-
-    /* Deselect the FLASH */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
-
+    priv->prev_instr = W25_FRDQ;
     w25_unlock(priv->spi);
 
     if (spare)
-      memcpy(buffer, (FAR uint8_t *)(priv->page_buf+priv->page_size), priv->spare_size);
+        memcpy(buffer, (FAR uint8_t *)(priv->page_buf+priv->page_size), priv->spare_size);
     else {
-      if ((priv->page_buf[priv->page_size] != SPI_ERASED_STATE) ||
+        if ((priv->page_buf[priv->page_size] != SPI_ERASED_STATE) ||
           (priv->page_buf[priv->page_size+1] != SPI_ERASED_STATE)) {
-        ferr("bad block = %08x, page = %04x\n", address>>priv->block_shift, page);
-        /* bad block */
-        return -EIO;
-      }
+            ferr("bad block = %08x, page = %04x (%02x %02x)\n",
+                    address>>priv->block_shift, page,
+                    priv->page_buf[priv->page_size],
+                    priv->page_buf[priv->page_size+1]);
+            /* bad block */
+            return -EIO;
+        }
 
-      uint16_t column = address & ((1 << priv->page_shift) - 1);
-      memcpy(buffer, (FAR uint8_t *)(priv->page_buf+column), nbytes);
+        uint16_t column = address & ((1 << priv->page_shift) - 1);
+        memcpy(buffer, (FAR uint8_t *)(priv->page_buf+column), nbytes);
     }
 
     return nbytes;
@@ -718,7 +668,7 @@ static ssize_t w25_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 #endif
 
     if ((spare && (nbytes > priv->spare_size)) || (nbytes > priv->page_size))
-      return -EFAULT;
+        return -EFAULT;
 
     w25_lock(priv->spi);
 
@@ -727,49 +677,26 @@ static ssize_t w25_pagewrite(struct spi_flash_dev_s *priv, off_t address,
     (void)w25_waitcomplete_locked(priv);
 #endif
 
-    w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
+    w25_select_die_locked(priv, (uint8_t)(address>>W25_DIE_SHIFT));
 
     /* Enable write access to the FLASH */
 
     w25_wren_locked(priv->spi);
 
-    /* Select this FLASH part */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
-
-    /* Send the "Page Program (W25_PP)" Command */
-
-    SPI_SEND(priv->spi, W25_PP);
-    priv->prev_instr = W25_PP;
-
     /* Align column to end of page to write spare */
     if (spare)
-      column = priv->page_size;
+        column = priv->page_size;
 
-    /* Send the address high byte first. */
+    /* Send the "Page Program (W25_PPQ)" Command */
 
-    (void)SPI_SEND(priv->spi, (column >> 8) & 0xff);
-    (void)SPI_SEND(priv->spi, column & 0xff);
+    w25_data_write(priv->spi, buffer, nbytes, column, 2);
+    priv->prev_instr = W25_PPQ;
 
-    /* Then send the page of data */
-
-    SPI_SNDBLOCK(priv->spi, buffer, nbytes);
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
 
     /* Program  Execute */
 
-    (void)SPI_SEND(priv->spi, W25_WRPAGE);
-    priv->prev_instr = W25_WRPAGE;
-
-    (void)SPI_SEND(priv->spi, W25_DUMMY);
-    (void)SPI_SEND(priv->spi, (page >> 8) & 0xff);
-    (void)SPI_SEND(priv->spi, page & 0xff);
-
-    /* Deselect the FLASH and setup for the next pass through the loop */
-
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
+    off_t commandaddr = (off_t)page;
+    w25_command(priv->spi, W25_WRPAGE, commandaddr, 3);
 
 #ifdef CONFIG_W25_SYNC_WRITE
     /* Wait for any preceding write or erase operation to complete. */
@@ -782,16 +709,75 @@ static ssize_t w25_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 
 #ifdef CONFIG_W25_SYNC_WRITE
     if (status & W25_ERR_PROGRAM) {
-      spi_mark_badblock(priv, address >> priv->block_shift);
+        spi_mark_badblock(priv, address >> priv->block_shift);
 #ifdef CONFIG_W25_DEBUG
-      ferr("program error block = %08x\n", address >> priv->block_shift);
+        ferr("program error block = %08x\n", address >> priv->block_shift);
 #endif
-      ret = -EIO;
+        ret = -EIO;
     }
 #endif
 
     return ret;
 }
+
+#ifdef CONFIG_SPI_TEST
+void spi_test_internal(FAR struct spi_flash_dev_s *priv)
+{
+    for (int block = 0; block < 64; block++) {
+        w25_blockerase(priv, block);
+    }
+
+    for (int block = 0; block < 64; block++) {
+        w25_blockerase(priv, 0x400 + block);
+    }
+
+    FAR uint8_t *buffer;
+    buffer = (FAR uint8_t *)kmm_malloc(W25_PAGE_SIZE);
+
+    const int nbytes = W25_PAGE_SIZE;
+
+    bool isfailed = false;
+    for (int page = 0; page < 64 * 16; page++) {
+
+        for (int index = 0; index < nbytes; index++)
+            buffer[index] = index & 0xff;
+
+        w25_pagewrite(priv, (page << W25_PAGE_SHIFT), nbytes, false, buffer);
+
+        memset(buffer, 0, W25_PAGE_SIZE);
+        w25_pageread(priv, (page << W25_PAGE_SHIFT), nbytes, false, buffer);
+
+        for (int index = 0; index < nbytes; index++) {
+            if (buffer[index] != (index & 0xff)) {
+                ferr("data incorrect: page %d index %d value %02x\n", page, index, buffer[index]);
+
+                index = 0;
+                while (index < nbytes) {
+                    printf("%02x ", buffer[index++]);
+                }
+                printf("\n");
+
+                isfailed = true;
+                break;
+            } else {
+                //ferr("data correct: page %d index %d value %02x\n", page, index, buffer[index]);
+            }
+        }
+
+        if (isfailed) {
+            break;
+        }
+    }
+
+    if (isfailed) {
+        ferr("QSPI test is failed\n");
+    } else {
+        ferr("QSPI test is passed\n");
+    }
+
+    kmm_free(buffer);
+}
+#endif
 
 int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
 {
@@ -812,13 +798,18 @@ int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
     priv->pageread = w25_pageread;
     priv->pagewrite = w25_pagewrite;
 
-    SPI_SETFREQUENCY(priv->spi, CONFIG_W25_SPI_FREQUENCY);
-    SPI_SETBITS(priv->spi, 8);
-    SPI_SETMODE(priv->spi, CONFIG_W25_SPIMODE);
+    QSPI_SETFREQUENCY(priv->spi, CONFIG_W25_QSPI_FREQUENCY);
+    QSPI_SETBITS(priv->spi, 8);
+    QSPI_SETMODE(priv->spi, CONFIG_W25_QSPIMODE);
 
-    /* Deselect the FLASH */
+    /* Allocate a 4-byte buffer to support DMA-able command data */
 
-    SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
+    priv->cmdbuf = (FAR uint8_t *)QSPI_ALLOC(priv->spi, 4);
+    if (priv->cmdbuf == NULL)
+      {
+        ferr("Failed to allocate command buffer\n");
+        return -ENOMEM;
+      }
 
     w25_reset(priv->spi);
     usleep(1000);
@@ -826,19 +817,18 @@ int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
     /* Identify the FLASH chip and get its capacity */
 
     ret = w25_readid(priv);
-    if (ret != OK)
-      {
+    if (ret != OK) {
         /* Unrecognized! Discard all of that work we just did and return NULL */
 
-        ferr("ERROR: Unrecognized\n");
-        return -EFAULT;
-      }
-
-    /* Make sure that the FLASH is unprotected so that we can write into it */
-
-    w25_unprotect(priv, 0);
-    w25_unprotect(priv, 1);
+        ferr("Unrecognized QSPI device\n");
+        goto errout;
+    }
 
     return OK;
+
+errout:
+    QSPI_FREE(priv->spi, priv->cmdbuf);
+
+    return -EFAULT;
 }
 

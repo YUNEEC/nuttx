@@ -210,3 +210,8 @@ endif
 ifeq ($(CONFIG_STM32F7_DMA2D),y)
 CHIP_CSRCS += stm32_dma2d.c
 endif
+
+ifeq ($(CONFIG_STM32F7_QSPI),y)
+CHIP_CSRCS += stm32_qspi.c
+endif
+

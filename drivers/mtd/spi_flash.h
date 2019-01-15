@@ -35,6 +35,8 @@
  *
  ************************************************************************************/
 
+//#define CONFIG_SPI_TEST
+
 /* This type represents the state of the MTD device.  The struct mtd_dev_s must
  * appear at the beginning of the definition so that you can freely cast between
  * pointers to struct mtd_dev_s and struct spi_flash_dev_s.
@@ -44,37 +46,49 @@
 
 struct spi_flash_dev_s
 {
-  struct mtd_dev_s      mtd;         /* MTD interface */
-  FAR struct spi_dev_s  *spi;        /* Saved SPI interface instance */
-  uint16_t              nblocks;     /* Number of erase blocks */
-  uint8_t               prev_instr;  /* Previous instruction given to W25 device */
+    struct mtd_dev_s      mtd;         /* MTD interface */
+#ifdef CONFIG_STM32F7_QUADSPI
+    FAR struct qspi_dev_s *spi;        /* Saved QSPI interface instance */
+#else
+    FAR struct spi_dev_s  *spi;        /* Saved SPI interface instance */
+#endif
+    uint16_t              nblocks;     /* Number of erase blocks */
+    uint8_t               prev_instr;  /* Previous instruction given to W25 device */
 
-  uint8_t               flags;       /* Buffered block flags */
-  off_t                 block;       /* Erase block number in the cache*/
-  FAR uint8_t           *block_buf;  /* Allocated block data */
+    uint8_t               flags;       /* Buffered block flags */
+    off_t                 block;       /* Erase block number in the cache*/
+    FAR uint8_t           *block_buf;  /* Allocated block data */
 
-  uint32_t              lastaddr;    /* Last erase or program address */
-  FAR uint8_t           *page_buf;   /* page buffer */
+    uint32_t              lastaddr;    /* Last erase or program address */
+    FAR uint8_t           *page_buf;   /* page buffer */
 
-  /* information filled by SPI device driver */
-  int                   block_size;
-  int                   block_shift;
-  int                   page_size;
-  int                   page_shift;
-  int                   spare_size;
+#ifdef CONFIG_STM32F7_QUADSPI
+    FAR uint8_t           *cmdbuf; /* command buffer for qspi */
+#endif
 
-  uint16_t              manufacturer;
-  uint16_t              memory;
-  uint16_t              capacity;
+    /* information filled by SPI device driver */
+    int                   block_size;
+    int                   block_shift;
+    int                   page_size;
+    int                   page_shift;
+    int                   spare_size;
 
-  int (*blockerase)(struct spi_flash_dev_s *priv, size_t block);
-  ssize_t (*pageread)(FAR struct spi_flash_dev_s *priv, off_t address, size_t nbytes,
-                            bool spare, FAR uint8_t *buffer);
-  ssize_t (*pagewrite)(struct spi_flash_dev_s *priv, off_t address,
-                          size_t nbytes, bool spare, FAR const uint8_t *buffer);
+    uint16_t              manufacturer;
+    uint16_t              memory;
+    uint16_t              capacity;
+
+    int (*blockerase)(struct spi_flash_dev_s *priv, size_t block);
+    ssize_t (*pageread)(FAR struct spi_flash_dev_s *priv, off_t address, size_t nbytes,
+                              bool spare, FAR uint8_t *buffer);
+    ssize_t (*pagewrite)(struct spi_flash_dev_s *priv, off_t address,
+                            size_t nbytes, bool spare, FAR const uint8_t *buffer);
 };
 
-FAR int spi_flash_initialize(FAR struct spi_flash_dev_s *priv);
+int spi_flash_initialize(FAR struct spi_flash_dev_s *priv);
 int spi_mark_badblock(FAR struct spi_flash_dev_s *priv, size_t block);
 bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block);
+
+#ifdef CONFIG_SPI_TEST
+void spi_test_internal(FAR struct spi_flash_dev_s *priv);
+#endif
 

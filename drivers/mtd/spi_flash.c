@@ -448,7 +448,7 @@ static int spi_erase_internal(FAR struct spi_flash_dev_s *priv,
       /* Erase each block */
 
       ret = priv->blockerase(priv, startblock);
-      if (ret < 0) {
+      if (ret == -EIO) {
         if (freecount) {
           freecount[startblock] = MTD_BADBLOCK_MARK;
           ferr("find bad block %d\n", startblock);
@@ -900,72 +900,79 @@ static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
   return ret;
 }
 
-FAR struct mtd_dev_s *spi_initialize(FAR struct spi_dev_s *spi)
+static int do_initialize(FAR struct spi_flash_dev_s *priv)
 {
-  FAR struct spi_flash_dev_s *priv;
-  int ret;
+    int ret = OK;
 
-  /* Allocate a state structure (we allocate the structure instead of using
-   * a fixed, static allocation so that we can handle multiple FLASH devices.
-   * The current implementation would handle only one FLASH part per SPI
-   * device (only because of the SPIDEV_FLASH(0) definition) and so would have
-   * to be extended to handle multiple FLASH parts on the same SPI bus.
-   */
+    /* Initialize the allocated structure (unsupported methods were
+     * nullified by kmm_zalloc).
+     */
 
-  priv = (FAR struct spi_flash_dev_s *)kmm_zalloc(sizeof(struct spi_flash_dev_s));
-  if (priv)
-    {
-      /* Initialize the allocated structure (unsupported methods were
-       * nullified by kmm_zalloc).
-       */
-
-      priv->mtd.erase  = spi_erase;
-      priv->mtd.bread  = spi_bread;
-      priv->mtd.bwrite = spi_bwrite;
-      priv->mtd.read   = spi_read;
-      priv->mtd.ioctl  = spi_ioctl;
+    priv->mtd.erase  = spi_erase;
+    priv->mtd.bread  = spi_bread;
+    priv->mtd.bwrite = spi_bwrite;
+    priv->mtd.read   = spi_read;
+    priv->mtd.ioctl  = spi_ioctl;
 #if defined(CONFIG_MTD_BYTE_WRITE)
-      priv->mtd.write  = spi_write;
+    priv->mtd.write  = spi_write;
 #endif
-      priv->spi        = spi;
 
-      ret = spi_flash_initialize(priv);
+    ret = spi_flash_initialize(priv);
 
-      if (ret != OK)
-        {
-          kmm_free(priv);
-          return NULL;
-        }
-      else
-        {
-          /* Allocate a buffer for the erase block cache */
+    if (ret != OK)
+      {
+        return -EFAULT;
+      }
+    else
+      {
+        priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
+        priv->lastaddr = 0xffffffff;
 
-          CLR_VALID(priv);
-          priv->block = 0;
-          priv->block_buf = (FAR uint8_t *)kmm_malloc(priv->block_size);
-          if (!priv->block_buf)
-            {
-              /* Allocation failed! Discard all of that work we just did and return NULL */
+        /* Allocate a buffer for the erase block cache */
+        CLR_VALID(priv);
+        priv->block = 0;
+        priv->block_buf = (FAR uint8_t *)kmm_malloc(priv->block_size);
+        if (!priv->block_buf)
+          {
+            /* Allocation failed! Discard all of that work we just did and return NULL */
 
-              ferr("ERROR: Allocation failed\n");
-              kmm_free(priv);
-              return NULL;
-            }
-        }
+            ferr("ERROR: Allocation failed\n");
+            kmm_free(priv);
+            return -ENOMEM;
+          }
+      }
 
-      priv->lastaddr = 0xffffffff;
-
-      priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
-
-      /* Register the MTD with the procfs system if enabled */
+    /* Register the MTD with the procfs system if enabled */
 
 #ifdef CONFIG_MTD_REGISTRATION
-      mtd_register(&priv->mtd, "spi");
+    mtd_register(&priv->mtd, "spi");
 #endif
+
+#ifdef CONFIG_SPI_TEST
+    spi_test_internal(priv);
+#endif
+
+    return ret;
+}
+
+FAR struct mtd_dev_s *spi_initialize(FAR void *spi)
+{
+    struct spi_flash_dev_s *priv;
+
+    priv = (FAR struct spi_flash_dev_s *)kmm_zalloc(sizeof(struct spi_flash_dev_s));
+
+    if (priv) {
+#ifdef CONFIG_STM32F7_QUADSPI
+        priv->spi = (FAR struct qspi_dev_s *)spi;
+#else
+        priv->spi = (FAR struct spi_dev_s *)spi;
+#endif
+        if (do_initialize(priv) != OK) {
+            kmm_free(priv);
+            priv = NULL;
+        }
     }
 
-  /* Return the implementation-specific state structure as the MTD device */
-
-  return (FAR struct mtd_dev_s *)priv;
+    return (FAR struct mtd_dev_s *)priv;
 }
 
