@@ -1,5 +1,5 @@
 /************************************************************************************
- * drivers/mtd/spi.c
+ * drivers/mtd/spi_flash.c
  * Driver for SPI-based W25x16, x32, and x64 and W25q16, q32, q64, and q128 FLASH
  *
  *   Copyright (C) 2012-2013, 2017 Gregory Nutt. All rights reserved.
@@ -108,52 +108,37 @@ static ssize_t spi_write(FAR struct mtd_dev_s *dev, off_t offset,
 
 int spi_mark_badblock(FAR struct spi_flash_dev_s *priv, size_t block)
 {
-  int ret;
+  int ret = OK;
   off_t address = (block << priv->block_shift);
-  uint8_t *spare_buf = kmm_malloc(priv->spare_size);
 
   /* Mark bad block */
-  memset(spare_buf, 0, priv->spare_size);
+  memset(priv->spare_buf, 0, priv->spare_size);
 
-  ssize_t nbytes = priv->pagewrite(priv, address, 2, true, (FAR uint8_t *)spare_buf);
+  ssize_t nbytes = priv->pagewrite(priv, address, 2, true, (FAR uint8_t *)priv->spare_buf);
   if (nbytes != 2) {
     ret = -EFAULT;
-    goto errout;
   }
 
-  ret = OK;
-
-errout:
-  kmm_free(spare_buf);
   return ret;
 }
 
 bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block)
 {
-  bool ret = false;
   off_t address = (block << priv->block_shift);
-  uint8_t *spare_buf = kmm_malloc(priv->spare_size);
 
-  ssize_t nbytes;
-
-  nbytes = priv->pageread(priv, address, priv->spare_size, true, (FAR uint8_t *)spare_buf);
+  ssize_t nbytes = priv->pageread(priv, address, priv->spare_size, true, (FAR uint8_t *)priv->spare_buf);
   if (nbytes == -EIO) {
-    ret = true;
-    goto errout;
+    return true;
   } else if (nbytes != priv->spare_size) {
     //TODO: Check whether set block as good or bad when read spare data failed
-    ret = false;
-    goto errout;
+    return false;
   }
 
-  if ((spare_buf[0] != SPI_ERASED_STATE) || (spare_buf[1] != SPI_ERASED_STATE)) {
-    ret = true;
-    goto errout;
+  if ((priv->spare_buf[0] != SPI_ERASED_STATE) || (priv->spare_buf[1] != SPI_ERASED_STATE)) {
+    return true;
   }
 
-errout:
-  kmm_free(spare_buf);
-  return ret;
+  return false;
 }
 
 #ifdef CONFIG_SPI_DUMP
@@ -900,9 +885,14 @@ static int spi_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
   return ret;
 }
 
-static int do_initialize(FAR struct spi_flash_dev_s *priv)
+FAR struct mtd_dev_s *spi_initialize(int bus)
 {
-    int ret = OK;
+    int ret;
+
+    FAR struct spi_flash_dev_s *priv = (FAR struct spi_flash_dev_s *)kmm_zalloc(sizeof(struct spi_flash_dev_s));
+    if (!priv) {
+        goto errout;
+    }
 
     /* Initialize the allocated structure (unsupported methods were
      * nullified by kmm_zalloc).
@@ -917,62 +907,85 @@ static int do_initialize(FAR struct spi_flash_dev_s *priv)
     priv->mtd.write  = spi_write;
 #endif
 
-    ret = spi_flash_initialize(priv);
+    /* Check SPI flash */
+    priv->spi = (FAR struct spi_dev_s *)stm32_spibus_initialize(bus);
 
-    if (ret != OK)
-      {
-        return -EFAULT;
-      }
-    else
-      {
-        priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
-        priv->lastaddr = 0xffffffff;
-
-        /* Allocate a buffer for the erase block cache */
-        CLR_VALID(priv);
-        priv->block = 0;
-        priv->block_buf = (FAR uint8_t *)kmm_malloc(priv->block_size);
-        if (!priv->block_buf)
-          {
-            /* Allocation failed! Discard all of that work we just did and return NULL */
-
-            ferr("ERROR: Allocation failed\n");
-            kmm_free(priv);
-            return -ENOMEM;
-          }
-      }
-
-    /* Register the MTD with the procfs system if enabled */
-
-#ifdef CONFIG_MTD_REGISTRATION
-    mtd_register(&priv->mtd, "spi");
+#ifdef CONFIG_MTD_W25
+    ret = w25_spi_flash_initialize(priv);
+    if (ret == OK) {
+       finfo("W25 SPI flash is found\n");
+       goto initialized;
+    }
 #endif
+
+#ifdef CONFIG_MTD_GIGADEVICE
+    ret = gd5f_spi_flash_initialize(priv);
+    if (ret == OK) {
+        finfo("Gigadevice SPI flash is found\n");
+        goto initialized;
+    }
+#endif
+
+    /* Check QSPI flash */
+    priv->qspi = (FAR struct qspi_dev_s *)stm32_qspi_initialize(0);
+
+#ifdef CONFIG_MTD_W25_QSPI
+    ret = w25_qspi_flash_initialize(priv);
+    if (ret == OK) {
+       finfo("W25 QSPI flash is found\n");
+       goto initialized;
+    }
+#endif
+
+    /* No SPI flash is detected */
+    goto errout;
+
+initialized:
+    priv->page_buf = (FAR uint8_t *)kmm_malloc(priv->page_size+priv->spare_size);
+    if (!priv->page_buf) {
+        ferr("ERROR: Allock page buffer failed\n");
+        goto errout;
+    }
+
+    priv->lastaddr = 0xffffffff;
+
+    /* Allocate a buffer for the erase block cache */
+    CLR_VALID(priv);
+    priv->block = 0;
+    priv->block_buf = (FAR uint8_t *)kmm_malloc(priv->block_size);
+    if (!priv->block_buf) {
+        ferr("ERROR: Alloc block buffer failed\n");
+        goto errout;
+    }
+
+    priv->spare_buf = kmm_malloc(priv->spare_size);
+    if (!priv->spare_buf) {
+        ferr("ERROR: Alloc spare buffer failed\n");
+        goto errout;
+    }
 
 #ifdef CONFIG_SPI_TEST
     spi_test_internal(priv);
 #endif
 
-    return ret;
-}
+    return (FAR struct mtd_dev_s *)priv;
 
-FAR struct mtd_dev_s *spi_initialize(FAR void *spi)
-{
-    struct spi_flash_dev_s *priv;
-
-    priv = (FAR struct spi_flash_dev_s *)kmm_zalloc(sizeof(struct spi_flash_dev_s));
-
-    if (priv) {
-#ifdef CONFIG_STM32F7_QUADSPI
-        priv->spi = (FAR struct qspi_dev_s *)spi;
-#else
-        priv->spi = (FAR struct spi_dev_s *)spi;
-#endif
-        if (do_initialize(priv) != OK) {
-            kmm_free(priv);
-            priv = NULL;
-        }
+errout:
+    if (priv->page_buf) {
+        kmm_free(priv->page_buf);
     }
 
-    return (FAR struct mtd_dev_s *)priv;
-}
+    if (priv->block_buf) {
+        kmm_free(priv->block_buf);
+    }
 
+    if (priv->spare_buf) {
+        kmm_free(priv->spare_buf);
+    }
+
+    if (priv) {
+        kmm_free(priv);
+    }
+
+    return NULL;
+}

@@ -1,6 +1,5 @@
-
 /************************************************************************************
- * drivers/mtd/spi.h
+ * drivers/mtd/spi_flash.h
  * Driver for SPI-based W25x16, x32, and x64 and W25q16, q32, q64, and q128 FLASH
  *
  *   Copyright (C) 2012-2013, 2017 Gregory Nutt. All rights reserved.
@@ -47,11 +46,8 @@
 struct spi_flash_dev_s
 {
     struct mtd_dev_s      mtd;         /* MTD interface */
-#ifdef CONFIG_STM32F7_QUADSPI
-    FAR struct qspi_dev_s *spi;        /* Saved QSPI interface instance */
-#else
+    FAR struct qspi_dev_s *qspi;       /* Saved QSPI interface instance */
     FAR struct spi_dev_s  *spi;        /* Saved SPI interface instance */
-#endif
     uint16_t              nblocks;     /* Number of erase blocks */
     uint8_t               prev_instr;  /* Previous instruction given to W25 device */
 
@@ -61,10 +57,9 @@ struct spi_flash_dev_s
 
     uint32_t              lastaddr;    /* Last erase or program address */
     FAR uint8_t           *page_buf;   /* page buffer */
+    FAR uint8_t           *spare_buf;  /* spare data buffer */
 
-#ifdef CONFIG_STM32F7_QUADSPI
     FAR uint8_t           *cmdbuf; /* command buffer for qspi */
-#endif
 
     /* information filled by SPI device driver */
     int                   block_size;
@@ -84,11 +79,22 @@ struct spi_flash_dev_s
                             size_t nbytes, bool spare, FAR const uint8_t *buffer);
 };
 
-int spi_flash_initialize(FAR struct spi_flash_dev_s *priv);
 int spi_mark_badblock(FAR struct spi_flash_dev_s *priv, size_t block);
 bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block);
 
 #ifdef CONFIG_SPI_TEST
 void spi_test_internal(FAR struct spi_flash_dev_s *priv);
+#endif
+
+#ifdef CONFIG_MTD_W25_QSPI
+int w25_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv);
+#endif
+
+#ifdef CONFIG_MTD_W25
+int w25_flash_initialize(FAR struct spi_flash_dev_s *priv);
+#endif
+
+#ifdef CONFIG_MTD_GIGADEVICE
+int gd5f_flash_initialize(FAR struct spi_flash_dev_s *priv);
 #endif
 
