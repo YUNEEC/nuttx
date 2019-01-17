@@ -519,7 +519,7 @@ FAR struct mtd_dev_s *sst39vf_initialize(void);
  *
  ****************************************************************************/
 
-FAR struct mtd_dev_s *spi_initialize(FAR void *dev);
+FAR struct mtd_dev_s *spi_initialize(int bus);
 
 /****************************************************************************
  * Name: s25fl1_initialize

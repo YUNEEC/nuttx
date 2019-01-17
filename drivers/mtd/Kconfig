@@ -934,40 +934,30 @@ config MTD_SPI_FLASH
 	select SPI
 	default n
 
-choice
-        prompt "SPI flash chip selection"
-        depends on MTD_SPI_FLASH
-        default MTD_W25
-        ---help---
-                Select spi chip
-
 config MTD_W25
-        bool "W25 FLASH"
+        bool "W25 Single SPI FLASH"
+	depends on MTD_SPI_FLASH
 
 config MTD_W25_QSPI
         bool "W25 QSPI FLASH"
+	depends on MTD_SPI_FLASH
 
 config MTD_GIGADEVICE
         bool "Gigadevice FLASH"
+	depends on MTD_SPI_FLASH
 
-endchoice # SPI flash chip selection
-
-if MTD_W25 || MTD_W25_QSPI
-
-config W25_SPIMODE
-	int "W25 SPI Mode"
+config SPI_MODE
+	int "SPI Mode"
 	default 0
+	depends on MTD_SPI_FLASH
 
-config W25_SPIFREQUENCY
-	int "W25 SPI Frequency"
-	default 20000000
+config SPI_FREQUENCY
+	int "Single SPI Frequency"
+	default 104000000
+	depends on MTD_SPI_FLASH
 
-config W25_READONLY
-	bool "W25 Read-Only FLASH"
-	default n
+config QSPI_FREQUENCY
+	int "QSPI Frequency"
+	default 72000000
+	depends on MTD_SPI_FLASH
 
-config W25_SLOWREAD
-	bool
-	default n
-
-endif # MTD_W25

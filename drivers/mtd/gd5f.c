@@ -449,7 +449,7 @@ static ssize_t gd5f_pageread(FAR struct spi_flash_dev_s *priv, off_t address, si
 
   if ((spare && (nbytes != priv->spare_size)) || (nbytes > priv->page_size))
     return -EFAULT;
-  
+
   gd5f_lock(priv->spi);
 
 #ifndef CONFIG_GD5F_SYNC_WRITE
@@ -625,7 +625,7 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
   return ret;
 }
 
-int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
+int gd5f_spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
 {
   int ret;
   if (!priv)
@@ -643,9 +643,9 @@ int spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
   priv->pageread = gd5f_pageread;
   priv->pagewrite = gd5f_pagewrite;
 
-  SPI_SETFREQUENCY(priv->spi, 104000000);
+  SPI_SETFREQUENCY(priv->spi, CONFIG_SPI_FREQUENCY);
   SPI_SETBITS(priv->spi, 8);
-  SPI_SETMODE(priv->spi, SPIDEV_MODE0);
+  SPI_SETMODE(priv->spi, CONFIG_SPI_MODE);
 
   /* Deselect the FLASH */
 
