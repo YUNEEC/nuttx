@@ -86,15 +86,19 @@ bool spi_is_badblock(FAR struct spi_flash_dev_s *priv, size_t block);
 void spi_test_internal(FAR struct spi_flash_dev_s *priv);
 #endif
 
-#ifdef CONFIG_MTD_W25_QSPI
-int w25_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv);
-#endif
-
 #ifdef CONFIG_MTD_W25
 int w25_flash_initialize(FAR struct spi_flash_dev_s *priv);
 #endif
 
-#ifdef CONFIG_MTD_GIGADEVICE
+#ifdef CONFIG_MTD_W25_QSPI
+int w25_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv);
+#endif
+
+#ifdef CONFIG_MTD_GD5F
 int gd5f_flash_initialize(FAR struct spi_flash_dev_s *priv);
+#endif
+
+#ifdef CONFIG_MTD_GD5F_QSPI
+int gd5f_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv);
 #endif
 
