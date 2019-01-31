@@ -614,7 +614,9 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 
 #ifdef CONFIG_GD5F_SYNC_WRITE
   if (status & GD5F_SR_ERR_PROGRAM) {
-    spi_mark_badblock(priv, address >> priv->block_shift);
+    if (!spare) {
+      spi_mark_badblock(priv, address >> priv->block_shift);
+    }
 #ifdef CONFIG_GD5F_DEBUG
     ferr("program error block = %08x\n", address >> priv->block_shift);
 #endif
