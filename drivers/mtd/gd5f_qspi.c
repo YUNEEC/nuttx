@@ -94,7 +94,7 @@
 #define GD5F_MANUFACTURER           0xC8   /* GigaDevice Serial Flash */
 #define GD5F2GQ4U_DEVID             0xD2   /* GD5F2GQ4U device ID (0xD2) */
 
-#define NBLOCKS_2048MBIT          2048  /* 2048 blocks x 128K bytes/block = 256Mb */
+#define NBLOCKS_2048MBIT            2048  /* 2048 blocks x 128K bytes/block = 256Mb */
 
 /* Status register bit definitions */
 
@@ -311,8 +311,6 @@ static void gd5f_write_status_locked(FAR struct spi_flash_dev_s *priv, uint8_t r
     } while (value != status);
 }
 
-
-
 static void gd5f_reset(FAR struct qspi_dev_s *spi)
 {
     gd5f_command(spi, GD5F_RESET, 0, 0);
@@ -443,7 +441,7 @@ static int gd5f_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
     int ret = OK;
     off_t address = block << priv->block_shift;
 
-#if 1//def CONFIG_GD5F_SPI_DEBUG
+#ifdef CONFIG_GD5F_SPI_DEBUG
     ferr("block: %08lx\n", (long)block);
 #endif
 
@@ -708,16 +706,16 @@ void spi_test_internal(FAR struct spi_flash_dev_s *priv)
 static void gd5f_quad_io_enable(FAR struct spi_flash_dev_s *priv)
 {
     uint8_t status = gd5f_read_status_locked(priv, GD5F_STATUS2);
-    ferr("status=%x\n",status);
 
     if (!(status & 0x01))
     {
       uint16_t addr = (GD5F_STATUS2 << 8) | (status | 0x01);
-      ferr("addr=%x\n",addr);
       gd5f_command_write(priv->qspi, GD5F_WRSR, NULL, 0, addr, 2);
 
       status = gd5f_read_status_locked(priv, GD5F_STATUS2);
-      ferr("status=%x\n",status);
+      if (!(status & 0x01)) {
+        ferr("Enable quad io failed! status=%x\n",status);
+      }
     }
 }
 
