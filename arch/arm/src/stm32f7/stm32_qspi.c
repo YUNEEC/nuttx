@@ -1133,7 +1133,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
   {
     /* Acknowledge interrupt */
 
-    qspi_putreg(&g_qspi0dev, QSPI_FCR_CTCF, STM32_QUADSPI_FCR);
+    qspi_putreg(&g_qspi0dev, QSPI_FCR_CTCF, STM32_QUADSPI_FCR_OFFSET);
 
     /* Disable the QSPI FIFO Threshold, Transfer Error and Transfer complete Interrupts */
 
@@ -1184,7 +1184,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
     {
       /* Acknowledge interrupt */
 
-      qspi_putreg(&g_qspi0dev, QSPI_FCR_CSMF, STM32_QUADSPI_FCR);
+      qspi_putreg(&g_qspi0dev, QSPI_FCR_CSMF, STM32_QUADSPI_FCR_OFFSET);
 
       /* If 'automatic poll mode stop' is activated, we're done */
 
@@ -1216,7 +1216,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
     {
       /* Acknowledge interrupt */
 
-      qspi_putreg(&g_qspi0dev, QSPI_FCR_CTEF, STM32_QUADSPI_FCR);
+      qspi_putreg(&g_qspi0dev, QSPI_FCR_CTEF, STM32_QUADSPI_FCR_OFFSET);
 
       /* Disable all the QSPI Interrupts */
 
@@ -1243,7 +1243,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
     {
       /* Acknowledge interrupt */
 
-      qspi_putreg(&g_qspi0dev, QSPI_FCR_CTOF, STM32_QUADSPI_FCR);
+      qspi_putreg(&g_qspi0dev, QSPI_FCR_CTOF, STM32_QUADSPI_FCR_OFFSET);
 
       /* XXX this interrupt simply means that, in 'memory mapped mode',
        * the QSPI memory has not been accessed for a while, and the
@@ -1583,7 +1583,7 @@ static int qspi_receive_blocking(struct stm32_qspidev_s *priv,
           /* Wait for transfer complete, then clear it */
 
           qspi_waitstatusflags(priv, QSPI_SR_TCF, 1);
-          qspi_putreg(priv, QSPI_FCR_CTCF, STM32_QUADSPI_FCR);
+          qspi_putreg(priv, QSPI_FCR_CTCF, STM32_QUADSPI_FCR_OFFSET);
 
           /* Use Abort to clear the busy flag, and ditch any extra bytes in fifo */
 
@@ -1643,7 +1643,7 @@ static int qspi_transmit_blocking(struct stm32_qspidev_s *priv,
           /* Wait for transfer complete, then clear it */
 
           qspi_waitstatusflags(priv, QSPI_SR_TCF, 1);
-          qspi_putreg(priv, QSPI_FCR_CTCF, STM32_QUADSPI_FCR);
+          qspi_putreg(priv, QSPI_FCR_CTCF, STM32_QUADSPI_FCR_OFFSET);
 
           /* Use Abort to clear the Busy flag */
 
@@ -1846,7 +1846,7 @@ static void qspi_setmode(struct qspi_dev_s *dev, enum qspi_mode_e mode)
        *  3    1    1
        */
 
-      regval  = qspi_getreg(priv, STM32_QUADSPI_DCR);
+      regval  = qspi_getreg(priv, STM32_QUADSPI_DCR_OFFSET);
       regval &= ~(QSPI_DCR_CKMODE);
 
       switch (mode)
@@ -1866,7 +1866,7 @@ static void qspi_setmode(struct qspi_dev_s *dev, enum qspi_mode_e mode)
           return;
         }
 
-      qspi_putreg(priv, regval, STM32_QUADSPI_DCR);
+      qspi_putreg(priv, regval, STM32_QUADSPI_DCR_OFFSET);
       spiinfo("DCR=%08x\n", regval);
 
       /* Save the mode so that subsequent re-configurations will be faster */
@@ -1953,7 +1953,7 @@ static int qspi_command(struct qspi_dev_s *dev,
 
   qspi_putreg(priv,
               QSPI_FCR_CTEF | QSPI_FCR_CTCF | QSPI_FCR_CSMF | QSPI_FCR_CTOF,
-              STM32_QUADSPI_FCR);
+              STM32_QUADSPI_FCR_OFFSET);
 
 #ifdef STM32F7_QSPI_INTERRUPTS
   /* interrupt mode will need access to the transaction context */
@@ -2066,6 +2066,10 @@ static int qspi_command(struct qspi_dev_s *dev,
           ret = qspi_receive_blocking(priv, &xctn);
         }
 
+      /* Wait for Transfer complete*/
+
+      qspi_waitstatusflags(priv, QSPI_SR_TCF,1);
+
       MEMORY_SYNC();
     }
   else
@@ -2073,9 +2077,8 @@ static int qspi_command(struct qspi_dev_s *dev,
       ret = OK;
     }
 
-  /* Wait for Transfer complete, and not busy */
+  /* Wait for not busy */
 
-  qspi_waitstatusflags(priv, QSPI_SR_TCF,1);
   qspi_waitstatusflags(priv, QSPI_SR_BUSY,0);
 
 #endif
@@ -2134,7 +2137,7 @@ static int qspi_memory(struct qspi_dev_s *dev,
 
   qspi_putreg(priv,
               QSPI_FCR_CTEF | QSPI_FCR_CTCF | QSPI_FCR_CSMF | QSPI_FCR_CTOF,
-              STM32_QUADSPI_FCR);
+              STM32_QUADSPI_FCR_OFFSET);
 
 #ifdef STM32F7_QSPI_INTERRUPTS
   /* interrupt mode will need access to the transaction context */
