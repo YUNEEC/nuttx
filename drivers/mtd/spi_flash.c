@@ -918,7 +918,7 @@ FAR struct mtd_dev_s *spi_initialize(int bus)
     }
 #endif
 
-#ifdef CONFIG_MTD_GIGADEVICE
+#ifdef CONFIG_MTD_GD5F
     ret = gd5f_spi_flash_initialize(priv);
     if (ret == OK) {
         finfo("Gigadevice SPI flash is found\n");
@@ -933,6 +933,14 @@ FAR struct mtd_dev_s *spi_initialize(int bus)
     ret = w25_qspi_flash_initialize(priv);
     if (ret == OK) {
        finfo("W25 QSPI flash is found\n");
+       goto initialized;
+    }
+#endif
+
+#ifdef CONFIG_MTD_GD5F_QSPI
+    ret = gd5f_qspi_flash_initialize(priv);
+    if (ret == OK) {
+       finfo("GD5F QSPI flash is found\n");
        goto initialized;
     }
 #endif

@@ -116,8 +116,12 @@ ifeq ($(CONFIG_MTD_W25_QSPI),y)
 CSRCS += w25_qspi.c
 endif
 
-ifeq ($(CONFIG_MTD_GIGADEVICE),y)
+ifeq ($(CONFIG_MTD_GD5F),y)
 CSRCS += gd5f.c
+endif
+
+ifeq ($(CONFIG_MTD_GD5F_QSPI),y)
+CSRCS += gd5f_qspi.c
 endif
 
 ifeq ($(CONFIG_MTD_AT25),y)

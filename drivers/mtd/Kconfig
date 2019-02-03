@@ -935,15 +935,19 @@ config MTD_SPI_FLASH
 	default n
 
 config MTD_W25
-        bool "W25 Single SPI FLASH"
+	bool "W25 Single SPI FLASH"
 	depends on MTD_SPI_FLASH
 
 config MTD_W25_QSPI
-        bool "W25 QSPI FLASH"
+	bool "W25 QSPI FLASH"
 	depends on MTD_SPI_FLASH
 
-config MTD_GIGADEVICE
-        bool "Gigadevice FLASH"
+config MTD_GD5F
+	bool "GD5F Single SPI FLASH"
+	depends on MTD_SPI_FLASH
+
+config MTD_GD5F_QSPI
+	bool "GD5F QSPI FLASH"
 	depends on MTD_SPI_FLASH
 
 config SPI_MODE
