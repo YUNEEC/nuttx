@@ -62,7 +62,6 @@
 //#define CONFIG_W25_DEBUG
 //#define CONFIG_W25_SPI_DEBUG
 //#define CONFIG_W25_COMMAND_DEBUG
-//#define CONFIG_W25_TEST
 
 /* Status bitmask */
 #define W25_ERR_ERASE              0x04

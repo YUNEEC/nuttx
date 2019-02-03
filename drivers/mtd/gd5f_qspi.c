@@ -62,7 +62,6 @@
 //#define CONFIG_GD5F_DEBUG
 //#define CONFIG_GD5F_SPI_DEBUG
 //#define CONFIG_GD5F_COMMAND_DEBUG
-//#define CONFIG_GD5F_TEST
 
 /* GD5F Instructions *****************************************************************/
 /*      Command                    Value      Description                           */
