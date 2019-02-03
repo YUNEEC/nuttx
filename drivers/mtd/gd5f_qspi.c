@@ -782,7 +782,7 @@ int gd5f_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv)
         goto errout;
     }
 
-    /*Enable QE, then the quad io operations can be executed.*/
+    /*Enable Quad IO(set QE bit in status regester 0xB0), then the quad io operations can be executed.*/
 
     gd5f_quad_io_enable(priv);
 

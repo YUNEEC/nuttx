@@ -940,7 +940,7 @@ FAR struct mtd_dev_s *spi_initialize(int bus)
 #ifdef CONFIG_MTD_GD5F_QSPI
     ret = gd5f_qspi_flash_initialize(priv);
     if (ret == OK) {
-       ferr("GD5F QSPI flash is found\n");
+       finfo("GD5F QSPI flash is found\n");
        goto initialized;
     }
 #endif
