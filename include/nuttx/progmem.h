@@ -202,6 +202,8 @@ ssize_t up_progmem_ispageerased(size_t page);
 
 ssize_t up_progmem_write(size_t addr, FAR const void *buf, size_t count);
 
+int stm32_flash_writeprotect(size_t page, bool enabled);
+
 #undef EXTERN
 #if defined(__cplusplus)
 }

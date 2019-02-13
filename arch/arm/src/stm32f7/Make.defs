@@ -215,3 +215,5 @@ ifeq ($(CONFIG_STM32F7_QSPI),y)
 CHIP_CSRCS += stm32_qspi.c
 endif
 
+CHIP_CSRCS += stm32_waste.c
+CHIP_CSRCS += stm32_flash.c
