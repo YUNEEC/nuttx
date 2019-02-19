@@ -1,5 +1,5 @@
 /************************************************************************************
- * arch/arm/src/stm32/stm32_flash.c
+ * arch/arm/src/stm32f7/stm32_flash.c
  *
  *   Copyright (C) 2011 Uros Platise. All rights reserved.
  *   Author: Uros Platise <uros.platise@isotel.eu>
@@ -59,7 +59,7 @@
 
 #include "up_arch.h"
 
-/* Only for the STM32F[1|3|4]0xx family and STM32L15xx (EEPROM only) for now */
+/* Only for the STM32F76xx family for now */
 
 #if defined(CONFIG_STM32F7_STM32F76XX)
 
@@ -103,8 +103,6 @@ static inline void sem_unlock(void)
   sem_post(&g_sem);
 }
 
-
-
 static void flash_unlock(void)
 {
   while (getreg32(STM32_FLASH_SR) & FLASH_SR_BSY)
@@ -126,8 +124,6 @@ static void flash_lock(void)
   modifyreg32(STM32_FLASH_CR, 0, FLASH_CR_LOCK);
 }
 
-
-
 #if defined(CONFIG_STM32_FLASH_WORKAROUND_DATA_CACHE_CORRUPTION_ON_RWW)
 static void data_cache_disable(void)
 {
@@ -146,7 +142,6 @@ static void data_cache_enable(void)
 }
 #endif /* defined(CONFIG_STM32_FLASH_WORKAROUND_DATA_CACHE_CORRUPTION_ON_RWW) */
 
-
 /************************************************************************************
  * Public Functions
  ************************************************************************************/
@@ -164,6 +159,7 @@ void stm32_flash_lock(void)
   flash_lock();
   sem_unlock();
 }
+
 #if 0
 static void stm32_flash_dump_regs(void)
 {
@@ -178,6 +174,7 @@ static void stm32_flash_dump_regs(void)
         getreg32(STM32_FLASH_OPTCR1));
 }
 #endif
+
 /************************************************************************************
  * Name: stm32_flash_writeprotect
  *
@@ -186,20 +183,19 @@ static void stm32_flash_dump_regs(void)
  *
  ************************************************************************************/
 
-
-int stm32_flash_writeprotect(size_t page, bool enabled)
+int stm32_flash_writeprotect(size_t pages, bool enabled)
 {
   uint32_t reg;
   uint32_t val;
 
-  if (page >= STM32_FLASH_NPAGES)
+  if (pages > ((1 << STM32_FLASH_NPAGES) - 1))
     {
       return -EFAULT;
     }
 
   /* Select the register that contains the bit to be changed */
 
-  if (page < 12)
+  if (pages & ((1 << STM32_FLASH_NPAGES) - 1))
     {
       reg = STM32_FLASH_OPTCR;
     }
@@ -220,11 +216,11 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
 
   if (enabled)
     {
-      val &= ~(1 << (16+page) );
+      val &= ~(pages << 16);
     }
   else
     {
-      val |=  (1 << (16+page) );
+      val |=  (pages << 16);
     }
 
     /* Wait for completion */
@@ -249,7 +245,6 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
 
   return 0;
 }
-
 
 size_t up_progmem_pagesize(size_t page)
 {
@@ -309,7 +304,6 @@ size_t up_progmem_getaddress(size_t page)
 
   return base_address;
 }
-
 
 size_t up_progmem_npages(void)
 {
@@ -469,5 +463,4 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
   return written;
 }
 
-#endif /* defined(CONFIG_STM32_STM32F10XX) || defined(CONFIG_STM32_STM32F30XX) || \
-          defined(CONFIG_STM32_STM32F4XXX) || defined(CONFIG_STM32_STM32L15XX) */
+#endif /* defined(CONFIG_STM32F7_STM32F76XX) */

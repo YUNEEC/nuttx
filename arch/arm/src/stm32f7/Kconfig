@@ -4896,6 +4896,12 @@ endmenu
 endmenu
 endif # STM32F7_DMA2D
 
+config STM32F7_FLASH
+	bool "Enable On-chip Flash driver"
+	default n
+	---help---
+		Provides standard flash access functions
+
 config STM32F7_QSPI
 	bool "QuadSPI"
 	default n
