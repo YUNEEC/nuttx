@@ -2,19 +2,20 @@ README
 ======
 
 This README discusses issues unique to NuttX configurations for the STMicro
-Nucleo-144 board.  See
+Nucleo-144 board.  See ST document STM32 Nucleo-144 boards (UM1974):
 
-http://www.st.com/content/ccc/resource/technical/document/data_brief/group0/7b/df/1d/e9/64/55/43/8d/DM00247910/files/DM00247910.pdf/jcr:content/translations/en.DM00247910.pdf
+https://www.st.com/resource/en/user_manual/dm00244518.pdf
 
 Contents
 ========
 
   - Nucleo-144 Boards
+  - Nucleo F722ZE
   - Nucleo F746ZG
   - Nucleo F767ZI
   - Development Environment
   - IDEs
-  - Basic configuaration & build steps
+  - Basic configuration & build steps
   - Hardware
     - Button
     - LED
@@ -38,7 +39,9 @@ LQFP144 package.  Variants include
   STM32F303ZET6  NUCLEO-F303ZE
   STM32F429ZIT6  NUCLEO-F429ZI
   STM32F446ZET6  NUCLEO-F446ZE
+  STM32F722ZET6  NUCLEO-F722ZE
   STM32F746ZGT6  NUCLEO-F746ZG
+  STM32F756ZGT6  NUCLEO-F756ZG
   STM32F767ZIT6  NUCLEO-F767ZI
   STM32L496ZGT6  NUCLEO-L496ZG
   STM32L496ZGT6P NUCLEO-L496ZG-P
@@ -202,7 +205,7 @@ Basic configuration & build steps
   different from the default in your PATH variable).
 
    - Configures nuttx creating .config file in the nuttx directory.
-     $ cd tools && ./configure.sh nucleo-f746zg/nsh && cd ..
+     $ tools/configure.sh nucleo-f746zg/nsh
    - Refreshes the .config file with the latest available configurations.
      $ make oldconfig
    - Select the features you want in the build.
@@ -223,22 +226,23 @@ Hardware
    1) The I/O is 3.3 Volt not 5 Volt like on the Arduino products.
    2) The Nucleo-144 board family has 3 pages of Solder Bridges AKA Solder
       Blobs (SB) that can alter the factory configuration. We will note SB
-      in effect but will assume the facitory defualt settings.
+      in effect but will assume the factory default settings.
 
   Our main concern is establishing a console and LED utilization for
   debugging. Because so many pins can be multiplexed with so many functions,
-  the above mentioned graphic may be helpful in indentifying a serial port.
+  the above mentioned graphic may be helpful in identifying a serial port.
 
-  There are 4 choices that can be made from the menuconfig:
+  There are 5 choices that can be made from the menuconfig:
 
   CONFIG_NUCLEO_CONSOLE_ARDUINO or CONFIG_NUCLEO_CONSOLE_MORPHO or
-  CONFIG_NUCLEO_CONSOLE_VIRTUAL or CONFIG_NUCLEO_CONSOLE_NONE
+  CONFIG_NUCLEO_CONSOLE_MORPHO_UART4 or CONFIG_NUCLEO_CONSOLE_VIRTUAL or
+  CONFIG_NUCLEO_CONSOLE_NONE
 
-  The CONFIG_NUCLEO_CONSOLE_NONE makes no preset for the console. YOu shuld still visit
-  the U[S]ART selection and Device Drivers to disable any U[S]ART reamaing.
+  The CONFIG_NUCLEO_CONSOLE_NONE makes no preset for the console. You should still
+  visit the U[S]ART selection and Device Drivers to disable any U[S]ART remaining.
 
   The CONFIG_NUCLEO_CONSOLE_ARDUINO configurations assume that you are using a
-  standard Arduio RS-232 shield with the serial interface with RX on pin D0 and
+  standard Arduino RS-232 shield with the serial interface with RX on pin D0 and
   TX on pin D1 from USART6:
 
             -------- ---------------
@@ -251,21 +255,32 @@ Hardware
 
   The CONFIG_NUCLEO_CONSOLE_MORPHO configurations uses Serial Port 8 (USART8)
   with TX on PE1 and RX on PE0.
-          Serial
+
+            Serial
             ------
             SERIAL_RX         PE_0
             SERIAL_TX         PE_1
 
+  The CONFIG_NUCLEO_CONSOLE_MORPHO_UART4 configurations uses Serial Port 4 (UART4)
+  with TX on PA1 and RX on PA0. Zero Ohm resistor / solder short at
+  SB13 must be removed/open. (Disables Ethernet MII clocking.)
+
+            Serial
+            ------
+            SERIAL_RX         PA_1  CN11 30
+            SERIAL_TX         PA_0  CN11 28
+
   The CONFIG_NUCLEO_CONSOLE_VIRTUAL configurations uses Serial Port 3 (USART3)
   with TX on PD8 and RX on PD9.
-          Serial
+
+            Serial
             ------
             SERIAL_RX         PD9
             SERIAL_TX         PD8
 
-  These signals are internalaly connected to the on board ST-Link
+  These signals are internally connected to the on board ST-Link.
 
-  Of course if your design  has used those pins you can choose a completely
+  Of course if your design has used those pins you can choose a completely
   different U[S]ART to use as the console. In that Case, you will need to edit
   the include/board.h to select different U[S]ART and / or pin selections.
 
@@ -480,7 +495,8 @@ Configurations
 ==============
 
 f7xx-nsh:
-----
+---------
+
   Configures the NuttShell (nsh) located at apps/examples/nsh for the
   Nucleo-144 boards.  The Configuration enables the serial interfaces
   on USART6.  Support for builtin applications is enabled, but in the base
@@ -494,8 +510,10 @@ f7xx-nsh:
      a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
         see additional README.txt files in the NuttX tools repository.
 
-     b. If this is the intall configuration then Execute
-           'cd tools && ./configure.sh nucleo-144/nsh && cd ..'
+     b. If this is the initial configuration then execute
+
+           ./tools/configure.sh nucleo-144/nsh
+
         in nuttx/ in order to start configuration process.
         Caution: Doing this step more than once will overwrite .config with
         the contents of the nucleo-144/nsh/defconfig file.
@@ -514,13 +532,33 @@ f7xx-nsh:
      CONFIG_HOST_LINUX=y                     : Builds under Linux
      CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIL=y     : ARM GNU for Linux
 
-  3. Although the default console is USART3 (which would correspond to
-     the Virtual COM port) I have done all testing with the console
-     device configured for UART8 (see instruction above under "Serial
-     Consoles).
+  3. The serial console may be configured to use either USART3 (which would
+     correspond to the Virtual COM port) or with the console device
+     configured for USART6 to support an Arduino serial shield (see
+     instructions above under "Serial Consoles).  You will need to check the
+     defconfig file to see how the console is set up and, perhaps, modify
+     the configuration accordingly.
+
+     To select the Virtual COM port:
+
+       -CONFIG_NUCLEO_CONSOLE_ARDUINO
+       +CONFIG_NUCLEO_CONSOLE_VIRTUAL=y
+       -CONFIG_USART6_SERIAL_CONSOLE=y
+       +CONFIG_USART3_SERIAL_CONSOLE=y
+
+     To select the Arduino serial shield:
+
+       -CONFIG_NUCLEO_CONSOLE_VIRTUAL=y
+       +CONFIG_NUCLEO_CONSOLE_ARDUINO
+       -CONFIG_USART3_SERIAL_CONSOLE=y
+       +CONFIG_USART6_SERIAL_CONSOLE=y
+
+     Default values for other settings associated with the select USART should
+     be correct.
 
 f7xx-evalos:
--------
+------------
+
   This configuration is designed to test the features of the board.
     - Configures the NuttShell (nsh) located at apps/examples/nsh for the
       Nucleo-144 boards. The console is available on serial interface USART3,
@@ -537,8 +575,10 @@ f7xx-evalos:
     a. Build and install the kconfig-mconf tool.  See nuttx/README.txt
        see additional README.txt files in the NuttX tools repository.
 
-    b. If this is the intall configuration then Execute
-          'cd tools && ./configure.sh nucleo-144/evalos && cd ..'
+    b. If this is the initial configuration then execute
+
+          ./tools/configure.sh nucleo-144/evalos
+
        in nuttx/ in order to start configuration process.
        Caution: Doing this step more than once will overwrite .config with
        the contents of the nucleo-144/evalos/defconfig file.

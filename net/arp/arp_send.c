@@ -90,7 +90,7 @@ static void arp_send_terminate(FAR struct arp_send_s *state, int result)
 
    /* Wake up the waiting thread */
 
-   sem_post(&state->snd_sem);
+   nxsem_post(&state->snd_sem);
 }
 
 /****************************************************************************
@@ -107,6 +107,16 @@ static uint16_t arp_send_eventhandler(FAR struct net_driver_s *dev,
 
   if (state)
     {
+      /* Is this the device that we need to route this request? */
+
+      if (strncmp((FAR const char *)dev->d_ifname,
+                  (FAR const char *)state->snd_ifname, IFNAMSIZ) != 0)
+        {
+          /* No... pass on this one and wait for the device that we want */
+
+          return flags;
+        }
+
       /* Check if the network is still up */
 
       if ((flags & NETDEV_DOWN) != 0)
@@ -117,9 +127,9 @@ static uint16_t arp_send_eventhandler(FAR struct net_driver_s *dev,
         }
 
       /* Check if the outgoing packet is available. It may have been claimed
-       * by a send interrupt serving a different thread -OR- if the output
-       * buffer currently contains unprocessed incoming data. In these cases
-       * we will just have to wait for the next polling cycle.
+       * by a send event handler serving a different thread -OR- if the
+       * output buffer currently contains unprocessed incoming data. In
+       * these cases we will just have to wait for the next polling cycle.
        */
 
       if (dev->d_sndlen > 0 || (flags & PKT_NEWDATA) != 0)
@@ -171,7 +181,7 @@ static uint16_t arp_send_eventhandler(FAR struct net_driver_s *dev,
  *   address mapping is now in the ARP table, or (2) a configurable number
  *   of timeouts occur without receiving the ARP replay.
  *
- * Parameters:
+ * Input Parameters:
  *   ipaddr   The IP address to be queried (in network order).
  *
  * Returned Value:
@@ -223,7 +233,7 @@ int arp_send(in_addr_t ipaddr)
 
   /* Get the device that can route this request */
 
-  dev = netdev_findby_ipv4addr(INADDR_ANY, ipaddr);
+  dev = netdev_findby_ripv4addr(INADDR_ANY, ipaddr);
   if (!dev)
     {
       nerr("ERROR: Unreachable: %08lx\n", (unsigned long)ipaddr);
@@ -231,9 +241,9 @@ int arp_send(in_addr_t ipaddr)
       goto errout;
     }
 
-  /* ARP support is only built if the Ethernet data link is supported.
+  /* ARP support is only built if the Ethernet link layer is supported.
    * Continue and send the ARP request only if this device uses the
-   * Ethernet data link protocol.
+   * Ethernet link layer protocol.
    */
 
   if (dev->d_lltype != NET_LL_ETHERNET)
@@ -250,7 +260,6 @@ int arp_send(in_addr_t ipaddr)
       /* Destination address is not on the local network */
 
 #ifdef CONFIG_NET_ROUTE
-
       /* We have a routing table.. find the correct router to use in
        * this case (or, as a fall-back, use the device's default router
        * address).  We will use the router IP address instead of the
@@ -268,6 +277,17 @@ int arp_send(in_addr_t ipaddr)
       ipaddr = dripaddr;
     }
 
+  /* The destination address is on the local network.  Check if it is
+   * the sub-net broadcast address.
+   */
+
+  else if (net_ipv4addr_broadcast(ipaddr, dev->d_netmask))
+    {
+      /* Yes.. We don't need to send the ARP request */
+
+      return OK;
+    }
+
   /* Allocate resources to receive a callback.  This and the following
    * initialization is performed with the network lock because we don't
    * want anything to happen until we are ready.
@@ -282,26 +302,29 @@ int arp_send(in_addr_t ipaddr)
       goto errout_with_lock;
     }
 
-  /* Initialize the state structure. This is done with interrupts
-   * disabled
-   */
-
   /* This semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&state.snd_sem, 0, 0); /* Doesn't really fail */
-  sem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&state.snd_sem, 0, 0); /* Doesn't really fail */
+  nxsem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
 
   state.snd_retries   = 0;              /* No retries yet */
   state.snd_ipaddr    = ipaddr;         /* IP address to query */
 
   /* Remember the routing device name */
 
-  strncpy((FAR char *)state.snd_ifname, (FAR const char *)dev->d_ifname, IFNAMSIZ);
+  strncpy((FAR char *)state.snd_ifname, (FAR const char *)dev->d_ifname,
+          IFNAMSIZ);
 
-  /* Now loop, testing if the address mapping is in the ARP table and re-sending the ARP request if it is not.
+  /* Now loop, testing if the address mapping is in the ARP table and re-
+   * sending the ARP request if it is not.
    */
+
+  /* The optimal delay would be the worst case round trip time. */
+
+  delay.tv_sec  = CONFIG_ARP_SEND_DELAYSEC;
+  delay.tv_nsec = CONFIG_ARP_SEND_DELAYNSEC;
 
   ret = -ETIMEDOUT; /* Assume a timeout failure */
 
@@ -314,7 +337,7 @@ int arp_send(in_addr_t ipaddr)
        * issue.
        */
 
-      if (arp_find(ipaddr))
+      if (arp_find(ipaddr, NULL) >= 0)
         {
           /* We have it!  Break out with success */
 
@@ -334,21 +357,12 @@ int arp_send(in_addr_t ipaddr)
       state.snd_cb->priv  = (FAR void *)&state;
       state.snd_cb->event = arp_send_eventhandler;
 
-      /* Notify the device driver that new TX data is available.
-       * NOTES: This is in essence what netdev_ipv4_txnotify() does, which
-       * is not possible to call since it expects a in_addr_t as
-       * its single argument to lookup the network interface.
-       */
+      /* Notify the device driver that new TX data is available. */
 
-      if (dev->d_txavail)
-        {
-          dev->d_txavail(dev);
-        }
+      netdev_txnotify_dev(dev);
 
-      /* Wait for the send to complete or an error to occur: NOTES: (1)
-       * net_lockedwait will also terminate if a signal is received, (2)
-       * interrupts may be disabled! They will be re-enabled while the
-       * task sleeps and automatically re-enabled when the task restarts.
+      /* Wait for the send to complete or an error to occur.
+       * net_lockedwait will also terminate if a signal is received.
        */
 
       do
@@ -368,13 +382,7 @@ int arp_send(in_addr_t ipaddr)
           break;
         }
 
-      /* Now wait for response to the ARP response to be received.  The
-       * optimal delay would be the work case round trip time.
-       * NOTE: The network is locked.
-       */
-
-      delay.tv_sec  = CONFIG_ARP_SEND_DELAYSEC;
-      delay.tv_nsec = CONFIG_ARP_SEND_DELAYNSEC;
+      /* Now wait for response to the ARP response to be received. */
 
       ret = arp_wait(&notify, &delay);
 
@@ -389,13 +397,14 @@ int arp_send(in_addr_t ipaddr)
           break;
         }
 
-      /* Increment the retry count */
+      /* Increment the retry count and double the delay time */
 
       state.snd_retries++;
+      clock_timespec_add(&delay, &delay, &delay);
       nerr("ERROR: arp_wait failed: %d\n", ret);
     }
 
-  sem_destroy(&state.snd_sem);
+  nxsem_destroy(&state.snd_sem);
   arp_callback_free(dev, state.snd_cb);
 errout_with_lock:
   net_unlock();

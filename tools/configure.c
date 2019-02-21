@@ -1,7 +1,7 @@
 /****************************************************************************
  * tools/configure.c
  *
- *   Copyright (C) 2012, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,11 +65,13 @@
 
 #define HOST_NOCHANGE  0
 #define HOST_LINUX     1
-#define HOST_WINDOWS   2
+#define HOST_MACOS     2
+#define HOST_WINDOWS   3
 
 #define WINDOWS_NATIVE 1
 #define WINDOWS_CYGWIN 2
 #define WINDOWS_UBUNTU 3
+#define WINDOWS_MSYS   4
 
 /****************************************************************************
  * Private Data
@@ -99,6 +101,7 @@ static char       *g_srcdefconfig  = NULL;  /* Source defconfig file */
 static char       *g_srcmakedefs   = NULL;  /* Source Make.defs file */
 
 static bool        g_winnative     = false; /* True: Windows native configuration */
+static bool        g_oldnative     = false; /* True: Was Windows native configuration */
 static bool        g_needapppath   = true;  /* Need to add app path to the .config file */
 
 static uint8_t     g_host          = HOST_NOCHANGE;
@@ -126,7 +129,7 @@ static const char *g_optfiles[] =
 
 static void show_usage(const char *progname, int exitcode)
 {
-  fprintf(stderr, "\nUSAGE: %s  [-d] [-b] [-f] [-l|c|u|n] [-a <app-dir>] <board-name>[%c<config-name>]\n", progname, g_delim);
+  fprintf(stderr, "\nUSAGE: %s  [-d] [-b] [-f] [-l|m|c|u|g|n] [-a <app-dir>] <board-name>[%c<config-name>]\n", progname, g_delim);
   fprintf(stderr, "\nUSAGE: %s  [-h]\n\n", progname);
   fprintf(stderr, "\nWhere:\n");
   fprintf(stderr, "  -d:\n");
@@ -149,13 +152,17 @@ static void show_usage(const char *progname, int exitcode)
   fprintf(stderr, "    instead of Windows style paths like C:\\Program Files are used.  POSIX\n");
   fprintf(stderr, "    style paths are used by default.\n");
 #endif
-  fprintf(stderr, "  -l:\n");
-  fprintf(stderr, "    Selects the Linux (l) host environment.  The [-c|u|n] options\n");
-  fprintf(stderr, "    select one of the Windows environments.  Default:  Use host setup\n");
-  fprintf(stderr, "    in the defconfig file\n");
-  fprintf(stderr, "  [-c|u|n]\n");
-  fprintf(stderr, "    Selects the Windows host and a Windows host environment:  Cygwin (c),\n");
-  fprintf(stderr, "    Ubuntu under Windows 10 (u), or Windows native (n).  Default Cygwin\n");
+  fprintf(stderr, "  [-l|m|c|u|g|n]\n");
+  fprintf(stderr, "    Selects the host environment.\n");
+  fprintf(stderr, "    -l Selects the Linux (l) host environment.\n");
+  fprintf(stderr, "    -m Selects the macOS (m) host environment.\n");
+  fprintf(stderr, "  [-c|u|g|n] selects the Windows host and a Windows host environment:\n");
+  fprintf(stderr, "    -c Selects the Windows host and Cygwin (c) environment.\n");
+  fprintf(stderr, "    -u Selects the Windows host and Ubuntu under Windows 10 (u) environment.\n");
+  fprintf(stderr, "    -g Selects the Windows host and the MinGW/MSYS environment.\n");
+  fprintf(stderr, "    -n Selects the Windows host and Windows native (n) environment.\n");
+  fprintf(stderr, "  Default: Use host setup in the defconfig file.\n");
+  fprintf(stderr, "  Default Windows: Cygwin.\n");
   fprintf(stderr, "  -a <app-dir>:\n");
   fprintf(stderr, "    Informs the configuration tool where the application build\n");
   fprintf(stderr, "    directory.  This is a relative path from the top-level NuttX\n");
@@ -195,7 +202,7 @@ static void parse_args(int argc, char **argv)
 
   g_debug = false;
 
-  while ((ch = getopt(argc, argv, ":a:bcdfhlnu")) > 0)
+  while ((ch = getopt(argc, argv, "a:bcdfghlmnu")) > 0)
     {
       switch (ch)
         {
@@ -222,11 +229,20 @@ static void parse_args(int argc, char **argv)
              g_winpaths = true;
              break;
 
+          case 'g' :
+            g_host    = HOST_WINDOWS;
+            g_windows = WINDOWS_MSYS;
+            break;
+
           case 'h' :
             show_usage(argv[0], EXIT_SUCCESS);
 
           case 'l' :
             g_host = HOST_LINUX;
+            break;
+
+          case 'm' :
+            g_host = HOST_MACOS;
             break;
 
           case 'n' :
@@ -568,6 +584,33 @@ static void check_configdir(void)
     }
 }
 
+static void check_configured(void)
+{
+  /* If we are already configured then there will be a .config and a Make.defs
+   * file in the top-level directory.
+   */
+
+  snprintf(g_buffer, BUFFER_SIZE, "%s%c.config", g_topdir, g_delim);
+  debug("check_configured: Checking %s\n", g_buffer);
+  if (verify_file(g_buffer))
+    {
+      fprintf(stderr, "ERROR: Found %s... Already configured\n", g_buffer);
+      fprintf(stderr, "       Please 'make distclean' and try again\n");
+      exit(EXIT_FAILURE);
+    }
+
+  /* Try the Make.defs file */
+
+  snprintf(g_buffer, BUFFER_SIZE, "%s%cMake.defs", g_topdir, g_delim);
+  debug("check_configuration: Checking %s\n", g_buffer);
+  if (verify_file(g_buffer))
+    {
+      fprintf(stderr, "ERROR: Found %s... Already configured\n", g_buffer);
+      fprintf(stderr, "       Please 'make distclean' and try again\n");
+      exit(EXIT_FAILURE);
+    }
+}
+
 static void read_configfile(void)
 {
   FILE *stream;
@@ -652,24 +695,35 @@ static void check_appdir(void)
 
   if (!g_appdir)
     {
-      /* No, was the path provided in the configuration? */
+      /* If no application directory was provided on the command line and we
+       * are switching between a windows native host and some other host then
+       * ignore any path to the apps/ directory in the defconfig file.  It
+       * will most certainly not be in a usable form.
+       */
 
-      struct variable_s *var = find_variable("CONFIG_APP_DIR", g_configvars);
-      if (var)
+      if (g_winnative == g_oldnative)
         {
-          debug("check_appdir: Config file appdir=%s\n",
-                var->val ? var->val : "<null>");
+          /* No, was the path provided in the configuration? */
 
-          /* Yes.. does this directory exist? */
+          struct variable_s *var =
+            find_variable("CONFIG_APPS_DIR", g_configvars);
 
-          if (var->val && verify_appdir(var->val))
+          if (var != NULL)
             {
-              /* We are using the CONFIG_APP_DIR setting already
-               * in the defconfig file.
-               */
+              debug("check_appdir: Config file appdir=%s\n",
+                    var->val ? var->val : "<null>");
 
-              g_needapppath = false;
-              return;
+              /* Yes.. does this directory exist? */
+
+              if (var->val && verify_appdir(var->val))
+                {
+                  /* We are using the CONFIG_APPS_DIR setting already in the
+                   * defconfig file.
+                   */
+
+                  g_needapppath = false;
+                  return;
+                }
             }
         }
 
@@ -718,6 +772,23 @@ static void check_configuration(void)
   if (var && var->val && strcmp("y", var->val) == 0)
     {
       debug("check_configuration: Windows native configuration\n");
+      g_oldnative = true;
+    }
+
+  /* If we are going to some host other then windows native or to a windows
+   * native host, then don't ignore what is in the defconfig file.
+   */
+
+  if (g_host == HOST_NOCHANGE)
+    {
+      /* Use whatever we found in the configuration file */
+
+      g_winnative = g_oldnative;
+    }
+  else if (g_host == HOST_WINDOWS && g_windows == WINDOWS_NATIVE)
+    {
+      /* The new configuration is windows native */
+
       g_winnative = true;
     }
 
@@ -846,6 +917,59 @@ static void substitute(char *str, int ch1, int ch2)
     }
 }
 
+static char *double_appdir_backslashes(char *old_appdir)
+{
+  char *new_appdir = NULL;
+  char *p_old = NULL;
+  char *p_new = NULL;
+  int oldlen = 0;
+  int occurrences = 0;
+  int alloclen = 0;
+
+  p_old = old_appdir;
+  while ((p_old = strchr(p_old, '\\')) != NULL)
+    {
+      occurrences++;
+      p_old++;
+    }
+
+  if (occurrences != 0)
+    {
+      oldlen = strlen(old_appdir);
+      alloclen = oldlen + occurrences + sizeof((char) '\0');
+      new_appdir = malloc(alloclen);
+
+      if (new_appdir != NULL)
+        {
+          p_old = old_appdir;
+          p_new = new_appdir;
+          while (oldlen)
+            {
+              if (*p_old != '\\')
+                {
+                  *p_new++ = *p_old;
+                }
+                else
+                {
+                  *p_new++ = '\\';
+                  *p_new++ = '\\';
+                }
+
+              ++p_old;
+              --oldlen;
+            }
+
+          *p_new = '\0';
+        }
+    }
+  else
+    {
+      new_appdir = strdup(old_appdir);
+    }
+
+  return new_appdir;
+}
+
 static void copy_optional(void)
 {
   int i;
@@ -917,14 +1041,15 @@ static void disable_feature(const char *destconfig, const char *varname)
 
 static void set_host(const char *destconfig)
 {
-  if (g_host != HOST_NOCHANGE)
+  switch (g_host)
     {
-      if (g_host == HOST_LINUX)
+      case HOST_LINUX:
         {
           printf("  Select the Linux host\n");
 
           enable_feature(destconfig, "CONFIG_HOST_LINUX");
           disable_feature(destconfig, "CONFIG_HOST_WINDOWS");
+          disable_feature(destconfig, "CONFIG_HOST_MACOS");
 
           disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
           disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
@@ -936,10 +1061,33 @@ static void set_host(const char *destconfig)
           disable_feature(destconfig, "CONFIG_SIM_X8664_MICROSOFT");
           disable_feature(destconfig, "CONFIG_SIM_M32");
         }
-      else if (g_host == HOST_WINDOWS)
+        break;
+
+      case HOST_MACOS:
+        {
+          printf("  Select the Linux host\n");
+
+          disable_feature(destconfig, "CONFIG_HOST_LINUX");
+          disable_feature(destconfig, "CONFIG_HOST_WINDOWS");
+          enable_feature(destconfig, "CONFIG_HOST_MACOS");
+
+          disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
+          disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
+          disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
+          disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
+          disable_feature(destconfig, "CONFIG_WINDOWS_OTHER");
+
+          enable_feature(destconfig, "CONFIG_SIM_X8664_SYSTEMV");
+          disable_feature(destconfig, "CONFIG_SIM_X8664_MICROSOFT");
+          disable_feature(destconfig, "CONFIG_SIM_M32");
+        }
+        break;
+
+      case HOST_WINDOWS:
         {
           enable_feature(destconfig, "CONFIG_HOST_WINDOWS");
           disable_feature(destconfig, "CONFIG_HOST_LINUX");
+          disable_feature(destconfig, "CONFIG_HOST_MACOS");
 
           disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
           disable_feature(destconfig, "CONFIG_WINDOWS_OTHER");
@@ -954,6 +1102,15 @@ static void set_host(const char *destconfig)
               case WINDOWS_CYGWIN:
                 printf("  Select Windows/Cygwin host\n");
                 enable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
+                disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
+                disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
+                disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
+                break;
+
+              case WINDOWS_MSYS:
+                printf("  Select Ubuntu for Windows 10 host\n");
+                disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
+                enable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
                 disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
@@ -961,6 +1118,7 @@ static void set_host(const char *destconfig)
               case WINDOWS_UBUNTU:
                 printf("  Select Ubuntu for Windows 10 host\n");
                 disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
+                disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
                 enable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 disable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
@@ -968,17 +1126,24 @@ static void set_host(const char *destconfig)
               case WINDOWS_NATIVE:
                 printf("  Select Windows native host\n");
                 disable_feature(destconfig, "CONFIG_WINDOWS_CYGWIN");
+                disable_feature(destconfig, "CONFIG_WINDOWS_MSYS");
                 disable_feature(destconfig, "CONFIG_WINDOWS_UBUNTU");
                 enable_feature(destconfig, "CONFIG_WINDOWS_NATIVE");
                 break;
 
               default:
-               fprintf(stderr, "ERROR: Unrecognized  windows configuration: %d\n",
+               fprintf(stderr,
+                       "ERROR: Unrecognized  windows configuration: %d\n",
                        g_windows);
                exit(EXIT_FAILURE);
             }
         }
-      else
+        break;
+
+      case HOST_NOCHANGE:
+        break;
+
+      default:
         {
           fprintf(stderr, "ERROR: Unrecognized  host configuration: %d\n", g_host);
           exit(EXIT_FAILURE);
@@ -1043,6 +1208,24 @@ static void configure(void)
             }
         }
 
+      /* Looks like prebuilt winnative kconfig-conf interprets "..\apps" as
+       * "..apps" (possibly '\a' as escape-sequence) so expand winnative path
+       * to double-backslashed variant "..\\apps".
+       */
+
+      if (g_winnative)
+        {
+          char *tmp_appdir = double_appdir_backslashes(appdir);
+          if (NULL == tmp_appdir)
+            {
+              fprintf(stderr, "ERROR: Failed to double appdir backslashes\n");
+              exit(EXIT_FAILURE);
+            }
+
+          free(appdir);
+          appdir = tmp_appdir;
+        }
+
       /* Open the file for appending */
 
       stream = fopen(destconfig, "a");
@@ -1073,7 +1256,16 @@ static void refresh(void)
       exit(EXIT_FAILURE);
     }
 
+  printf("  Refreshing...\n");
+  fflush(stdout);
+
+#ifdef WIN32
   ret = system("make olddefconfig");
+#else
+  ret = system("make olddefconfig 1>/dev/null");
+#endif
+  putchar('\n');
+
 #ifdef WEXITSTATUS
   if (ret < 0 || WEXITSTATUS(ret) != 0)
 #else
@@ -1097,6 +1289,7 @@ int main(int argc, char **argv, char **envp)
   debug("main: Checking Nuttx Directories\n");
   find_topdir();
   check_configdir();
+  check_configured();
 
   debug("main: Reading the configuration/version files\n");
   read_configfile();

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/imx6/imx_serial.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -69,8 +69,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Which UART with be tty0/console and which tty1-4?  The console will always
- * be ttyS0.  If there is no console then will use the lowest numbered UART.
+/* Which UART with be tty0/console and which tty1-4?  The console will
+ * always be ttyS0.  If there is no console then will use the lowest
+ * numbered UART.
  */
 
 /* First pick the console and ttys0.  This could be any of UART1-5 */
@@ -617,8 +618,8 @@ static int imx_attach(struct uart_dev_s *dev)
  *
  * Description:
  *   Detach UART interrupts.  This method is called when the serial port is
- *   closed normally just before the shutdown method is called.  The exception is
- *   the serial console which is never shutdown.
+ *   closed normally just before the shutdown method is called.  The
+ *   exception is the serial console which is never shutdown.
  *
  ****************************************************************************/
 
@@ -668,7 +669,7 @@ static int imx_interrupt(int irq, void *context, FAR void *arg)
           return OK;
         }
 
-      /* Handline incoming, receive bytes */
+      /* Handle incoming, receive bytes */
 
       if (usr1 & UART_USR1_RRDY)
         {
@@ -963,10 +964,10 @@ int up_putc(int ch)
 
   if (!up_interrupt_context() && g_os_initstate >= OSINIT_HARDWARE)
     {
-      ret = sem_wait(&g_putc_lock);
+      ret = nxsem_wait(&g_putc_lock);
       if (ret < 0)
         {
-          return ERROR;
+          return ret;
         }
 
       locked = true;
@@ -995,7 +996,7 @@ int up_putc(int ch)
 
   if (locked)
     {
-      sem_post(&g_putc_lock);
+      nxsem_post(&g_putc_lock);
     }
 
   return ch;

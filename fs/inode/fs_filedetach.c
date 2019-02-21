@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/inode/fs_filedetach.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,23 +58,28 @@
 
 static inline void _files_semtake(FAR struct filelist *list)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&list->fl_sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&list->fl_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      DEBUGASSERT(get_errno() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
  * Name: _files_semgive
  ****************************************************************************/
 
-#define _files_semgive(list) sem_post(&list->fl_sem)
+#define _files_semgive(list) nxsem_post(&list->fl_sem)
 
 /****************************************************************************
  * Public Functions
@@ -147,9 +152,9 @@ int file_detach(int fd, FAR struct file *filep)
   filep->f_inode   = parent->f_inode;
   filep->f_priv    = parent->f_priv;
 
-  /* Release the file descriptore *without* calling the drive close method
+  /* Release the file descriptor *without* calling the driver close method
    * and without decrementing the inode reference count.  That will be done
-   * in file_close_detached().
+   * in file_close().
    */
 
   parent->f_oflags = 0;
@@ -162,56 +167,3 @@ int file_detach(int fd, FAR struct file *filep)
 }
 #endif
 
-/****************************************************************************
- * Name: file_close_detached
- *
- * Description:
- *   Close a file that was previously detached with file_detach().
- *
- *   REVISIT:  This is essentially the same as _files_close()
- *
- * Input Parameters:
- *   filep - A pointer to a user provided memory location containing the
- *           open file data returned by file_detach().
- *
- * Returned Value:
- *   Zero (OK) is returned on success; A negated errno value is returned on
- *   any failure to indicate the nature of the failure.
- *
- ****************************************************************************/
-
-int file_close_detached(FAR struct file *filep)
-{
-  struct inode *inode;
-  int ret = OK;
-
-  DEBUGASSERT(filep != NULL);
-  inode = filep->f_inode;
-
-  /* Check if the struct file is open (i.e., assigned an inode) */
-
-  if (inode)
-    {
-      /* Close the file, driver, or mountpoint. */
-
-      if (inode->u.i_ops && inode->u.i_ops->close)
-        {
-          /* Perform the close operation */
-
-          ret = inode->u.i_ops->close(filep);
-        }
-
-      /* And release the inode */
-
-      inode_release(inode);
-
-      /* Reset the user file struct instance so that it cannot be reused. */
-
-      filep->f_oflags = 0;
-      filep->f_pos    = 0;
-      filep->f_inode  = NULL;
-      filep->f_priv   = NULL;
-    }
-
-  return ret;
-}

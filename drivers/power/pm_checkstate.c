@@ -87,8 +87,9 @@
 enum pm_state_e pm_checkstate(int domain)
 {
   FAR struct pm_domain_s *pdom;
-  systime_t now;
+  clock_t now, elapsed;
   irqstate_t flags;
+  int index;
 
   /* Get a convenience pointer to minimize all of the indexing */
 
@@ -110,8 +111,9 @@ enum pm_state_e pm_checkstate(int domain)
    * estimated.
    */
 
-   now = clock_systimer();
-   if (now - pdom->stime >= TIME_SLICE_TICKS)
+  now     = clock_systimer();
+  elapsed = now - pdom->stime;
+  if (elapsed >= TIME_SLICE_TICKS)
     {
       int16_t accum;
 
@@ -124,21 +126,21 @@ enum pm_state_e pm_checkstate(int domain)
       pdom->stime = now;
       pdom->accum = 0;
 
-      /* Reassessing the PM state may require some computation.  However,
-       * the work will actually be performed on a worker thread at a user-
-       * controlled priority.
-       */
-
       (void)pm_update(domain, accum);
     }
 
-  leave_critical_section(flags);
+  /* Consider the possible power state lock here */
 
-  /* Return the recommended state.  Assuming that we are called from the
-   * IDLE thread at the lowest priority level, any updates scheduled on the
-   * worker thread above should have already been peformed and the recommended
-   * state should be current:
-   */
+  for (index = 0; index < pdom->recommended; index++)
+    {
+      if (pdom->stay[index] != 0)
+        {
+          pdom->recommended = index;
+          break;
+        }
+    }
+
+  leave_critical_section(flags);
 
   return pdom->recommended;
 }

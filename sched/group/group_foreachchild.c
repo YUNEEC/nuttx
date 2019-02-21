@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/group/group_foreachchild.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,12 +55,12 @@
  * Description:
  *   Execute a function for each child of a group.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The group containing the children
  *   handler - The function to be called
  *   arg - An additional argument to provide to the handler
  *
- * Return Value:
+ * Returned Value:
  *   Success (OK) is always returned unless the handler returns a non-zero
  *   value (a negated errno on errors).  In that case, the traversal
  *   terminates and that non-zero value is returned.
@@ -77,7 +77,9 @@ int group_foreachchild(FAR struct task_group_s *group,
 
   DEBUGASSERT(group);
 
-  for (i = 0; i < group->tg_nmembers; i++)
+  /* Visit the main thread last (if present) */
+
+  for (i = group->tg_nmembers - 1; i >= 0; i--)
     {
       ret = handler(group->tg_members[i], arg);
       if (ret != 0)

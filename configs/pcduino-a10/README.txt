@@ -326,9 +326,11 @@ Configurations
   Each pcDuino configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh pcduino-a10/<subdir>
-    cd -
+    tools/configure.sh [OPTIONS] pcduino-a10/<subdir>
+
+  Where [OPTIONS] include -l to configure for a Linux host platform and
+  -c means to configure for a Windows Cygwin host platform.  -h will give
+  you the list of all options.
 
   Before building, make sure the PATH environment variable includes the
   correct path to the directory than holds your toolchain binaries.

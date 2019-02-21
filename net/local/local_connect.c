@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/local/local_connnect.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
 #include <queue.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 
 #include <arch/irq.h>
@@ -90,19 +91,24 @@ static int32_t local_generate_instance_id(void)
 
 static inline void _local_semtake(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      DEBUGASSERT(get_errno() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define _local_semgive(sem) sem_post(sem)
+#define _local_semgive(sem) nxsem_post(sem)
 
 /****************************************************************************
  * Name: local_stream_connect
@@ -111,7 +117,7 @@ static inline void _local_semtake(sem_t *sem)
  *   Find a local connection structure that is the appropriate "server"
  *   connection to be used with the provided "client" connection.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) returned on success; A negated errno value is returned on a
  *   failure.  Possible failures include:
  *
@@ -176,7 +182,7 @@ static int inline local_stream_connect(FAR struct local_conn_s *client,
       goto errout_with_fifos;
     }
 
-  DEBUGASSERT(client->lc_outfd >= 0);
+  DEBUGASSERT(client->lc_outfile.f_inode != NULL);
 
   /* Add ourself to the list of waiting connections and notify the server. */
 
@@ -184,7 +190,7 @@ static int inline local_stream_connect(FAR struct local_conn_s *client,
   client->lc_state = LOCAL_STATE_ACCEPT;
   local_accept_pollnotify(server, POLLIN);
 
-  if (sem_getvalue(&server->lc_waitsem, &sval) >= 0 && sval < 1)
+  if (nxsem_getvalue(&server->lc_waitsem, &sval) >= 0 && sval < 1)
     {
       _local_semgive(&server->lc_waitsem);
     }
@@ -219,13 +225,13 @@ static int inline local_stream_connect(FAR struct local_conn_s *client,
       goto errout_with_outfd;
     }
 
-  DEBUGASSERT(client->lc_infd >= 0);
+  DEBUGASSERT(client->lc_infile.f_inode != NULL);
   client->lc_state = LOCAL_STATE_CONNECTED;
   return OK;
 
 errout_with_outfd:
-  (void)close(client->lc_outfd);
-  client->lc_outfd = -1;
+  (void)file_close(&client->lc_outfile);
+  client->lc_outfile.f_inode = NULL;
 
 errout_with_fifos:
   (void)local_release_fifos(client);
@@ -244,7 +250,7 @@ errout_with_fifos:
  *   Find a local connection structure that is the appropriate "server"
  *   connection to be used with the provided "client" connection.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) returned on success; A negated errno value is returned on a
  *   failure.  Possible failures include:
  *

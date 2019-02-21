@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_sendfile.c
  *
- *   Copyright (C) 2007, 2009, 2011, 2013, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011, 2013, 2017-2018 Gregory Nutt. All
+ *     rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -73,7 +74,7 @@
  *   different semantics and prototypes.  sendfile() should not be used
  *   in portable programs.
  *
- * Input Parmeters:
+ * Input Parameters:
  *   infd   - A file (or socket) descriptor opened for reading
  *   outfd  - A descriptor opened for writing.
  *   offset - If 'offset' is not NULL, then it points to a variable
@@ -102,7 +103,7 @@
 
 ssize_t sendfile(int outfd, int infd, off_t *offset, size_t count)
 {
-#if defined(CONFIG_NET_TCP) && CONFIG_NSOCKET_DESCRIPTORS > 0
+#if defined(CONFIG_NET_SENDFILE) && CONFIG_NSOCKET_DESCRIPTORS > 0
   /* Check the destination file descriptor:  Is it a (probable) file
    * descriptor?  Check the source file:  Is it a normal file?
    */
@@ -111,32 +112,40 @@ ssize_t sendfile(int outfd, int infd, off_t *offset, size_t count)
       (unsigned int)infd < CONFIG_NFILE_DESCRIPTORS)
     {
       FAR struct file *filep;
+      int ret;
 
       /* This appears to be a file-to-socket transfer.  Get the file
        * structure.
        */
 
-      filep = fs_getfilep(infd);
-      if (!filep)
+      ret = fs_getfilep(infd, &filep);
+      if (ret < 0)
         {
-          /* The errno value has already been set */
-
+          set_errno(-ret);
           return ERROR;
         }
 
+      DEBUGASSERT(filep != NULL);
+
       /* Then let net_sendfile do the work. */
 
-      return net_sendfile(outfd, filep, offset, count);
-    }
-  else
-#endif
-    {
-      /* No... then this is probably a file-to-file transfer.  The generic
-       * lib_sendfile() can handle that case.
-       */
+      ret = net_sendfile(outfd, filep, offset, count);
+      if (ret >= 0 || get_errno() != ENOSYS)
+        {
+          return ret;
+        }
 
-      return lib_sendfile(outfd, infd, offset, count);
+      /* Fall back to the slow path if errno equals ENOSYS,
+       * because net_sendfile fail to optimize this transfer.
+       */
     }
+#endif
+
+  /* No... then this is probably a file-to-file transfer.  The generic
+   * lib_sendfile() can handle that case.
+   */
+
+  return lib_sendfile(outfd, infd, offset, count);
 }
 
 #endif /* CONFIG_NFILE_DESCRIPTORS > 0 && CONFIG_NET_SENDFILE */

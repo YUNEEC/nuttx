@@ -165,7 +165,7 @@ config SAMA5_HAVE_VDEC
 	bool
 	default n
 
-# Summary configuratinos
+# Summary configurations
 
 config SAMA5_FLEXCOM
 	bool
@@ -946,6 +946,21 @@ config SAMA5_LCDC_BACKCOLOR
 	hex "Background color"
 	default 0x0
 
+config SAMA5_LCDC_CMAP
+	bool "Color map support"
+	default n
+	select FB_CMAP
+	---help---
+		Enables color map support
+
+config SAMA5_LCDC_TRANSPARENCY
+	bool "Transparency color map support"
+	default n
+	depends on SAMA5_LCDC_CMAP
+	select FB_TRANSPARENCY
+	---help---
+		Enables transparency color map support
+
 config SAMA5_LCDC_FB_VBASE
 	hex "Framebuffer memory start address (virtual)"
 	---help---
@@ -1433,26 +1448,6 @@ config SAMA5_GMAC_NBC
 	---help---
 		Select to disable receipt of broadcast packets.
 
-choice
-	prompt "Work queue"
-	default SAMA5_GMAC_LPWORK if SCHED_LPWORK
-	default SAMA5_GMAC_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config SAMA5_GMAC_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config SAMA5_GMAC_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
-
 config SAMA5_GMAC_PHYADDR
 	int "PHY address"
 	default 1
@@ -1690,26 +1685,6 @@ config SAMA5_EMACA_NBC
 	default n
 	---help---
 		Select to disable receipt of broadcast packets.
-
-choice
-	prompt "Work queue"
-	default SAMA5_EMACA_LPWORK if SCHED_LPWORK
-	default SAMA5_EMACA_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config SAMA5_EMACA_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config SAMA5_EMACA_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
 
 config SAMA5_EMACA_REGDEBUG
 	bool "Register-Level Debug"
@@ -2103,26 +2078,6 @@ config SAMA5_EMACB_NBC
 	default n
 	---help---
 		Select to disable receipt of broadcast packets.
-
-choice
-	prompt "Work queue"
-	default SAMA5_EMACB_LPWORK if SCHED_LPWORK
-	default SAMA5_EMACB_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config SAMA5_EMACB_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config SAMA5_EMACB_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
 
 config SAMA5_EMACB_DEBUG
 	bool "Force EMAC0/1 DEBUG"
@@ -2549,7 +2504,7 @@ config SAMA5_SSC0_RX_STTDLY
 endif # SAMA5_SSC0_RX
 
 config SAMA5_SSC0_TX
-	bool "Enable I2C transmitter"
+	bool "Enable I2S transmitter"
 	default n
 	---help---
 		Enable I2S transmission logic
@@ -2721,7 +2676,7 @@ config SAMA5_SSC1_RX_STTDLY
 endif # SAMA5_SSC1_RX
 
 config SAMA5_SSC1_TX
-	bool "Enable I2C transmitter"
+	bool "Enable I2S transmitter"
 	default n
 	---help---
 		Enable I2S transmission logic
@@ -3227,7 +3182,7 @@ config SAMA5_ADC_DMASAMPLES
 			2 Buffers * Number_of_ADC_Channels * SAMA5_ADC_DMASAMPLES * sizeof(uint16_t)
 
 		So, for example, if you had 8 ADC channels and 8 triggers per DMA
-		transfer, then the total DMA buffering requirment would be:
+		transfer, then the total DMA buffering requirement would be:
 
 			2 * 8 * 8 * 2 = 256 bytes.
 
@@ -4954,7 +4909,7 @@ config SAMA5_DDRCS_PGHEAP_OFFSET
 		you must have excluding this page cache region from the heap ether
 		by (1) not selecting SAMA5_DDRCS_HEAP, or (2) selecting
 		SAMA5_DDRCS_HEAP_OFFSET and SAMA5_DDRCS_HEAP_SIZE so that the page
-		cache region does not overlapy the region of DRAM that is added to
+		cache region does not overlap the region of DRAM that is added to
 		the heap.
 
 config SAMA5_DDRCS_PGHEAP_SIZE
@@ -4972,7 +4927,7 @@ config SAMA5_DDRCS_PGHEAP_SIZE
 		you must have excluding this page cache region from the heap ether
 		by (1) not selecting SAMA5_DDRCS_HEAP, or (2) selecting
 		SAMA5_DDRCS_HEAP_OFFSET and SAMA5_DDRCS_HEAP_SIZE so that the page
-		cache region does not overlapy the region of DRAM that is added to
+		cache region does not overlap the region of DRAM that is added to
 		the heap.
 
 endif # SAMA5_DDRCS_PGHEAP

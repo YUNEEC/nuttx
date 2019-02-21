@@ -43,7 +43,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
@@ -51,11 +50,10 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
-#include <nuttx/kmalloc.h>
 
-#include "socket/socket.h"
 #include "usrsock/usrsock.h"
 
 /****************************************************************************
@@ -83,7 +81,7 @@ static uint16_t getsockopt_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
   else if (flags & USRSOCK_EVENT_REQ_COMPLETE)
     {
@@ -107,7 +105,7 @@ static uint16_t getsockopt_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
 
   return flags;
@@ -153,26 +151,6 @@ static int do_getsockopt_request(FAR struct usrsock_conn_s *conn, int level,
 }
 
 /****************************************************************************
- * Name: setup_conn_getsockopt
- ****************************************************************************/
-
-static void setup_conn_getsockopt(FAR struct usrsock_conn_s *conn,
-                                  FAR struct iovec *iov, unsigned int iovcnt)
-{
-  unsigned int i;
-
-  conn->resp.datain.iov = iov;
-  conn->resp.datain.pos = 0;
-  conn->resp.datain.total = 0;
-  conn->resp.datain.iovcnt = iovcnt;
-
-  for (i = 0; i < iovcnt; i++)
-    {
-      conn->resp.datain.total += iov[i].iov_len;
-    }
-}
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -193,7 +171,7 @@ static void setup_conn_getsockopt(FAR struct usrsock_conn_s *conn,
  *
  *   See <sys/socket.h> a complete list of values for the 'option' argument.
  *
- * Parameters:
+ * Input Parameters:
  *   conn      usrsock socket connection structure
  *   level     Protocol level to set the option
  *   option    identifies the option to get
@@ -237,7 +215,7 @@ int usrsock_getsockopt(FAR struct usrsock_conn_s *conn, int level, int option,
   inbufs[0].iov_base = (FAR void *)value;
   inbufs[0].iov_len = *value_len;
 
-  setup_conn_getsockopt(conn, inbufs, ARRAY_SIZE(inbufs));
+  usrsock_setup_datain(conn, inbufs, ARRAY_SIZE(inbufs));
 
   /* Request user-space daemon to close socket. */
 
@@ -248,7 +226,7 @@ int usrsock_getsockopt(FAR struct usrsock_conn_s *conn, int level, int option,
 
       while ((ret = net_lockedwait(&state.reqstate.recvsem)) < 0)
         {
-          DEBUGASSERT(ret == -EINTR);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
         }
 
       ret = state.reqstate.result;
@@ -263,7 +241,7 @@ int usrsock_getsockopt(FAR struct usrsock_conn_s *conn, int level, int option,
         }
     }
 
-  setup_conn_getsockopt(conn, NULL, 0);
+  usrsock_teardown_datain(conn);
   usrsock_teardown_data_request_callback(&state);
 
 errout_unlock:

@@ -7,6 +7,7 @@
  *            Diego Sanchez <dsanchez@nx-engineering.com>
  *            Paul Alexander Patience <paul-a.patience@polymtl.ca>
  *            David Sidrane <david_s5@nscdg.com>
+ *            Bob Feretich <bob.feretich@rafresearch.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -61,6 +62,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/fs/ioctl.h>
+#include <nuttx/power/pm.h>
 #include <nuttx/analog/adc.h>
 #include <nuttx/analog/ioctl.h>
 
@@ -85,7 +87,8 @@
 
 /* This implementation is for the STM32 F7[4-7] only */
 
-#if defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX) || \
+#if defined(CONFIG_STM32F7_STM32F72XX) || defined(CONFIG_STM32F7_STM32F73XX) || \
+    defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX) || \
     defined(CONFIG_STM32F7_STM32F76XX) || defined(CONFIG_STM32F7_STM32F77XX)
 
 /****************************************************************************
@@ -224,6 +227,11 @@ struct stm32_dev_s
   uint32_t pclck;       /* The PCLK frequency that drives this timer */
   uint32_t freq;        /* The desired frequency of conversions */
 #endif
+
+#ifdef CONFIG_PM
+  struct pm_callback_s pm_callback;
+#endif
+
 #ifdef ADC_HAVE_DMA
   DMA_HANDLE dma;       /* Allocated DMA channel */
 
@@ -295,6 +303,11 @@ static void adc_dmaconvcallback(DMA_HANDLE handle, uint8_t isr,
 
 static void adc_startconv(FAR struct stm32_dev_s *priv, bool enable);
 
+#ifdef CONFIG_PM
+static int adc_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e state);
+#endif
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
@@ -331,6 +344,12 @@ static struct stm32_dev_s g_adcpriv1 =
   .dmachan     = ADC1_DMA_CHAN,
   .hasdma      = true,
 #endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
+#endif
 };
 
 static struct adc_dev_s g_adcdev1 =
@@ -360,6 +379,12 @@ static struct stm32_dev_s g_adcpriv2 =
   .dmachan     = ADC2_DMA_CHAN,
   .hasdma      = true,
 #endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
+#endif
 };
 
 static struct adc_dev_s g_adcdev2 =
@@ -388,6 +413,12 @@ static struct stm32_dev_s g_adcpriv3 =
 #ifdef ADC3_HAVE_DMA
   .dmachan     = ADC3_DMA_CHAN,
   .hasdma      = true,
+#endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
 #endif
 };
 
@@ -566,7 +597,7 @@ static void tim_modifyreg(FAR struct stm32_dev_s *priv, int offset,
  * Description:
  *   Dump all timer registers.
  *
- * Input parameters:
+ * Input Parameters:
  *   priv - A reference to the ADC block status
  *
  * Returned Value:
@@ -981,6 +1012,33 @@ static int adc_timinit(FAR struct stm32_dev_s *priv)
 #endif
 
 /****************************************************************************
+ * Name: adc_pm_prepare
+ *
+ * Description:
+ *   Called by power management framework when it wants to enter low power
+ *   states. Check if ADC is in progress and if so prevent from entering STOP.
+ *
+ ****************************************************************************/
+#ifdef CONFIG_PM
+static int adc_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e state)
+{
+  struct stm32_dev_s *priv =
+      (struct stm32_dev_s *)((char *)cb -
+                             offsetof(struct stm32_dev_s, pm_callback));
+  uint32_t regval;
+
+  regval = adc_getreg(priv, STM32_ADC_CR2_OFFSET);
+  if ((state >= PM_IDLE) && (regval & ADC_CR2_SWSTART))
+    {
+      return -EBUSY;
+    }
+
+  return OK;
+}
+#endif
+
+/****************************************************************************
  * Name: adc_startconv
  *
  * Description:
@@ -1080,9 +1138,9 @@ static void adc_rccreset(FAR struct stm32_dev_s *priv, bool reset)
 /****************************************************************************
  * Name: adc_enable
  *
- * Description    : Enables or disables the specified ADC peripheral.
- *                  Also, starts a conversion when the ADC is not
- *                  triggered by timers
+ * Description:
+ *   Enables or disables the specified ADC peripheral.  Also, starts a
+ *   conversion when the ADC is not triggered by timers
  *
  * Input Parameters:
  *

@@ -57,6 +57,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/fs/ioctl.h>
+#include <nuttx/power/pm.h>
 #include <nuttx/analog/adc.h>
 #include <nuttx/analog/ioctl.h>
 
@@ -75,19 +76,26 @@
 #if defined(CONFIG_STM32L4_ADC1) || defined(CONFIG_STM32L4_ADC2) || \
     defined(CONFIG_STM32L4_ADC3)
 
-/* This implementation is for the STM32L4X3 and STM32L4X6 only */
+#if !(defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4X5) || \
+      defined(CONFIG_STM32L4_STM32L4X6) || defined(CONFIG_STM32L4_STM32L4XR))
+#  error "Unrecognized STM32 chip"
+#endif
 
-#if defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4X6)
-
-#if defined(CONFIG_STM32L4_STM32L4X3)
+#if defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4XR)
 #  if defined(CONFIG_STM32L4_ADC2) || defined(CONFIG_STM32L4_ADC3)
-#    error "Using non-existent ADC on STM32L4X3"
+#    error "Using non-existent ADC"
 #  endif
 #endif
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+#ifndef container_of
+#  define container_of(ptr, type, member) \
+          ((type *)((intptr_t)(ptr) - offsetof(type, member)))
+#endif
+
 /* RCC reset ****************************************************************/
 
 #define STM32L4_RCC_RSTR STM32L4_RCC_AHB2RSTR
@@ -97,7 +105,7 @@
 
 /* ADC interrupts ***********************************************************/
 
-#if defined(CONFIG_STM32L4_STM32L4X3)
+#if defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4XR)
 #  define STM32L4_IRQ_ADC12 STM32L4_IRQ_ADC1
 #endif
 
@@ -195,6 +203,10 @@ struct stm32_dev_s
   uint32_t freq;        /* The desired frequency of conversions */
 #endif
 
+#ifdef CONFIG_PM
+  struct pm_callback_s pm_callback;
+#endif
+
 #ifdef ADC_HAVE_DMA
   DMA_HANDLE dma;       /* Allocated DMA channel */
 
@@ -258,6 +270,11 @@ static int adc_setoffset(FAR struct stm32_dev_s *priv, uint8_t ch, uint8_t i,
 
 static void adc_startconv(FAR struct stm32_dev_s *priv, bool enable);
 
+#ifdef CONFIG_PM
+static int adc_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e state);
+#endif
+
 /* ADC Interrupt Handler */
 
 static int adc_interrupt(FAR struct adc_dev_s *dev, uint32_t regval);
@@ -317,6 +334,12 @@ static struct stm32_dev_s g_adcpriv1 =
 #ifdef ADC1_HAVE_DFSDM
   .hasdfsdm    = true,
 #endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
+#endif
 };
 
 static struct adc_dev_s g_adcdev1 =
@@ -349,6 +372,12 @@ static struct stm32_dev_s g_adcpriv2 =
 #ifdef ADC2_HAVE_DFSDM
   .hasdfsdm    = true,
 #endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
+#endif
 };
 
 static struct adc_dev_s g_adcdev2 =
@@ -380,6 +409,12 @@ static struct stm32_dev_s g_adcpriv3 =
 #endif
 #ifdef ADC3_HAVE_DFSDM
   .hasdfsdm    = true,
+#endif
+#ifdef CONFIG_PM
+  .pm_callback =
+    {
+      .prepare = adc_pm_prepare,
+    }
 #endif
 };
 
@@ -558,7 +593,7 @@ static void tim_modifyreg(FAR struct stm32_dev_s *priv, int offset,
  * Description:
  *   Dump all timer registers.
  *
- * Input parameters:
+ * Input Parameters:
  *   priv - A reference to the ADC block status
  *
  * Returned Value:
@@ -975,6 +1010,32 @@ static int adc_timinit(FAR struct stm32_dev_s *priv)
 #endif
 
 /****************************************************************************
+ * Name: adc_pm_prepare
+ *
+ * Description:
+ *   Called by power management framework when it wants to enter low power
+ *   states. Check if ADC is in progress and if so prevent from entering STOP.
+ *
+ ****************************************************************************/
+#ifdef CONFIG_PM
+static int adc_pm_prepare(struct pm_callback_s *cb, int domain,
+                          enum pm_state_e state)
+{
+  FAR struct stm32_dev_s *priv =
+      container_of(cb, struct stm32_dev_s, pm_callback);
+  uint32_t regval;
+
+  regval = adc_getreg(priv, STM32L4_ADC_CR_OFFSET);
+  if ((state >= PM_IDLE) && (regval & ADC_CR_ADSTART))
+    {
+      return -EBUSY;
+    }
+
+  return OK;
+}
+#endif
+
+/****************************************************************************
  * Name: adc_wdog_enable
  *
  * Description:
@@ -1085,7 +1146,8 @@ static void adc_rccreset(FAR struct stm32_dev_s *priv, bool reset)
 /****************************************************************************
  * Name: adc_enable
  *
- * Description    : Enables the specified ADC peripheral.
+ * Description:
+ *   Enables the specified ADC peripheral.
  *
  * Input Parameters:
  *   priv - A reference to the ADC block status
@@ -1962,9 +2024,16 @@ struct adc_dev_s *stm32l4_adc_initialize(int intf, FAR const uint8_t *chanlist,
   priv->cchannels = cchannels;
   memcpy(priv->chanlist, chanlist, cchannels);
 
+#ifdef CONFIG_PM
+  if (pm_register(&priv->pm_callback) != OK)
+    {
+      aerr("Power management registration failed\n");
+      return NULL;
+    }
+#endif
+
   return dev;
 }
 
-#endif /* CONFIG_STM32L4_STM32L4X3 || CONFIG_STM32L4_STM32L4X6 */
 #endif /* CONFIG_STM32L4_ADC1 || CONFIG_STM32L4_ADC2 || CONFIG_STM32L4_ADC3 */
 #endif /* CONFIG_ADC */

@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/stm32f103-minimum/src/stm32f103_minimum.h
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Laurent Latil <laurent@latil.nom.fr>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,9 +44,44 @@
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
+#include <arch/chip/chip.h>
+
 /************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************/
+
+#define HAVE_AT24 1
+
+/* AT24 Serial EEPROM */
+
+#define AT24_I2C_BUS   1 /* AT24C256 connected to I2C1 */
+#define AT24_MINOR     0
+
+#if !defined(CONFIG_MTD_AT24XX) || !defined(CONFIG_STM32_I2C1)
+#  undef HAVE_AT24
+#endif
+
+/* Can't support AT24 features if mountpoints are disabled or if we were not
+ * asked to mount the AT25 part
+ */
+
+#if defined(CONFIG_DISABLE_MOUNTPOINT) || \
+   !defined(CONFIG_STM32F103MINIMUM_AT24_BLOCKMOUNT)
+#  undef HAVE_AT24
+#endif
+
+/* If we are going to mount the AT24, then they user must also have told
+ * us what to do with it by setting one of these.
+ */
+
+#ifndef CONFIG_FS_NXFFS
+#  undef CONFIG_STM32F103MINIMUM_AT24_NXFFS
+#endif
+
+#if !defined(CONFIG_STM32F103MINIMUM_AT24_FTL) && \
+    !defined(CONFIG_STM32F103MINIMUM_AT24_NXFFS)
+#  undef HAVE_AT24
+#endif
 
 /* How many SPI modules does this chip support? The LM3S6918 supports 2 SPI
  * modules (others may support more -- in such case, the following must be
@@ -63,8 +98,18 @@
 /* GPIOs **************************************************************/
 /* LEDs */
 
-#define GPIO_LED1         (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
-                           GPIO_OUTPUT_CLEAR|GPIO_PORTC|GPIO_PIN13)
+/* The Blue/Red pills have a different pinout to the Black pill,
+ * which includes the board's user LED.
+ */
+
+#ifdef CONFIG_STM32F103MINIMUM_BLACKPILL
+#  define GPIO_LED1         (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
+                            GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN12)
+#else
+#  define GPIO_LED1         (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
+                             GPIO_OUTPUT_CLEAR|GPIO_PORTC|GPIO_PIN13)
+#endif
+
 /* BUTTONs */
 
 #define GPIO_BTN_USER1    (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_MODE_INPUT|\
@@ -77,11 +122,19 @@
 #define MAX_IRQBUTTON     BUTTON_USER2
 #define NUM_IRQBUTTONS    (BUTTON_USER1 - BUTTON_USER2 + 1)
 
+/* ZERO CROSS pin definition */
+
+#define GPIO_ZEROCROSS    (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_PORTA|GPIO_PIN0)
+
 /* Pins config to use with HC-SR04 sensor */
 
 #define GPIO_HCSR04_INT   (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_PORTA|GPIO_PIN0)
 #define GPIO_HCSR04_TRIG  (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
                            GPIO_OUTPUT_CLEAR|GPIO_PORTA|GPIO_PIN1)
+
+/* Pin for APDS-9960 sensor */
+
+#define GPIO_APDS9960_INT (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_PORTA|GPIO_PIN0)
 
 /* SPI chip selects */
 
@@ -92,6 +145,9 @@
                            GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
 
 #define STM32_LCD_CS      (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
+
+#define GPIO_MAX6675_CS   (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
                            GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
 
 #define GPIO_MCP2515_CS   (GPIO_OUTPUT|GPIO_CNF_OUTPP|GPIO_MODE_50MHz|\
@@ -116,6 +172,10 @@
 
 #define STM32F103MINIMUM_PWMTIMER   3
 #define STM32F103MINIMUM_PWMCHANNEL 3
+
+/* LM-75 Temperature Sensor: PA.0 */
+
+#define GPIO_LM75_OSINT (GPIO_INPUT|GPIO_CNF_INFLOAT|GPIO_PORTA|GPIO_PIN0)
 
 /* nRF24 Configuration */
 
@@ -164,7 +224,7 @@
  *   CONFIG_LIB_BOARDCTL=y:
  *     If CONFIG_NSH_ARCHINITIALIZE=y:
  *       Called from the NSH library (or other application)
- *     Otherse, assumed to be called from some other application.
+ *     Otherwise, assumed to be called from some other application.
  *
  *   Otherwise CONFIG_BOARD_INITIALIZE=y:
  *     Called from board_initialize().
@@ -187,6 +247,55 @@ int stm32_bringup(void);
 int stm32_gpio_initialize(void);
 #endif
 
+/****************************************************************************
+ * Name: stm32_zerocross_initialize
+ *
+ * Description:
+ *   Initialize and register the zero cross driver
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SENSORS_ZEROCROSS
+int stm32_zerocross_initialize(void);
+#endif
+
+/************************************************************************************
+ * Name: stm32_adc_setup
+ *
+ * Description:
+ *   Initialize ADC and register the ADC driver.
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_ADC
+int stm32_adc_setup(void);
+#endif
+
+/************************************************************************************
+ * Name: stm32_apds9960initialize
+ *
+ * Description:
+ *   Initialize APDS-9960 gesture sensor
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SENSORS_APDS9960
+int stm32_apds9960initialize(FAR const char *devpath);
+#endif
+
+/****************************************************************************
+ * Name: stm32_bmp180initialize
+ *
+ * Description:
+ *   Called to configure an I2C and to register BMP180 for the stm32f4discovery
+ *   board.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SENSORS_BMP180
+int stm32_bmp180initialize(FAR const char *devpath);
+#endif
+
 /************************************************************************************
  * Name: stm32_spidev_initialize
  *
@@ -198,6 +307,30 @@ int stm32_gpio_initialize(void);
 void stm32_spidev_initialize(void);
 
 /************************************************************************************
+ * Name: stm32_mmcsd_initialize
+ *
+ * Description:
+ *   Initializes SPI-based SD card
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_MMCSD
+int stm32_mmcsd_initialize(int minor);
+#endif
+
+/****************************************************************************
+ * Name: nunchuck_initialize
+ *
+ * Description:
+ *   Initialize and register the button joystick driver
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_INPUT_NUNCHUCK
+int nunchuck_initialize(FAR char *devname);
+#endif
+
+/************************************************************************************
  * Name: stm32_hcsr04_initialize
  *
  * Description:
@@ -206,6 +339,30 @@ void stm32_spidev_initialize(void);
  ************************************************************************************/
 
 int stm32_hcsr04_initialize(FAR const char *devname);
+
+/************************************************************************************
+ * Name: stm32_lm75initialize
+ *
+ * Description:
+ *   Called to initialize LM75 temperature sensor
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_LM75_I2C
+int stm32_lm75initialize(FAR const char *devpath);
+#endif
+
+/************************************************************************************
+ * Name: stm32_max6675initialize
+ *
+ * Description:
+ *   Called to initialize MAX6675 temperature sensor
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SENSORS_MAX6675
+int stm32_max6675initialize(FAR const char *devpath);
+#endif
 
 /************************************************************************************
  * Name: stm32_w25initialize
@@ -230,7 +387,7 @@ int stm32_qencoder_initialize(FAR const char *devpath, int timer);
 #endif
 
 /****************************************************************************
- * Name stm32_rgbled_setup
+ * Name: stm32_rgbled_setup
  *
  * Description:
  *   This function is called by board initialization logic to configure the
@@ -301,7 +458,7 @@ int stm32_pwm_setup(void);
  * Description:
  *   Initialize the NRF24L01 wireless module
  *
- * Input Parmeters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:

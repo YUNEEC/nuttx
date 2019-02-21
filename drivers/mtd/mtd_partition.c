@@ -61,6 +61,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define PART_NAME_MAX           15
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -93,7 +95,7 @@ struct mtd_partition_s
   struct mtd_partition_s  *pnext; /* Pointer to next partition struct */
 #endif
 #ifdef CONFIG_MTD_PARTITION_NAMES
-  FAR const char *name;         /* Name of the partition */
+  char name[PART_NAME_MAX + 1]; /* Name of the partition */
 #endif
 };
 
@@ -545,7 +547,7 @@ static ssize_t part_procfs_read(FAR struct file *filep, FAR char *buffer,
   ssize_t blkpererase;
   ssize_t ret;
 #ifdef CONFIG_MTD_PARTITION_NAMES
-  char partname[11];
+  char partname[PART_NAME_MAX + 1];
   FAR const char *ptr;
   uint8_t x;
 #endif
@@ -569,15 +571,9 @@ static ssize_t part_procfs_read(FAR struct file *filep, FAR char *buffer,
       if (attr->nextpart == g_pfirstpartition)
         {
 #ifdef CONFIG_MTD_PARTITION_NAMES
-          total = snprintf(buffer, buflen, "Name        Start    Size");
+          total = snprintf(buffer, buflen, "%-*s  Start    Size   MTD\n", PART_NAME_MAX, "Name");
 #else
-          total = snprintf(buffer, buflen, "  Start    Size");
-#endif
-
-#ifndef CONFIG_FS_PROCFS_EXCLUDE_MTD
-          total += snprintf(&buffer[total], buflen - total, "   MTD\n");
-#else
-          total += snprintf(&buffer[total], buflen - total, "\n");
+          total = snprintf(buffer, buflen, "  Start    Size   MTD\n");
 #endif
         }
 
@@ -604,57 +600,36 @@ static ssize_t part_procfs_read(FAR struct file *filep, FAR char *buffer,
           /* Copy data from the next known partition */
 
 #ifdef CONFIG_MTD_PARTITION_NAMES
-          if (attr->nextpart->name == NULL)
+          ptr = attr->nextpart->name;
+          for (x = 0; x < sizeof(partname) - 1; x++)
             {
-              strcpy(partname, "(noname)  ");
-            }
-          else
-            {
-              ptr = attr->nextpart->name;
-              for (x = 0; x < sizeof(partname) - 1; x++)
+              /* Test for end of partition name */
+
+              if (*ptr == ',' || *ptr == '\0')
                 {
-                  /* Test for end of partition name */
+                  /* Perform space fill for alignment */
 
-                  if (*ptr == ',' || *ptr == '\0')
-                    {
-                      /* Perform space fill for alignment */
-
-                      partname[x] = ' ';
-                    }
-                  else
-                    {
-                      /* Copy next byte of partition name */
-
-                      partname[x] = *ptr++;
-                    }
+                  partname[x] = ' ';
                 }
+              else
+                {
+                  /* Copy next byte of partition name */
 
-              partname[x] = '\0';
+                  partname[x] = *ptr++;
+                }
             }
+
+          partname[x] = '\0';
 
           /* Terminate the partition name and add to output buffer */
 
-          ret = snprintf(&buffer[total], buflen - total, "%s%7d %7d",
+          ret = snprintf(&buffer[total], buflen - total, "%s%7d %7d   %s\n",
                   partname, attr->nextpart->firstblock / blkpererase,
-                  attr->nextpart->neraseblocks);
+                  attr->nextpart->neraseblocks, attr->nextpart->parent->name);
 #else
-          ret = snprintf(&buffer[total], buflen - total, "%7d %7d",
+          ret = snprintf(&buffer[total], buflen - total, "%7d %7d   %s\n",
                   attr->nextpart->firstblock / blkpererase,
-                  attr->nextpart->neraseblocks);
-#endif
-
-#ifndef CONFIG_FS_PROCFS_EXCLUDE_MTD
-          if (ret + total < buflen)
-            {
-              ret += snprintf(&buffer[total + ret], buflen - (total + ret),
-                        "   %s\n", attr->nextpart->parent->name);
-            }
-#else
-          if (ret + total < buflen)
-            {
-              ret += snprintf(&buffer[total + ret], buflen - (total + ret),
-                        "\n");
-            }
+                  attr->nextpart->neraseblocks, attr->nextpart->parent->name);
 #endif
 
           if (ret + total < buflen)
@@ -767,7 +742,7 @@ static int part_procfs_stat(const char *relpath, struct stat *buf)
  *   partitions, that mutual exclusion would be provided by the file system
  *   above the FLASH driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   mtd        - The MTD device to be partitioned
  *   firstblock - The offset in bytes to the first block
  *   nblocks    - The number of blocks in the partition
@@ -852,6 +827,7 @@ FAR struct mtd_dev_s *mtd_partition(FAR struct mtd_dev_s *mtd, off_t firstblock,
 #ifdef CONFIG_MTD_BYTE_WRITE
   part->child.write  = mtd->write ? part_write : NULL;
 #endif
+  part->child.name   = "part";
 
   part->parent       = mtd;
   part->firstblock   = erasestart * blkpererase;
@@ -860,7 +836,7 @@ FAR struct mtd_dev_s *mtd_partition(FAR struct mtd_dev_s *mtd, off_t firstblock,
   part->blkpererase  = blkpererase;
 
 #ifdef CONFIG_MTD_PARTITION_NAMES
-  part->name         = NULL;
+  strcpy(part->name, "(noname)");
 #endif
 
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_PROCFS_EXCLUDE_PARTITIONS)
@@ -906,11 +882,14 @@ int mtd_setpartitionname(FAR struct mtd_dev_s *mtd, FAR const char *name)
 {
   FAR struct mtd_partition_s *priv = (FAR struct mtd_partition_s *)mtd;
 
-  DEBUGASSERT(mtd);
-  DEBUGASSERT(name);
+  if (priv == NULL || name == NULL)
+    {
+      return -EINVAL;
+    }
 
   /* Allocate space for the name */
-  priv->name = name;
+
+  strncpy(priv->name, name, sizeof(priv->name));
   return OK;
 }
 #endif

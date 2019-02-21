@@ -22,78 +22,7 @@ config DEV_ZERO
 	bool "Enable /dev/zero"
 	default n
 
-config ARCH_HAVE_RNG
-	bool
-
-config DEV_RANDOM
-	bool "Enable /dev/random"
-	default y
-	depends on ARCH_HAVE_RNG
-	---help---
-		Enable support for /dev/urandom provided by a hardware TRNG.
-
-config DEV_URANDOM
-	bool "Enable /dev/urandom"
-	default n
-	---help---
-		Enable support for /dev/urandom provided by either a hardware TRNG or
-		by a software PRNG implementation.
-
-		NOTE:  This option may not be cryptographially secure and should not
-		be enabled if you are concerned about cyptographically secure
-		pseudo-random numbers (CPRNG) and do not know the characteristics
-		of the software PRNG impelementation!
-
-if DEV_URANDOM
-
-choice
-	prompt "/dev/urandom algorithm"
-	default DEV_URANDOM_ARCH if ARCH_HAVE_RNG
-	default DEV_URANDOM_XORSHIFT128 if !ARCH_HAVE_RNG
-
-config DEV_URANDOM_XORSHIFT128
-	bool "xorshift128"
-	---help---
-		xorshift128 is a pseudorandom number generator that is simple,
-		portable, and can also be used on 8-bit and 16-bit MCUs.
-
-		NOTE: Not cyptographically secure
-
-config DEV_URANDOM_CONGRUENTIAL
-	bool "Conguential"
-	---help---
-		Use the same congruential general used with srand().  This algorithm
-		is computationally more intense and uses double precision floating
-		point.  NOTE: Good randomness from the congruential generator also
-		requires that you also select CONFIG_LIB_RAND_ORDER > 2
-
-		NOTE: Not cyptographically secure
-
-config DEV_URANDOM_RANDOM_POOL
-	bool "Entropy pool"
-	depends on CRYPTO_RANDOM_POOL
-	---help---
-		Use the entropy pool CPRNG output for urandom algorithm.
-
-		NOTE: May or may not be cyptographically secure, depending upon the
-		quality entropy available to entropy pool.
-
-config DEV_URANDOM_ARCH
-	bool "Architecture-specific"
-	depends on ARCH_HAVE_RNG
-	---help---
-		The implementation of /dev/urandom is provided in archtecture-
-		specific logic using hardware TRNG logic.  architecture-specific
-		logic must provide the whole implementation in this case, including
-		the function devurandom_register().  In this case, /dev/urandom may
-		refer to the same driver as /dev/random.
-
-		NOTE: May or may not be cyptographically secure, depending upon the
-		implementation.
-
-endchoice # /dev/urandom algorithm
-endif # DEV_URANDOM
-
+source drivers/crypto/Kconfig
 source drivers/loop/Kconfig
 
 menu "Buffering"
@@ -179,37 +108,7 @@ menuconfig PWM
 		See include/nuttx/drivers/pwm.h for further PWM driver information.
 
 if PWM
-
-config PWM_PULSECOUNT
-	bool "PWM Pulse Count Support"
-	default n
-	depends on ARCH_HAVE_PWM_PULSECOUNT
-	---help---
-		Some hardware will support generation of a fixed number of pulses.
-		This might be used, for example to support a stepper motor.  If the
-		hardware will support a fixed pulse count, then this configuration
-		should be set to enable the capability.
-
-config PWM_MULTICHAN
-	bool "PWM Multiple Output Channel Support"
-	default n
-	depends on ARCH_HAVE_PWM_MULTICHAN
-	depends on !PWM_PULSECOUNT
-	---help---
-		Enables support for multiple output channels per timer.
-
-if PWM_MULTICHAN
-
-config PWM_NCHANNELS
-	int "Number of Output Channels Per Timer"
-	default 1
-	range 1 6
-	---help---
-		Specifies the number of output channels per timer.  Each timer
-		may support fewer output channels than this value.
-
-endif # PWM_MULTICHAN
-
+source drivers/pwm/Kconfig
 endif # PWM
 
 config ARCH_HAVE_I2CRESET
@@ -238,6 +137,7 @@ menuconfig I2S
 		See include/nuttx/audio/i2s.h for further I2S driver information.
 
 if I2S
+source drivers/i2s/Kconfig
 endif # I2S
 
 source drivers/timers/Kconfig
@@ -269,6 +169,20 @@ menuconfig DRIVERS_AUDIO
 if DRIVERS_AUDIO
 source drivers/audio/Kconfig
 endif # DRIVERS_AUDIO
+
+config FB_CMAP
+	bool
+	default n
+	---help---
+		Set by driver-specific configuration to indicate support for color
+		mapping.  Not directly user selectable.
+
+config FB_TRANSPARENCY
+	bool
+	default n
+	---help---
+		Set by driver-specific configuration to indicate support for color
+		transparency.  Not directly user selectable.
 
 menuconfig DRIVERS_VIDEO
 	bool "Video Device Support"
@@ -308,6 +222,24 @@ endif # INPUT
 source drivers/ioexpander/Kconfig
 source drivers/lcd/Kconfig
 source drivers/leds/Kconfig
+
+# MMC/SD-related platform capabilities
+
+config ARCH_HAVE_SDIO
+	bool
+	default n
+
+config ARCH_HAVE_SDIOWAIT_WRCOMPLETE
+	bool
+	default n
+
+config ARCH_HAVE_SDIO_PREFLIGHT
+	bool
+	default n
+
+config ARCH_HAVE_SDIO_DELAYED_INVLDT
+	bool
+	default n
 
 menuconfig MMCSD
 	bool "MMC/SD Driver Support"
@@ -476,5 +408,13 @@ menuconfig DRIVERS_CONTACTLESS
 		Drivers for various contactless devices.
 
 source drivers/contactless/Kconfig
+
+menuconfig 1WIRE
+	bool "1wire Device Support"
+	default n
+	---help---
+		Drivers for various 1wire devices.
+
+source drivers/1wire/Kconfig
 
 source drivers/syslog/Kconfig

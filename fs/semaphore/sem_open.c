@@ -77,7 +77,7 @@
  *   the same semaphore address is returned (provided there have been no
  *   calls to sem_unlink()).
  *
- * Parameters:
+ * Input Parameters:
  *   name  - Semaphore name
  *   oflags - Semaphore creation options.  This may either or both of the
  *     following bit settings.
@@ -93,7 +93,7 @@
  *        initial values of the semaphore must be less than or equal to
  *        SEM_VALUE_MAX.
  *
- * Return Value:
+ * Returned Value:
  *   A pointer to sem_t or SEM_FAILED if unsuccessful.
  *
  * Assumptions:
@@ -239,7 +239,7 @@ FAR sem_t *sem_open (FAR const char *name, int oflags, ...)
 
       /* Initialize the semaphore */
 
-      sem_init(&nsem->ns_sem, 0, value);
+      nxsem_init(&nsem->ns_sem, 0, value);
 
       /* Return a reference to the semaphore */
 

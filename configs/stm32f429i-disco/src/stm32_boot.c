@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/stm32f429i-disco/src/stm32_boot.c
  *
- *   Copyright (C) 2011-2012, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,55 +47,6 @@
 #include "up_arch.h"
 #include "stm32f429i-disco.h"
 #include "stm32_ccm.h"
-
-/************************************************************************************
- * Pre-processor Definitions
- ************************************************************************************/
-
-/* Configuration ********************************************************************/
-/* Should we initialize the NX server using nx_start?  This is done for NxWidgets
- * (CONFIG_NXWIDGETS=y) and if the NxWidget::CNxServer class expects the RTOS do the
- * the NX initialization (CONFIG_NXWIDGET_SERVERINIT=n).  This combination of
- * settings is normally only used in the kernel build mode* (CONFIG_BUILD_PROTECTED)
- * when NxWidgets is unable to initialize NX from user-space.
- */
-
-#undef HAVE_NXSTART
-
-#if !defined(CONFIG_NX_MULTIUSER)
-#  undef CONFIG_NX_START
-#endif
-
-#if defined(CONFIG_NXWIDGETS) && !defined(CONFIG_NXWIDGET_SERVERINIT)
-#   define HAVE_NXSTART
-#   include <nuttx/nx/nx.h>
-#endif
-
-/* Should we initialize the touchscreen for the NxWM (CONFIG_NXWM=y)?  This
- * is done if we have a touchscreen (CONFIG_INPUT_STMPE811=y), NxWM uses the
- * touchscreen (CONFIG_NXWM_TOUCHSCREEN=y), and if we were asked to
- * initialize the touchscreen for NxWM (NXWM_TOUCHSCREEN_DEVINIT=n). This
- * combination of settings is normally only used in the kernel build mode
- * (CONFIG_BUILD_PROTECTED) when NxWidgets is unable to initialize NX from
- * user-space.
- */
-
-#undef HAVE_TCINIT
-
-#if defined(CONFIG_NXWM_TOUCHSCREEN)
-#  if !defined(CONFIG_NXWM_TOUCHSCREEN_DEVNO)
-#    error CONFIG_NXWM_TOUCHSCREEN_DEVNO is not defined
-#  elif defined(CONFIG_INPUT_STMPE811)
-#    if !defined(CONFIG_NXWM_TOUCHSCREEN_DEVINIT)
-#      define HAVE_TCINIT
-#      include <nuttx/input/touchscreen.h>
-#    endif
-#  else
-#    if !defined(CONFIG_NXWM_TOUCHSCREEN_DEVINIT) && defined(CONFIG_BUILD_PROTECTED)
-#      error CONFIG_INPUT_STMPE811=y is needed
-#    endif
-#  endif
-#endif
 
 /************************************************************************************
  * Public Functions
@@ -163,7 +114,7 @@ void stm32_boardinitialize(void)
  *   If CONFIG_BOARD_INITIALIZE is selected, then an additional
  *   initialization call will be performed in the boot-up sequence to a
  *   function called board_initialize().  board_initialize() will be
- *   called immediately after up_initialize() is called and just before the
+ *   called immediately after up_intiialize() is called and just before the
  *   initial application is started.  This additional initialization phase
  *   may be used, for example, to initialize board-specific device drivers.
  *
@@ -172,25 +123,8 @@ void stm32_boardinitialize(void)
 #ifdef CONFIG_BOARD_INITIALIZE
 void board_initialize(void)
 {
-#ifdef CONFIG_STM32F429I_DISCO_ILI9341_FBIFACE
-  /* Initialize the framebuffer driver */
+  /* Perform board-specific initialization */
 
-  up_fbinitialize(0);
-#endif
-
-#ifdef CONFIG_STM32F429I_DISCO_ILI9341_LCDIFACE
-  /* Initialize the SPI-based LCD early */
-
-  board_lcd_initialize();
-#endif
-
-#if defined(CONFIG_NSH_LIBRARY) && !defined(CONFIG_LIB_BOARDCTL)
-  /* Perform NSH initialization here instead of from the NSH.  This
-   * alternative NSH initialization is necessary when NSH is ran in user-space
-   * but the initialization function must run in kernel space.
-   */
-
-  (void)board_app_initialize(0);
-#endif
+  (void)stm32_bringup();
 }
 #endif

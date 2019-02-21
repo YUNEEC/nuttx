@@ -138,7 +138,7 @@ static void comp_pollnotify(FAR struct comp_dev_s *dev,
           if (fds->revents != 0)
             {
               ainfo("Report events: %02x\n", fds->revents);
-              sem_post(fds->sem);
+              nxsem_post(fds->sem);
             }
         }
     }
@@ -152,14 +152,21 @@ static void comp_pollnotify(FAR struct comp_dev_s *dev,
 #ifndef CONFIG_DISABLE_POLL
 static void comp_semtake(FAR sem_t *sem)
 {
-  while (sem_wait(sem) != 0)
+ int ret;
+
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(get_errno() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 #endif
 
@@ -229,7 +236,7 @@ static int comp_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
  errout:
-  sem_post(&dev->ad_sem);
+  nxsem_post(&dev->ad_sem);
   return ret;
 }
 #endif
@@ -251,7 +258,7 @@ static int comp_notify(FAR struct comp_dev_s *dev, uint8_t val)
   dev->val = val;
 
   comp_pollnotify(dev, POLLIN);
-  sem_post(&dev->ad_readsem);
+  nxsem_post(&dev->ad_readsem);
 
   return 0;
 }
@@ -270,15 +277,12 @@ static int comp_open(FAR struct file *filep)
   FAR struct inode      *inode = filep->f_inode;
   FAR struct comp_dev_s *dev   = inode->i_private;
   uint8_t                tmp;
-  int                    ret   = OK;
+  int                    ret;
 
   /* If the port is the middle of closing, wait until the close is finished */
 
-  if (sem_wait(&dev->ad_sem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_sem);
+  if (ret >= 0)
     {
       /* Increment the count of references to the device.  If this the first
        * time that the driver has been opened for this device, then initialize
@@ -313,7 +317,7 @@ static int comp_open(FAR struct file *filep)
             }
         }
 
-      sem_post(&dev->ad_sem);
+      nxsem_post(&dev->ad_sem);
     }
 
   return ret;
@@ -333,13 +337,10 @@ static int comp_close(FAR struct file *filep)
   FAR struct inode     *inode = filep->f_inode;
   FAR struct comp_dev_s *dev   = inode->i_private;
   irqstate_t            flags;
-  int                   ret = OK;
+  int                   ret;
 
-  if (sem_wait(&dev->ad_sem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_sem);
+  if (ret >= 0)
     {
       /* Decrement the references to the driver.  If the reference count will
        * decrement to 0, then uninitialize the driver.
@@ -348,7 +349,7 @@ static int comp_close(FAR struct file *filep)
       if (dev->ad_ocount > 1)
         {
           dev->ad_ocount--;
-          sem_post(&dev->ad_sem);
+          nxsem_post(&dev->ad_sem);
         }
       else
         {
@@ -362,7 +363,7 @@ static int comp_close(FAR struct file *filep)
           dev->ad_ops->ao_shutdown(dev);          /* Disable the COMP */
           leave_critical_section(flags);
 
-          sem_post(&dev->ad_sem);
+          nxsem_post(&dev->ad_sem);
         }
     }
 
@@ -391,11 +392,11 @@ static ssize_t comp_read(FAR struct file *filep, FAR char *buffer, size_t buflen
     }
 
 #ifndef CONFIG_DISABLE_POLL
-  ret = sem_wait(&dev->ad_readsem);
+  ret = nxsem_wait(&dev->ad_readsem);
   if (ret < 0)
     {
-      aerr("sem_wait() failed: %d\n", errno);
-      return -errno;
+      aerr("nxsem_wait() failed: %d\n", ret);
+      return ret;
     }
 
   buffer[0] = dev->val;
@@ -436,11 +437,11 @@ int comp_register(FAR const char *path, FAR struct comp_dev_s *dev)
 
   /* Initialize semaphores */
 
-  sem_init(&dev->ad_sem, 0, 1);
-  (void)sem_setprotocol(&dev->ad_sem, SEM_PRIO_NONE);
+  nxsem_init(&dev->ad_sem, 0, 1);
+  (void)nxsem_setprotocol(&dev->ad_sem, SEM_PRIO_NONE);
 
-  sem_init(&dev->ad_readsem, 0, 0);
-  (void)sem_setprotocol(&dev->ad_readsem, SEM_PRIO_NONE);
+  nxsem_init(&dev->ad_readsem, 0, 0);
+  (void)nxsem_setprotocol(&dev->ad_readsem, SEM_PRIO_NONE);
 
   /* Bind the upper-half callbacks to the lower half COMP driver */
 
@@ -463,7 +464,7 @@ int comp_register(FAR const char *path, FAR struct comp_dev_s *dev)
   ret =  register_driver(path, &comp_fops, 0444, dev);
   if (ret < 0)
     {
-      sem_destroy(&dev->ad_sem);
+      nxsem_destroy(&dev->ad_sem);
     }
 
   return ret;

@@ -90,7 +90,7 @@ static uint16_t psock_connect_eventhandler(FAR struct net_driver_s *dev,
  * Private Functions
  ****************************************************************************/
 
- /****************************************************************************
+/****************************************************************************
  * Name: psock_setup_callbacks
  ****************************************************************************/
 
@@ -106,8 +106,8 @@ static inline int psock_setup_callbacks(FAR struct socket *psock,
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&pstate->tc_sem, 0, 0); /* Doesn't really fail */
-  (void)sem_setprotocol(&pstate->tc_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&pstate->tc_sem, 0, 0); /* Doesn't really fail */
+  (void)nxsem_setprotocol(&pstate->tc_sem, SEM_PRIO_NONE);
 
   pstate->tc_conn   = conn;
   pstate->tc_psock  = psock;
@@ -163,7 +163,7 @@ static void psock_teardown_callbacks(FAR struct tcp_connect_s *pstate,
  *   This function is called to perform the actual connection operation via
  *   by the lower, device interfacing layer.
  *
- * Parameters:
+ * Input Parameters:
  *   dev      The structure of the network driver that reported the event
  *   pvconn   The connection structure associated with the socket
  *   flags    Set of events describing why the callback was invoked
@@ -264,43 +264,18 @@ static uint16_t psock_connect_eventhandler(FAR struct net_driver_s *dev,
 
       psock_teardown_callbacks(pstate, pstate->tc_result);
 
-      /* When we set up the connection structure, we did not know the size
-       * of the initial MSS.  Now that the connection is associated with a
-       * network device, we now know the size of link layer header and can
-       * determine the correct initial MSS.
-       */
-
-      DEBUGASSERT(pstate->tc_conn);
-
-#ifdef CONFIG_NET_IPv4
-#ifdef CONFIG_NET_IPv6
-      if (pstate->tc_conn->domain == PF_INET)
-#endif
-        {
-          pstate->tc_conn->mss = TCP_IPv4_INITIAL_MSS(dev);
-        }
-#endif /* CONFIG_NET_IPv4 */
-
-#ifdef CONFIG_NET_IPv6
-#ifdef CONFIG_NET_IPv4
-      else
-#endif
-        {
-          pstate->tc_conn->mss = TCP_IPv6_INITIAL_MSS(dev);
-        }
-#endif /* CONFIG_NET_IPv6 */
-
       /* We now have to filter all outgoing transfers so that they use only
        * the MSS of this device.
        */
 
+      DEBUGASSERT(pstate->tc_conn != NULL);
       DEBUGASSERT(pstate->tc_conn->dev == NULL ||
                   pstate->tc_conn->dev == dev);
       pstate->tc_conn->dev = dev;
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->tc_sem);
+      nxsem_post(&pstate->tc_sem);
     }
 
   return flags;
@@ -316,7 +291,7 @@ static uint16_t psock_connect_eventhandler(FAR struct net_driver_s *dev,
  * Description:
  *   Perform a TCP connection
  *
- * Parameters:
+ * Input Parameters:
  *   psock - A reference to the socket structure of the socket to be connected
  *   addr  - The address of the remote server to connect to
  *
@@ -370,7 +345,7 @@ int psock_tcp_connect(FAR struct socket *psock,
 
           /* Uninitialize the state structure */
 
-          (void)sem_destroy(&state.tc_sem);
+          (void)nxsem_destroy(&state.tc_sem);
 
           /* If net_lockedwait failed, negated errno was returned. */
 

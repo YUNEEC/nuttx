@@ -53,25 +53,26 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_waitirq
+ * Name: nxmq_wait_irq
  *
  * Description:
  *   This function is called when a signal or a timeout is received by a
  *   task that is waiting on a message queue -- either for a queue to
- *   becoming not full (on mq_send) or not empty (on mq_receive).
+ *   becoming not full (on mq_send and friends) or not empty (on mq_receive
+ *   and friends).
  *
- * Parameters:
+ * Input Parameters:
  *   wtcb - A pointer to the TCB of the task that is waiting on a message
  *          queue, but has received a signal instead.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void mq_waitirq(FAR struct tcb_s *wtcb, int errcode)
+void nxmq_wait_irq(FAR struct tcb_s *wtcb, int errcode)
 {
   FAR struct mqueue_inode_s *msgq;
   irqstate_t flags;

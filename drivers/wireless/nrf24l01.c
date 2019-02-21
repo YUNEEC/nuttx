@@ -60,6 +60,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
 #  include <nuttx/wqueue.h>
@@ -222,7 +223,7 @@ static void nrf24l01_worker(FAR void *arg);
 #endif
 
 #ifdef CONFIG_DEBUG_WIRELESS
-static void binarycvt(char *deststr, const uint8_t *srcbin, size_t srclen)
+static void binarycvt(char *deststr, const uint8_t *srcbin, size_t srclen);
 #endif
 
 /* POSIX API */
@@ -296,7 +297,7 @@ static void nrf24l01_lock(FAR struct spi_dev_s *spi)
  *   Un-lock the SPI bus after each transfer, possibly losing the current
  *   configuration if we are sharing the SPI bus with other devices.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -319,7 +320,7 @@ static void nrf24l01_unlock(FAR struct spi_dev_s *spi)
  * Description:
  *   Configure the SPI for use with the NRF24L01.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -510,7 +511,7 @@ static uint8_t nrf24l01_setregbit(FAR struct nrf24l01_dev_s *dev,
 static void fifoput(FAR struct nrf24l01_dev_s *dev, uint8_t pipeno,
                     FAR uint8_t *buffer, uint8_t buflen)
 {
-  sem_wait(&dev->sem_fifo);
+  (void)nxsem_wait(&dev->sem_fifo);
   while (dev->fifo_len + buflen + 1 > CONFIG_WL_NRF24L01_RXFIFO_LEN)
     {
       /* TODO: Set fifo overrun flag ! */
@@ -533,7 +534,7 @@ static void fifoput(FAR struct nrf24l01_dev_s *dev, uint8_t pipeno,
       dev->nxt_write = (dev->nxt_write + 1) % CONFIG_WL_NRF24L01_RXFIFO_LEN;
     }
 
-  sem_post(&dev->sem_fifo);
+  nxsem_post(&dev->sem_fifo);
 }
 
 /****************************************************************************
@@ -546,7 +547,7 @@ static uint8_t fifoget(FAR struct nrf24l01_dev_s *dev, FAR uint8_t *buffer,
   uint8_t pktlen;
   uint8_t i;
 
-  sem_wait(&dev->sem_fifo);
+  (void)nxsem_wait(&dev->sem_fifo);
 
   /* sem_rx contains count of inserted packets in FIFO, but FIFO can
    * overflow - fail smart.
@@ -582,7 +583,7 @@ static uint8_t fifoget(FAR struct nrf24l01_dev_s *dev, FAR uint8_t *buffer,
   dev->fifo_len -= (pktlen + 1);
 
   no_data:
-  sem_post(&dev->sem_fifo);
+  nxsem_post(&dev->sem_fifo);
   return pktlen;
 }
 #endif
@@ -604,7 +605,7 @@ static int nrf24l01_irqhandler(int irq, FAR void *context, FAR void *arg)
 #else
   /* Otherwise we simply wake up the send function */
 
-  sem_post(&dev->sem_tx);  /* Wake up the send function */
+  nxsem_post(&dev->sem_tx);  /* Wake up the send function */
 #endif
 
   return OK;
@@ -716,7 +717,7 @@ static void nrf24l01_worker(FAR void *arg)
 #ifndef CONFIG_DISABLE_POLL
           has_data = true;
 #endif
-          sem_post(&dev->sem_rx);  /* Wake-up any thread waiting in recv */
+          nxsem_post(&dev->sem_rx);  /* Wake-up any thread waiting in recv */
 
           status = nrf24l01_readreg(dev, NRF24L01_FIFO_STATUS, &fifo_status, 1);
 
@@ -731,7 +732,7 @@ static void nrf24l01_worker(FAR void *arg)
           dev->pfd->revents |= POLLIN;  /* Data available for input */
 
           wlinfo("Wake up polled fd\n");
-          sem_post(dev->pfd->sem);
+          nxsem_post(dev->pfd->sem);
         }
 #endif
 
@@ -754,11 +755,7 @@ static void nrf24l01_worker(FAR void *arg)
          {
            /* The actual work is done in the send function */
 
-           sem_post(&dev->sem_tx);
-         }
-       else
-         {
-           wlerr("invalid length in rx: %d\n", (int)pktlen);
+           nxsem_post(&dev->sem_tx);
          }
     }
 
@@ -792,7 +789,7 @@ static void nrf24l01_tostate(struct nrf24l01_dev_s *dev,
       /* Leaving power down (note: new state cannot be power down here) */
 
       nrf24l01_setregbit(dev, NRF24L01_CONFIG, NRF24L01_PWR_UP, true);
-      usleep(NRF24L01_TPD2STBY_DELAY);
+      nxsig_usleep(NRF24L01_TPD2STBY_DELAY);
     }
 
   /* Entering new state */
@@ -832,7 +829,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
 {
   uint8_t status;
   uint8_t obsvalue;
-  int result;
+  int ret;
 
   /* Store the current lifecycle state in order to restore it after transmit
    * done.
@@ -863,8 +860,8 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
 
   /* Wait for IRQ (TX_DS or MAX_RT) - but don't hang on lost IRQ */
 
-  result = sem_tickwait(&dev->sem_tx, clock_systimer(),
-                        MSEC2TICK(NRF24L01_MAX_TX_IRQ_WAIT));
+  ret = nxsem_tickwait(&dev->sem_tx, clock_systimer(),
+                       MSEC2TICK(NRF24L01_MAX_TX_IRQ_WAIT));
 
   /* Re-acquire the SPI bus */
 
@@ -872,7 +869,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
 
   dev->tx_pending = false;
 
-  if (result < 0)
+  if (ret < 0)
     {
        wlerr("wait for irq failed\n");
        nrf24l01_flush_tx(dev);
@@ -884,7 +881,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
     {
       /* Transmit OK */
 
-      result = OK;
+      ret = OK;
       dev->lastxmitcount = (obsvalue & NRF24L01_ARC_CNT_MASK)
           >> NRF24L01_ARC_CNT_SHIFT;
 
@@ -893,7 +890,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
   else if (status & NRF24L01_MAX_RT)
     {
       wlinfo("MAX_RT! (lastxmitcount=%d)\n", dev->lastxmitcount);
-      result = -ECOMM;
+      ret = -ECOMM;
       dev->lastxmitcount = NRF24L01_XMIT_MAXRT;
 
       /* If no ACK packet is received the payload remains in TX fifo.  We
@@ -907,7 +904,7 @@ static int dosend(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
       /* Unexpected... */
 
       wlerr("ERROR: No TX_DS nor MAX_RT bit set in STATUS reg!\n");
-      result = -EIO;
+      ret = -EIO;
     }
 
 out:
@@ -923,7 +920,7 @@ out:
   /* Restore state */
 
   nrf24l01_tostate(dev, prevstate);
-  return result;
+  return ret;
 }
 
 /****************************************************************************
@@ -956,7 +953,7 @@ static int nrf24l01_open(FAR struct file *filep)
 {
   FAR struct inode *inode;
   FAR struct nrf24l01_dev_s *dev;
-  int result;
+  int ret;
 
   wlinfo("Opening nRF24L01 dev\n");
 
@@ -968,31 +965,32 @@ static int nrf24l01_open(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Check if device is not already used */
 
   if (dev->nopens > 0)
     {
-      result = -EBUSY;
+      ret = -EBUSY;
       goto errout;
     }
 
-  result = nrf24l01_init(dev);
-  if (!result)
+  ret = nrf24l01_init(dev);
+  if (!ret)
     {
       dev->nopens++;
     }
 
 errout:
-  sem_post(&dev->devsem);
-  return result;
+  nxsem_post(&dev->devsem);
+  return ret;
 }
 
 /****************************************************************************
@@ -1003,6 +1001,7 @@ static int nrf24l01_close(FAR struct file *filep)
 {
   FAR struct inode *inode;
   FAR struct nrf24l01_dev_s *dev;
+  int ret;
 
   wlinfo("Closing nRF24L01 dev\n");
   DEBUGASSERT(filep);
@@ -1013,18 +1012,19 @@ static int nrf24l01_close(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   nrf24l01_changestate(dev, ST_POWER_DOWN);
   dev->nopens--;
 
-  sem_post(&dev->devsem);
+  nxsem_post(&dev->devsem);
   return OK;
 }
 
@@ -1040,7 +1040,7 @@ static ssize_t nrf24l01_read(FAR struct file *filep, FAR char *buffer,
 #else
   FAR struct nrf24l01_dev_s *dev;
   FAR struct inode *inode;
-  int result;
+  int ret;
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -1048,17 +1048,18 @@ static ssize_t nrf24l01_read(FAR struct file *filep, FAR char *buffer,
   DEBUGASSERT(inode && inode->i_private);
   dev = (FAR struct nrf24l01_dev_s *)inode->i_private;
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
-  result = nrf24l01_recv(dev, (uint8_t *)buffer, buflen, &dev->last_recvpipeno);
 
-  sem_post(&dev->devsem);
-  return result;
+  ret = nrf24l01_recv(dev, (uint8_t *)buffer, buflen, &dev->last_recvpipeno);
+  nxsem_post(&dev->devsem);
+  return ret;
 #endif
 }
 
@@ -1071,7 +1072,7 @@ static ssize_t nrf24l01_write(FAR struct file *filep, FAR const char *buffer,
 {
   FAR struct nrf24l01_dev_s *dev;
   FAR struct inode *inode;
-  int result;
+  int ret;
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -1079,18 +1080,19 @@ static ssize_t nrf24l01_write(FAR struct file *filep, FAR const char *buffer,
   DEBUGASSERT(inode && inode->i_private);
   dev = (FAR struct nrf24l01_dev_s *)inode->i_private;
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
-  result = nrf24l01_send(dev, (const uint8_t *)buffer, buflen);
+  ret = nrf24l01_send(dev, (const uint8_t *)buffer, buflen);
 
-  sem_post(&dev->devsem);
-  return result;
+  nxsem_post(&dev->devsem);
+  return ret;
 }
 
 /****************************************************************************
@@ -1101,7 +1103,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   FAR struct inode *inode;
   FAR struct nrf24l01_dev_s *dev;
-  int result = OK;
+  int ret;
 
   wlinfo("cmd: %d arg: %ld\n", cmd, arg);
   DEBUGASSERT(filep);
@@ -1112,12 +1114,13 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Process the IOCTL by command */
@@ -1190,7 +1193,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
       case NRF24L01IOC_GETRETRCFG:  /* Get retransmit params. arg: Pointer
                                      * to nrf24l01_retrcfg_t */
-        result = -ENOSYS;  /* TODO */
+        ret = -ENOSYS;  /* TODO */
         break;
 
       case NRF24L01IOC_SETPIPESCFG:
@@ -1263,7 +1266,7 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         }
 
       case NRF24L01IOC_GETDATARATE:
-        result = -ENOSYS;  /* TODO */
+        ret = -ENOSYS;  /* TODO */
         break;
 
       case NRF24L01IOC_SETADDRWIDTH:
@@ -1321,12 +1324,12 @@ static int nrf24l01_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         }
 
       default:
-        result = -ENOTTY;
+        ret = -ENOTTY;
         break;
     }
 
-  sem_post(&dev->devsem);
-  return result;
+  nxsem_post(&dev->devsem);
+  return ret;
 }
 
 /****************************************************************************
@@ -1345,7 +1348,7 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   FAR struct inode *inode;
   FAR struct nrf24l01_dev_s *dev;
-  int result = OK;
+  int ret;
 
   wlinfo("setup: %d\n", (int)setup);
   DEBUGASSERT(filep && fds);
@@ -1356,12 +1359,13 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Exclusive access */
 
-  if (sem_wait(&dev->devsem) < 0)
+  ret = nxsem_wait(&dev->devsem);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Are we setting up the poll?  Or tearing it down? */
@@ -1372,7 +1376,7 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
       if ((fds->events & POLLIN) == 0)
         {
-          result = -EDEADLK;
+          ret = -EDEADLK;
           goto errout;
         }
 
@@ -1383,7 +1387,7 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
       if (dev->pfd)
         {
-          result = -EBUSY;
+          ret = -EBUSY;
           goto errout;
         }
 
@@ -1393,14 +1397,14 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
        * don't wait for RX.
        */
 
-      sem_wait(&dev->sem_fifo);
+      (void)nxsem_wait(&dev->sem_fifo);
       if (dev->fifo_len > 0)
         {
           dev->pfd->revents |= POLLIN;  /* Data available for input */
-          sem_post(dev->pfd->sem);
+          nxsem_post(dev->pfd->sem);
         }
 
-      sem_post(&dev->sem_fifo);
+      nxsem_post(&dev->sem_fifo);
     }
   else /* Tear it down */
     {
@@ -1408,8 +1412,8 @@ static int nrf24l01_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&dev->devsem);
-  return result;
+  nxsem_post(&dev->devsem);
+  return ret;
 #endif
 }
 #endif
@@ -1448,13 +1452,13 @@ int nrf24l01_register(FAR struct spi_dev_s *spi,
                       FAR struct nrf24l01_config_s *cfg)
 {
   FAR struct nrf24l01_dev_s *dev;
-  int result = OK;
+  int ret = OK;
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
   uint8_t *rx_fifo;
 #endif
 
-  ASSERT((spi != NULL) & (cfg != NULL));
+  DEBUGASSERT((spi != NULL) & (cfg != NULL));
 
   if ((dev = kmm_malloc(sizeof(struct nrf24l01_dev_s))) == NULL)
     {
@@ -1468,15 +1472,15 @@ int nrf24l01_register(FAR struct spi_dev_s *spi,
   dev->en_aa      = 0;
   dev->ce_enabled = false;
 
-  sem_init(&(dev->devsem), 0, 1);
+  nxsem_init(&(dev->devsem), 0, 1);
   dev->nopens     = 0;
 
 #ifndef CONFIG_DISABLE_POLL
   dev->pfd        = NULL;
 #endif
 
-  sem_init(&dev->sem_tx, 0, 0);
-  sem_setprotocol(&dev->sem_tx, SEM_PRIO_NONE);
+  nxsem_init(&dev->sem_tx, 0, 0);
+  nxsem_setprotocol(&dev->sem_tx, SEM_PRIO_NONE);
 
 #ifdef CONFIG_WL_NRF24L01_RXSUPPORT
   if ((rx_fifo = kmm_malloc(CONFIG_WL_NRF24L01_RXFIFO_LEN)) == NULL)
@@ -1490,9 +1494,9 @@ int nrf24l01_register(FAR struct spi_dev_s *spi,
   dev->nxt_write  = 0;
   dev->fifo_len   = 0;
 
-  sem_init(&(dev->sem_fifo), 0, 1);
-  sem_init(&(dev->sem_rx), 0, 0);
-  sem_setprotocol(&dev->sem_rx, SEM_PRIO_NONE);
+  nxsem_init(&(dev->sem_fifo), 0, 1);
+  nxsem_init(&(dev->sem_rx), 0, 0);
+  nxsem_setprotocol(&dev->sem_rx, SEM_PRIO_NONE);
 #endif
 
   /* Configure IRQ pin  (falling edge) */
@@ -1503,14 +1507,14 @@ int nrf24l01_register(FAR struct spi_dev_s *spi,
 
   wlinfo("Registering " DEV_NAME "\n");
 
-  result = register_driver(DEV_NAME, &nrf24l01_fops, 0666, dev);
-  if (result < 0)
+  ret = register_driver(DEV_NAME, &nrf24l01_fops, 0666, dev);
+  if (ret < 0)
     {
-      wlerr("ERROR: register_driver() failed: %d\n", result);
+      wlerr("ERROR: register_driver() failed: %d\n", ret);
       nrf24l01_unregister(dev);
     }
 
-  return result;
+  return ret;
 }
 
 /****************************************************************************
@@ -1523,7 +1527,7 @@ int nrf24l01_register(FAR struct spi_dev_s *spi,
 
 int nrf24l01_init(FAR struct nrf24l01_dev_s *dev)
 {
-  int result = OK;
+  int ret = OK;
   uint8_t features;
 
   CHECK_ARGS(dev);
@@ -1555,7 +1559,7 @@ int nrf24l01_init(FAR struct nrf24l01_dev_s *dev)
            * actual hardware.
            */
 
-          result = -ENODEV;
+          ret = -ENODEV;
           goto out;
         }
     }
@@ -1593,7 +1597,7 @@ int nrf24l01_init(FAR struct nrf24l01_dev_s *dev)
 
 out:
   nrf24l01_unlock(dev->spi);
-  return result;
+  return ret;
 }
 
 /****************************************************************************
@@ -1959,16 +1963,16 @@ int nrf24l01_changestate(FAR struct nrf24l01_dev_s *dev, nrf24l01_state_t state)
 int nrf24l01_send(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
                   size_t datalen)
 {
-  int result;
+  int ret;
 
   CHECK_ARGS(dev && data && datalen <= NRF24L01_MAX_PAYLOAD_LEN);
 
   nrf24l01_lock(dev->spi);
 
-  result = dosend(dev, data, datalen);
+  ret = dosend(dev, data, datalen);
 
   nrf24l01_unlock(dev->spi);
-  return result;
+  return ret;
 }
 
 /****************************************************************************
@@ -1979,7 +1983,7 @@ int nrf24l01_sendto(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
                     size_t datalen, FAR const uint8_t *destaddr)
 {
   bool pipeaddrchg = false;
-  int result;
+  int ret;
 
   nrf24l01_lock(dev->spi);
 
@@ -1996,7 +2000,7 @@ int nrf24l01_sendto(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
       pipeaddrchg = true;
     }
 
-  result = dosend(dev, data, datalen);
+  ret = dosend(dev, data, datalen);
 
   if (pipeaddrchg)
     {
@@ -2008,7 +2012,7 @@ int nrf24l01_sendto(FAR struct nrf24l01_dev_s *dev, FAR const uint8_t *data,
     }
 
   nrf24l01_unlock(dev->spi);
-  return result;
+  return ret;
 }
 
 /****************************************************************************
@@ -2028,18 +2032,18 @@ int nrf24l01_lastxmitcount(FAR struct nrf24l01_dev_s *dev)
 ssize_t nrf24l01_recv(struct nrf24l01_dev_s *dev, uint8_t *buffer,
                       size_t buflen, uint8_t *recvpipe)
 {
-  if (sem_wait(&dev->sem_rx) != 0)
+  int ret = nxsem_wait(&dev->sem_rx);
+  if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   return fifoget(dev, buffer, buflen, recvpipe);
 }
 #endif
-
 
 /****************************************************************************
  * Name: nrf24l01_dumpregs

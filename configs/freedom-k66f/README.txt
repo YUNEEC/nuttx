@@ -131,10 +131,10 @@ LEDs and Buttons
   Beside the general purpose IO function, both SW2 and SW3 can be used
   as a low-leakage wakeup (LLWU) source.
 
-  Switch    GPIO Function
-  --------- ---------------------------------------------------------------
-  SW2       PTD11/LLWU_P25/SPI2_PCS0/SDHC0_CLKIN/LPUART0_CTS/FB_A19
-  SW3       PTA10/LLWU_P22/FTM2_CH0/MII0_RXD2/FTM2_QD_PHA/TPM2_CH0/TRACE_D0
+    Switch    GPIO Function
+    --------- ---------------------------------------------------------------
+    SW2       PTD11/LLWU_P25/SPI2_PCS0/SDHC0_CLKIN/LPUART0_CTS/FB_A19
+    SW3       PTA10/LLWU_P22/FTM2_CH0/MII0_RXD2/FTM2_QD_PHA/TPM2_CH0/TRACE_D0
 
 Networking Support
 ==================
@@ -197,8 +197,7 @@ Networking Support
     CONFIG_NET=y                        : Enable Neworking
     CONFIG_NET_ETHERNET=y               : Support Ethernet data link
     CONFIG_NET_SOCKOPTS=y               : Enable socket operations
-    CONFIG_NET_ETH_MTU=590              : Maximum packet size (MTU) 1518 is more standard
-    CONFIG_NET_ETH_TCP_RECVWNDO=536     : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_ETH_PKTSIZE=590          : Maximum packet size 1518 is more standard
     CONFIG_NET_ARP=y                    : Enable ARP
     CONFIG_NET_ARPTAB_SIZE=16           : ARP table size
     CONFIG_NET_ARP_IPIN=y               : Enable ARP address harvesting
@@ -212,7 +211,7 @@ Networking Support
     CONFIG_NET_UDP=y                    : Enable UDP networking
     CONFIG_NET_BROADCAST=y              : Needed for DNS name resolution
     CONFIG_NET_ICMP=y                   : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y              : Needed for NSH ping command
+    CONFIG_NET_ICMP_SOCKET=y            : Needed for NSH ping command
                                         : Defaults should be okay for other options
  Application Configuration -> Network Utilities
     CONFIG_NETDB_DNSCLIENT=y            : Enable host address resolution
@@ -456,7 +455,7 @@ SD Card Support
       CONFIG_MMCSD=y                        : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
       CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
-      CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
+      CONFIG_MMCSD_HAVE_CARDDETECT=y         : Supports card-detect PIOs
       CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
       CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
       CONFIG_MMCSD_SDIO=y                   : SDIO-based MMC/SD support
@@ -621,7 +620,7 @@ GNU Toolchain Options
 =====================
 
   The NuttX make system supports several GNU-based toolchains under Linux,
-  Cygwin under Windows, and Windoes native.  To select a toolchain:
+  Cygwin under Windows, and Windows native.  To select a toolchain:
 
   1. Use 'make menuconfig' and select the toolchain that you are using
      under the System Type menu.
@@ -713,13 +712,6 @@ Freedom K66F Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     CONFIG_KINETIS_TRACE    -- Enable trace clocking on power up.
@@ -753,7 +745,7 @@ Freedom K66F Configuration Options
     CONFIG_KINETIS_FTM1     -- Support FlexTimer 1
     CONFIG_KINETIS_FTM2     -- Support FlexTimer 2
     CONFIG_KINETIS_FTM3     -- Support FlexTimer 3
-    CONFIG_KINETIS_LPTIMER  -- Support the low power timer
+    CONFIG_KINETIS_LPTMR0   -- Support the low power timer 0
     CONFIG_KINETIS_RTC      -- Support RTC
     CONFIG_KINETIS_SLCD     -- Support the segment LCD (K3x, K4x, and K5x only)
     CONFIG_KINETIS_EWM      -- Support the external watchdog
@@ -813,9 +805,9 @@ Freedom K66F Configuration Options
   Kenetis ethernet controller settings
 
     CONFIG_ENET_NRXBUFFERS - Number of RX buffers.  The size of one
-        buffer is determined by CONFIG_NET_ETH_MTU.  Default: 6
+        buffer is determined by CONFIG_NET_ETH_PKTSIZE.  Default: 6
     CONFIG_ENET_NTXBUFFERS - Number of TX buffers.  The size of one
-        buffer is determined by CONFIG_NET_ETH_MTU.  Default: 2
+        buffer is determined by CONFIG_NET_ETH_PKTSIZE.  Default: 2
     CONFIG_ENET_USEMII - Use MII mode.  Default: RMII mode.
     CONFIG_ENET_PHYADDR - PHY address
 
@@ -825,9 +817,7 @@ Configurations
 Each Freedom K66F configuration is maintained in a sub-directory and
 can be selected as follow:
 
-    cd tools
-    ./configure.sh freedom-K66F/<subdir>
-    cd -
+    tools/configure.sh freedom-K66F/<subdir>
 
 Where <subdir> is one of the following:
 
@@ -973,3 +963,4 @@ Status
     automounter is working.
     netnsh:Is building but Ehternet is not working yet. TX is called but
     not IRQ is issued.
+

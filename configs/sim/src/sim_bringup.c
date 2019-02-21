@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/sim/src/sam_bringup.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,9 +46,14 @@
 
 #include <nuttx/board.h>
 #include <nuttx/clock.h>
+#include <nuttx/kmalloc.h>
+#include <nuttx/mtd/mtd.h>
+#include <nuttx/fs/nxffs.h>
 #include <nuttx/video/fb.h>
 #include <nuttx/timers/oneshot.h>
 #include <nuttx/wireless/pktradio.h>
+#include <nuttx/wireless/bluetooth/bt_driver.h>
+#include <nuttx/wireless/bluetooth/bt_null.h>
 #include <nuttx/wireless/ieee802154/ieee802154_loopback.h>
 
 #include "up_internal.h"
@@ -65,8 +70,7 @@ int trv_mount_world(int minor, FAR const char *mountpoint);
 #define NEED_FRAMEBUFFER 1
 
 /* If we are using the X11 touchscreen simulation, then the frame buffer
- * initialization happens in board_tsc_setup.  Otherwise, we will need to
- * do that here.
+ * initialization will need to be done here.
  */
 
 #if defined(CONFIG_SIM_X11FB) && defined(CONFIG_SIM_TOUCHSCREEN)
@@ -98,12 +102,32 @@ int sim_bringup(void)
 #ifdef CONFIG_ONESHOT
   FAR struct oneshot_lowerhalf_s *oneshot;
 #endif
+#ifdef CONFIG_RAMMTD
+  FAR uint8_t *ramstart;
+#endif
   int ret;
+
+#ifdef CONFIG_FS_PROCFS
+  /* Mount the procfs file system */
+
+  ret = mount(NULL, SIM_PROCFS_MOUNTPOINT, "procfs", 0, NULL);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to mount procfs at %s: %d\n",
+             SIM_PROCFS_MOUNTPOINT, ret);
+    }
+#endif
 
 #ifdef CONFIG_LIB_ZONEINFO_ROMFS
   /* Mount the TZ database */
 
   (void)sim_zoneinfo(3);
+#endif
+
+#ifdef CONFIG_GRAPHICS_TRAVELER_ROMFSDEMO
+  /* Special initialization for the Traveler game simulation */
+
+  (void)trv_mount_world(0, CONFIG_GRAPHICS_TRAVELER_DEFPATH);
 #endif
 
 #ifdef CONFIG_EXAMPLES_GPIO
@@ -112,13 +136,82 @@ int sim_bringup(void)
   (void)sim_gpio_initialize();
 #endif
 
+#ifdef CONFIG_RAMMTD
+  /* Create a RAM MTD device if configured */
+
+  ramstart = (FAR uint8_t *)kmm_malloc(128 * 1024);
+  if (ramstart == NULL)
+    {
+      syslog(LOG_ERR, "ERROR: Allocation for RAM MTD failed\n");
+    }
+  else
+    {
+      /* Initialized the RAM MTD */
+
+      FAR struct mtd_dev_s *mtd = rammtd_initialize(ramstart, 128 * 1024);
+      if (mtd == NULL)
+        {
+          syslog(LOG_ERR, "ERROR: rammtd_initialize failed\n");
+          kmm_free(ramstart);
+        }
+      else
+        {
+          /* Erase the RAM MTD */
+
+          ret = mtd->ioctl(mtd, MTDIOC_BULKERASE, 0);
+          if (ret < 0)
+            {
+              syslog(LOG_ERR, "ERROR: IOCTL MTDIOC_BULKERASE failed\n");
+            }
+
+#if defined(CONFIG_MTD_SMART) && defined(CONFIG_FS_SMARTFS)
+          /* Initialize a SMART Flash block device and bind it to the MTD
+           * device.
+           */
+
+          smart_initialize(0, mtd, NULL);
+
+#elif defined(CONFIG_FS_SPIFFS)
+          /* Register the MTD driver so that it can be accessed from the VFS */
+
+          ret = register_mtddriver("/dev/rammtd", mtd, 0755, NULL);
+          if (ret < 0)
+            {
+              syslog(LOG_ERR, "ERROR: Failed to register MTD driver: %d\n",
+                     ret);
+            }
+
+          /* Mount the SPIFFS file system */
+
+          ret = mount("/dev/rammtd", "/mnt/spiffs", "spiffs", 0, NULL);
+          if (ret < 0)
+            {
+              syslog(LOG_ERR,
+                     "ERROR: Failed to mount SPIFFS at /mnt/spiffs: %d\n",
+                     ret);
+            }
+
+#elif defined(CONFIG_FS_NXFFS)
+          /* Initialize to provide NXFFS on the MTD interface */
+
+          ret = nxffs_initialize(mtd);
+          if (ret < 0)
+            {
+              syslog(LOG_ERR, "ERROR: NXFFS initialization failed: %d\n",
+                     ret);
+            }
+#endif
+        }
+    }
+#endif
+
 #ifdef CONFIG_ONESHOT
   /* Get an instance of the simulated oneshot timer */
 
   oneshot = oneshot_initialize(0, 0);
   if (oneshot == NULL)
     {
-      syslog(LOG_ERR, "ERROR: oneshot_initialize faile\n");
+      syslog(LOG_ERR, "ERROR: oneshot_initialize failed\n");
     }
   else
     {
@@ -146,20 +239,13 @@ int sim_bringup(void)
   sim_ajoy_initialize();
 #endif
 
-#ifdef CONFIG_GRAPHICS_TRAVELER_ROMFSDEMO
-  /* Special initialization for the Traveler game simulation */
+#if defined(CONFIG_SIM_X11FB) && defined(CONFIG_SIM_TOUCHSCREEN)
+  /* Initialize the touchscreen */
 
-  (void)trv_mount_world(0, CONFIG_GRAPHICS_TRAVELER_DEFPATH);
-#endif
-
-#ifdef CONFIG_FS_PROCFS
-  /* Mount the procfs file system */
-
-  ret = mount(NULL, SIM_PROCFS_MOUNTPOINT, "procfs", 0, NULL);
+  ret = sim_tsc_setup(0);
   if (ret < 0)
     {
-      syslog(LOG_ERR, "ERROR: Failed to mount procfs at %s: %d\n",
-             SIM_PROCFS_MOUNTPOINT, ret);
+      syslog(LOG_ERR, "ERROR: sim_tsc_setup failed: %d\n", ret);
     }
 #endif
 
@@ -191,6 +277,29 @@ int sim_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: pktradio_loopback() failed: %d\n", ret);
     }
+#endif
+
+#ifdef CONFIG_WIRELESS_BLUETOOTH
+#ifdef CONFIG_BLUETOOTH_NULL
+  /* Register the NULL Bluetooth network device */
+
+  ret = btnull_register();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: btnull_register() failed: %d\n", ret);
+    }
+#endif
+
+  /* Initialize the Bluetooth stack (This will fail if no device has been
+   * registered).
+   */
+
+  ret = bt_netdev_register();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: bt_netdev_register() failed: %d\n", ret);
+    }
+
 #endif
 
   UNUSED(ret);

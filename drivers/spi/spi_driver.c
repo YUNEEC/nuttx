@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/spi/spi_driver.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -82,8 +82,10 @@ struct spi_driver_s
  * Private Function Prototypes
  ****************************************************************************/
 
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int     spidrvr_open(FAR struct file *filep);
 static int     spidrvr_close(FAR struct file *filep);
+#endif
 static ssize_t spidrvr_read(FAR struct file *filep, FAR char *buffer,
                  size_t buflen);
 static ssize_t spidrvr_write(FAR struct file *filep, FAR const char *buffer,
@@ -130,7 +132,7 @@ static const struct file_operations spidrvr_fops =
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int spidrvr_open(FAR struct file *filep)
 {
-  FAR struct inode *inode = filep->f_inode;
+  FAR struct inode *inode;
   FAR struct spi_driver_s *priv;
   int ret;
 
@@ -144,20 +146,19 @@ static int spidrvr_open(FAR struct file *filep)
 
   /* Get exclusive access to the SPI driver state structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errcode = errno;
-      DEBUGASSERT(errcode < 0);
-      return -errcode;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
-  /* Increment the count of open references on the RTC driver */
+  /* Increment the count of open references on the driver */
 
   priv->crefs++;
   DEBUGASSERT(priv->crefs > 0);
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 #endif
@@ -169,7 +170,7 @@ static int spidrvr_open(FAR struct file *filep)
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int spidrvr_close(FAR struct file *filep)
 {
-  FAR struct inode *inode = filep->f_inode;
+  FAR struct inode *inode;
   FAR struct spi_driver_s *priv;
   int ret;
 
@@ -183,15 +184,14 @@ static int spidrvr_close(FAR struct file *filep)
 
   /* Get exclusive access to the SPI driver state structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errcode = errno;
-      DEBUGASSERT(errcode < 0);
-      return -errcode;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
-  /* Decrement the count of open references on the RTC driver */
+  /* Decrement the count of open references on the driver */
 
   DEBUGASSERT(priv->crefs > 0);
   priv->crefs--;
@@ -202,12 +202,12 @@ static int spidrvr_close(FAR struct file *filep)
 
   if (priv->crefs <= 0 && priv->unlinked)
     {
-      sem_destroy(&priv->exclsem);
+      nxsem_destroy(&priv->exclsem);
       kmm_free(priv);
       return OK;
     }
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 #endif
@@ -238,7 +238,7 @@ static ssize_t spidrvr_write(FAR struct file *filep, FAR const char *buffer,
 
 static int spidrvr_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
-  FAR struct inode *inode = filep->f_inode;
+  FAR struct inode *inode;
   FAR struct spi_driver_s *priv;
   FAR struct spi_sequence_s *seq;
   int ret;
@@ -255,13 +255,14 @@ static int spidrvr_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the SPI driver state structure */
 
-  ret = sem_wait(&priv->exclsem);
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errcode = errno;
-      DEBUGASSERT(errcode < 0);
-      return -errcode;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
+#endif
 
   /* Process the IOCTL command */
 
@@ -291,7 +292,9 @@ static int spidrvr_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&priv->exclsem);
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  nxsem_post(&priv->exclsem);
+#endif
   return ret;
 }
 
@@ -312,19 +315,18 @@ static int spidrvr_unlink(FAR struct inode *inode)
 
   /* Get exclusive access to the SPI driver state structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errcode = errno;
-      DEBUGASSERT(errcode < 0);
-      return -errcode;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Are there open references to the driver data structure? */
 
   if (priv->crefs <= 0)
     {
-      sem_destroy(&priv->exclsem);
+      nxsem_destroy(&priv->exclsem);
       kmm_free(priv);
       return OK;
     }
@@ -334,7 +336,7 @@ static int spidrvr_unlink(FAR struct inode *inode)
    */
 
   priv->unlinked = true;
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return ret;
 }
 #endif
@@ -384,7 +386,7 @@ int spi_register(FAR struct spi_dev_s *spi, int bus)
 
       priv->spi = spi;
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
-      sem_init(&priv->exclsem, 0, 1);
+      nxsem_init(&priv->exclsem, 0, 1);
 #endif
 
       /* Create the character device name */

@@ -12,7 +12,7 @@
       <h1><big><font color="#3c34ec">
         <i>NuttX RTOS Porting Guide</i>
       </font></big></h1>
-      <p>Last Updated: August 30, 2017</p>
+      <p>Last Updated: August 25, 2018</p>
     </td>
   </tr>
 </table>
@@ -56,8 +56,8 @@
     <a href="#DirStructGraphics">2.9 nuttx/graphics/</a><br>
     <a href="#DirStructInclude">2.10 nuttx/include/</a><br>
     <a href="#DirStructLib">2.11 nuttx/lib/</a><br>
-    <a href="#DirStructLibC">2.12 nuttx/libc/</a><br>
-    <a href="#DirStructLibXX">2.13 nuttx/libxx/</a><br>
+    <a href="#DirStructLibC">2.12 nuttx/libs/libc/</a><br>
+    <a href="#DirStructLibXX">2.13 nuttx/libs/libxx/</a><br>
     <a href="#DirStructMm">2.14 nuttx/mm/</a><br>
     <a href="#DirStructNet">2.15 nuttx/net</a><br>
     <a href="#DirStructSched">2.16 nuttx/sched/</a><br>
@@ -148,42 +148,43 @@
       <a href="#up_addrenv_kstackalloc">4.5.15 <code>up_addrenv_kstackalloc()</code></a><br>
       <a href="#up_addrenv_kstackfree">4.5.16 <code>up_addrenv_kstackfree()</code></a>
     </ul>
-    <a href="#boardctl">4.6 <code>boardctl()</code> Application Interface</a><br>
-    <a href="#boardsmp">4.7 Symmetric Multiprocessing (SMP) Application Interface</a>
+    <a href="#exports">4.6 APIs Exported by NuttX to Architecture-Specific Logic</a>
     <ul>
-      <a href="#uptestset">4.7.1 <code>up_testset()</code></a><br>
-      <a href="#upcpuindex">4.7.2 <code>up_cpu_index()</code></a><br>
-      <a href="#upcpustart">4.7.3 <code>up_cpu_start()</code></a><br>
-      <a href="#upcpupause">4.7.4 <code>up_cpu_pause()</code></a><br>
-      <a href="#upcpuresume">4.7.5 <code>up_cpu_resume()</code></a>
+      <a href="#osstart">4.6.1 <code>os_start()</code></a><br>
+      <a href="#listmgmt">4.6.2 OS List Management APIs</a><br>
+      <a href="#schedprocesstimer">4.6.3 <code>sched_process_timer()</code></a><br>
+      <a href="#schedtimerexpiration">4.6.4 <code>sched_timer_expiration()</code></a><br>
+      <a href="#schedalarmexpiration">4.6.5 <code>sched_alarm_expiration()</code></a><br>
+      <a href="#irqdispatch">4.6.6 <code>irq_dispatch()</code></a>
     </ul>
-    <a href="#exports">4.8 APIs Exported by NuttX to Architecture-Specific Logic</a>
+    <a href="#internalOS">4.7 Application OS vs. Internal OS Interfaces</a><br>
+    <a href="#boardctl">4.8 <code>boardctl()</code> Application Interface</a><br>
+    <a href="#boardsmp">4.9 Symmetric Multiprocessing (SMP) Application Interface</a>
     <ul>
-      <a href="#osstart">4.8.1 <code>os_start()</code></a><br>
-      <a href="#listmgmt">4.8.2 OS List Management APIs</a><br>
-      <a href="#schedprocesstimer">4.8.3 <code>sched_process_timer()</code></a><br>
-      <a href="#schedtimerexpiration">4.8.4 <code>sched_timer_expiration()</code></a><br>
-      <a href="#schedalarmexpiration">4.8.5 <code>sched_alarm_expiration()</code></a><br>
-      <a href="#irqdispatch">4.8.6 <code>irq_dispatch()</code></a>
+      <a href="#uptestset">4.9.1 <code>up_testset()</code></a><br>
+      <a href="#upcpuindex">4.9.2 <code>up_cpu_index()</code></a><br>
+      <a href="#upcpustart">4.9.3 <code>up_cpu_start()</code></a><br>
+      <a href="#upcpupause">4.9.4 <code>up_cpu_pause()</code></a><br>
+      <a href="#upcpuresume">4.9.5 <code>up_cpu_resume()</code></a>
     </ul>
-    <a href="#shm">4.9 Shared Memory</a>
+    <a href="#shm">4.10 Shared Memory</a>
     <ul>
-      <a href="#upshmat">4.9.1 <code>up_shmat()</code></a><br>
-      <a href="#upshmdt">4.9.2 <code>up_shmdt()</code></a><br>
+      <a href="#upshmat">4.10.1 <code>up_shmat()</code></a><br>
+      <a href="#upshmdt">4.10.2 <code>up_shmdt()</code></a><br>
     </ul>
-    <a href="#demandpaging">4.10 On-Demand Paging</a><br>
-    <a href="#ledsupport">4.11 LED Support</a>
+    <a href="#demandpaging">4.11 On-Demand Paging</a><br>
+    <a href="#ledsupport">4.12 LED Support</a>
     <ul>
-      <a href="#ledheaders">4.11.1 Header Files</a><br>
-      <a href="#leddefinitions">4.11.2 LED Definitions</a><br>
-      <a href="#ledapis">4.11.3 Common LED interfaces</a>
+      <a href="#ledheaders">4.12.1 Header Files</a><br>
+      <a href="#leddefinitions">4.12.2 LED Definitions</a><br>
+      <a href="#ledapis">4.12.3 Common LED interfaces</a>
     </ul>
-    <a href="#iobs">4.12 I/O Buffer Management</a>
+    <a href="#iobs">4.13 I/O Buffer Management</a>
     <ul>
-      <a href="#iobconfig">4.12.1 Configuration Options</a><br>
-      <a href="#iobthrottle">4.12.2 Throttling</a><br>
-      <a href="#iobtypes">4.12.3 Public Types</a><br>
-      <a href="#iobprotos">4.12.4 Public Function Prototypes</a>
+      <a href="#iobconfig">4.13.1 Configuration Options</a><br>
+      <a href="#iobthrottle">4.13.2 Throttling</a><br>
+      <a href="#iobtypes">4.13.3 Public Types</a><br>
+      <a href="#iobprotos">4.13.4 Public Function Prototypes</a>
     </ul>
   </ul>
   <a href="#NxFileSystem">5.0 NuttX File System</a><br>
@@ -306,6 +307,10 @@
 |   |   |   |   `-- <i>(board configuration-specific source files)</i>
 |   |   |   `---<i>(other configuration sub-directories for this board)</i>/
 |   |   `-- <i>&lt;(other board directories)&gt;</i>/
+|   |-- crypto
+|   |   |-- Makefile
+|   |   |-- Kconfig
+|   |   `-- <i>(common crypto source files)</i>
 |   |-- <a href="#DirStructDrivers">drivers</a>/
 |   |   |-- Makefile
 |   |   |-- Kconfig
@@ -330,14 +335,23 @@
 |   |   |   `-- <i>(more standard header files)</i>
 |   |   |-- <i>(non-standard include sub-directories)</i>
 |   |       `-- <i>(non-standard header files)</i>
-|   |-- <a href="#DirStructLibC">libc</a>/
-|   |   |-- Makefile
-|   |   |-- Kconfig
-|   |   `-- <i>(libc source files)</i>
-|   |-- <a href="#DirStructLibXX">libxx</a>/
-|   |   |-- Makefile
-|   |   |-- Kconfig
-|   |   `-- <i>(libxx management source files)</i>
+|   |-- libs/
+|   |   |-- <a href="#DirStructLibC">libc</a>/
+|   |   |   |-- Makefile
+|   |   |   |-- Kconfig
+|   |   |   `-- <i>(libc source files)</i>
+|   |   |-- libdsp/
+|   |   |   |-- Makefile
+|   |   |   |-- Kconfig
+|   |   |   `-- <i>(libdsp source files)</i>
+|   |   |-- libnx/
+|   |   |   |-- Makefile
+|   |   |   |-- Kconfig
+|   |   |   `-- <i>(libdsp source files)</i>
+|   |   `-- <a href="#DirStructLibXX">libxx</a>/
+|   |       |-- Makefile
+|   |       |-- Kconfig
+|   |       `-- <i>(libxx source files)</i>
 |   |-- <a href="#DirStructMm">mm</a>/
 |   |   |-- Makefile
 |   |   |-- Kconfig
@@ -371,6 +385,8 @@
 |   |   |   `-- <i>(UDP source files)</i>
 |   |   `-- utils/
 |   |       `-- <i>(Miscellaneous, utility source files)</i>
+|   |-- pass1/
+|   |   `-- Makefile
 |   |-- <a href="#DirStructSched">sched</a>/
 |   |   |-- Makefile
 |   |   |-- Kconfig
@@ -381,64 +397,128 @@
 |   |   `-- <i>(syscall source files)</i>
 |   |-- <a href="#DirStructTools">tools</a>/
 |   |   `-- <i>(miscellaneous scripts and programs)</i>
-|   `-- <a href="#DirStructWireless">tools</a>/
+|   `-- <a href="#DirStructWireless">wireless</a>/
 |       |-- Makefile
 |       |-- Kconfig
-|       `-- <i>(wireless management source files)</i>
+|       `-- <i>(wireless source files)</i>
 `- apps
+    |-- builtin/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(builtin source files)</i>
+    |-- canutils/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(can utililities sub-directories)</i>
+    |-- fsutils/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(File system utilities sub-directories)</i>
+    |-- gpsutils/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(GPS utilities sub-directories)</i>
+    |-- include/
+    |   `-- <i>(Include sub-directories)</i>
+    |-- interpreters/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(Interpreter sub-directories)</i>
+    |-- modbus/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(Modbus source files)</i>
     |-- <a href="#DirStructNetUtils">netutils</a>/
     |   |-- Makefile
+    |   |-- Make.defs
     |   |-- Kconfig
     |   |-- <i>(network feature sub-directories)</i>/
-    |   |   `-- <i>(network feature source files)</i>
+    |   |   `-- <i>(network utilities sub-directories)</i>
     |   `-- <i>(netutils common files)</i>
-    |--  <a href="#DirStructNshLib">nshlib</a>/
+    |-- <a href="#DirStructNshLib">nshlib</a>/
     |   |-- Makefile
+    |   |-- Make.defs
     |   |-- Kconfig
     |   `-- <i>NuttShell (NSH) files</i>
-    |-- <i>(Board-specific applications)</i>/
+    |-- platform/
     |   |-- Makefile
+    |   |-- Make.defs
     |   |-- Kconfig
-    |   |-- <i>(Board-specific application sub-directories)</i>/
-    |   |   `-- <i>(Board-specific application source files)</i>
-    |   `-- <i>(Board-specific common files)</i>
+    |   `-- <i>(Platform-specific sub-directories)</i>
+    |-- system/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(System utilities sub-directories)</i>
+    |-- testing/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(Test support sub-directories)</i>
+    |-- wireless/
+    |   |-- Makefile
+    |   |-- Make.defs
+    |   |-- Kconfig
+    |   `-- <i>(Wireless utilities sub-directories)</i>
     `-- <a href="#DirStructExamples">examples</a>/
         `-- <i>(example)</i>/
             |-- Makefile
+            |-- Make.defs
             |-- Kconfig
-            `-- <i>(example source files)</i>
+            `-- <i>(example sub-directories)</i>
 </pre></ul>
 
 <p>
   <b>Configuration Files</b>.
-  The NuttX configuration consists of:
+  The NuttX configuration consists of logic in processor architecture directories, chip/SoC directories, and board configuration directories.
+  The complete configuration is specified by several settings in the NuttX configuration file.
 </p>
 <ul>
   <li>
-    <i>Processor architecture specific files</i>.
-    These are the files contained in the <code>arch/</code><i>&lt;arch-name&gt;</i><code>/</code> directory
-    and are discussed in a paragraph <a href="#archdirectorystructure">below</a>.
-  </li>
-  <li>
-    <i>Chip/SoC specific files</i>.
-    Each processor processor architecture is embedded in chip or <i>System-on-a-Chip</i> (SoC) architecture.
-    The full chip architecture includes the processor architecture plus chip-specific interrupt logic,
-    clocking logic, general purpose I/O (GPIO) logic, and specialized, internal peripherals (such as UARTs, USB, etc.).
     <p>
-      These chip-specific files are contained within chip-specific sub-directories in the
-      <code>arch/</code><i>&lt;arch-name&gt;</i><code>/</code> directory and are selected via
-      the <code>CONFIG_ARCH_name</code> selection.
+      <i>Processor architecture specific files</i>.
+      These are the files contained in the <code>arch/</code><i>&lt;arch-name&gt;</i><code>/</code> directory and are discussed in a paragraph <a href="#archdirectorystructure">below</a>.
+      As an example, all ARM processor architectures are provided under the <code>arch/arm/</code> directory which is selected with the <code>CONFIG_ARCH=&quot;arm&quot;</code> configuration option.
+    </p>
+    <p>
+      Variants of the processor architecture may be provided in sub-directories of the
+      Extending this example, the ARMv7-M ARM family is supported by logic in <code>arch/arm/include/armv7-m</code> and <code>arch/arm/src/armv7-m</code> directories which are selected by the <code>CONFIG_ARCH_CORTEXM3=y</code>, <code>CONFIG_ARCH_CORTEXM4=y</code>, or  <code>CONFIG_ARCH_CORTEXM7=y</code> configuration options
     </p>
   </li>
   <li>
-    <i>Board specific configurations</i>.
-    In order to be usable, the chip must be contained in a board environment.
-    The board configuration defines additional properties of the board including such things as
-    peripheral LEDs, external peripherals (such as network, USB, etc.).
+    <p>
+      <i>Chip/SoC specific files</i>.
+      Each processor architecture is embedded in a <i>System-on-a-Chip</i> (SoC) architecture.
+      The full SoC architecture includes the processor architecture plus chip-specific interrupt logic, clocking logic, general purpose I/O (GPIO) logic, and specialized, internal peripherals (such as UARTs, USB, etc.).
+    </p>
+    <p>
+      These chip-specific files are contained within chip-specific sub-directories also under the
+      <code>arch/</code><i>&lt;arch-name&gt;</i><code>/</code> directory and are selected via
+      the <code>CONFIG_ARCH_CHIP</code> selection.
+    </p>
+    <p>
+      As an example, the STMicro STM32 SoC architecture is based on the ARMv7-M processor and is supported by logic in the <code>arch/arm/include/stm32</code> and <code>arch/arm/src/stm32</code> directories which are selected with the <code>CONFIG_ARCH_CHIP="stm32"</code> configuration setting.
+    </p>
+  </li>
+  <li>
+    <p>
+      <i>Board specific configurations</i>.
+      In order to be usable, the chip must be contained in a board environment.
+      The board configuration defines additional properties of the board including such things as peripheral LEDs, external peripherals (such as networks, USB, etc.).
+    </p>
     <p>
       These board-specific configuration files can be found in the
       <code>configs/</code><i>&lt;board-name&gt;</i><code>/</code> sub-directories and are discussed
       in a paragraph <a href="#configsdirectorystructure">below</a>.
+    </p>
+    <p>
+      The directory <code>configs/stm32f4disovery/</code>, as an example, holds board-specific logic for the STM32F4 Discovery board and is selected via the <code>CONFIG_ARCH_BOARD=&quot;stm32f4discovery&quot;</code> configuration setting.
     </p>
   </li>
 </ul>
@@ -635,83 +715,56 @@
 </p>
 <ul>
   <li><code>arch/sim</code>:
-    A user-mode port of NuttX to the x86 Linux platform is available.
+    A user-mode port of NuttX to the x86 Linux or Cygwin platform is available.
     The purpose of this port is primarily to support OS feature development.
     This port does not support interrupts or a real timer (and hence no
     round robin scheduler)  Otherwise, it is complete.
   </li>
-  <p>NOTE: This target will not run on Cygwin probably for many reasons but
-    first off because it uses some of the same symbols as does cygwind.dll.
+  <p>NOTE: In principle, this user mode port should run in any POSIX environement.
+    This target will probably not run &quot;out-of-the-box&quot; in unverified POSIX environments due to the many host environemnt dependencies.
   </p>
 
   <li><code>arch/arm</code>:
     This directory holds common ARM architectures.
   </li>
 
-  <li><code>configs/mcu123-lpc214x</code>:
-    The mcu123.com lpc214x development board.
-    This is a work in progress.
+  <li><code>arch/arm</code>:
+    This directory holds common AVR and AVR32 architectures.
+  </li>
+
+  <li><code>arch/mips</code>:
+    This directory holds common MIPS architectures.  This include PIC32MX and PIC32MZ.
+  </li>
+
+  <li><code>arch/misoc</code>:
+    This directory supports the Misoc LM3 architecture.
+  </li>
+
+  <li><code>arch/or1K</code>:
+    This directory supports the OpenRISC mor1kx architecture.
+  </li>
+
+  <li><code>arch/renesas</code>:
+    This directory is the home for various Renesas architectures, currently only the M16C and vererable SuperH-1 architectures.
+  </li>
+
+  <li><code>arch/risc-v</code>:
+    This directory supports the RISC-V NR5 architecture.
+  </li>
+
+  <li><code>arch/xtensa</code>:
+    This directory supports the Xtensa LX6 architecture as used by the ESP32.
   </li>
 
   <li><code>arch/z16f</code>:
     Zilog z16f Microcontroller.
-    This port uses the Zilog z16f2800100zcog Development Kit.
-    This port was released with nuttx-0.3.7.
   </li>
 
-    <li><code>arch/z80</code>:
+  <li><code>arch/z80</code>:
     This directory holds 8-bit ZiLOG architectures.  At present, this includes the
     Zilog z80, ez80Acclaim! and z8Encore! Microcontrollers.
-    <ul>
-      <li><code>arch/z80/include</code> and <code>arch/z80/src/common</code>:
-          Common logic.
-      </li>
-
-      <li><code>arch/z80/include/z80</code> and <code>arch/z80/src/z80</code>:
-        The Z80 port was released in nuttx-0.3.6 has been verified using only a
-        z80 instruction simulator called z80sim.
-        This port also uses the SDCC toolchain (http://sdcc.sourceforge.net/)
-        (verified with version 2.6.0 and 2.7.0).
-      </li>
-
-      <li><code>arch/z80/include/ez80</code> and <code>arch/z80/src/ez80</code>:
-        The ez80Acclaim! port uses the ZiLOG ez80f0910200kitg development kit, eZ80F091 part,
-        with the Zilog ZDS-II Windows command line tools.
-        The development environment is Cygwin under WinXP.
-        This is a work in progress.  Verified ez80 support will be announced in a future NuttX release.
-      </li>
-
-      <li><code>arch/z80/include/z8</code> and <code>arch/z80/src/z8</code>:
-        The Z8Encore! port uses either the ZiLOG z8encore000zco development kit, Z8F6403 part,
-        or the z8f64200100kit development kit, Z8F6423 part with the Zilog ZDS-II Windows command line
-        tools.  The development environment is Cygwin under WinXP.
-        The initial release, verified only on the ZDS-II ez8 simulator, was released in nuttx-0.3.9.
-      </li>
-    </ul>
-    </li>
-</ul>
-
-<p>
-  <b>Deprecated Architecture Directories</b>.
-  The following architecture directories are deprecated.  They have been
-  replaced by the logic in <code>arm/arm</code> and will deleted when
-  <code>arch/arm</code> is fully verified.
-</p>
-<ul>
-  <li><code>arch/c5471</code>:
-    Replaced with <code>arch/arm/include/c5471</code> and
-    <code>arch/arm/src/c5471</code>.
-  </li>
-
-  <li><code>arch/dm320</code>:
-    Replaced with <code>arch/arm/include/dm320</code> and
-    <code>arch/arm/src/dm320</code>.
   </li>
 </ul>
-<p>
-  Other ports for the for the TI TMS320DM270 and for MIPS are in various states
-  of progress
-</p>
 
 <h2>2.3 <a name="DirStructBinFmt">nuttx/binfmt</a></h2>
 
@@ -756,7 +809,7 @@
 |   ...
 |-- scripts/
 |   |-- <i>(linker script files)</i>
-|   `-- Make.defs <i>(optional</i>
+|   `-- Make.defs <i>(optional)</i>
 `-- <i>(other board-specific configuration sub-directories)</i>/
 </pre></ul>
 
@@ -950,78 +1003,94 @@ endif
 drivers/
 |-- Kconfig
 |-- Makefile
+|-- 1wire/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(1-wire device source files)</i>
 |-- analog/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common ADC and DAC driver source files)</i>
+|   `-- <i>(ADC and DAC driver source files)</i>
 |-- audio/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common audio device source files)</i>
+|   `-- <i>(Audio device source files)</i>
 |-- bch/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(bch driver source files)</i>
+|   `-- <i>(BCH driver source files)</i>
+|-- can/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(CAN driver source files)</i>
 |-- contactless/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common contactless device driver source files)</i>
+|   `-- <i>(Contactless device driver source files)</i>
+|-- eeprom/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(EEPROM character driver source files)</i>
+|-- i2c/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(I2C device driver source files)</i>
 |-- input/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common touchscreen and keypad driver source files)</i>
+|   `-- <i>(Touchscreen and keypad driver source files)</i>
 |-- ioexpander/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common I/O expander and GPIO-related driver source files)</i>
+|   `-- <i>(I/O expander and GPIO-related driver source files)</i>
 |-- lcd/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common LCD driver source files)</i>
+|   `-- <i>(LCD driver source files)</i>
 |-- leds/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common LED device driver source files)</i>
+|   `-- <i>(LED device driver source files)</i>
 |-- loop/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common loop device driver source files)</i>
+|   `-- <i>(Loop device driver source files)</i>
 |-- mmcsd/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common MMC/SD card driver source files)</i>
+|   `-- <i>(MMC/SD card driver source files)</i>
 |-- modem/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common modem driver source files)</i>
+|   `-- <i>(Modem driver source files)</i>
 |-- mtd/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common memory technology device driver source files)</i>
+|   `-- <i>(Memory technology device driver source files)</i>
 |-- net/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common network driver source files)</i>
+|   `-- <i>(Network driver source files)</i>
 |-- pipes/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common pipe and FIFO driver source files)</i>
+|   `-- <i>(Pipe and FIFO driver source files)</i>
 |-- power/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common power-related driver source files)</i>
+|   `-- <i>(Power-related driver source files)</i>
 |-- sensors/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common sensor driver source files)</i>
+|   `-- <i>(Sensor driver source files)</i>
 |-- serial/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common front-end character drivers for chip-specific UARTs)</i>
+|   `-- <i>(Front-end character drivers for chip-specific UARTs, 16550 UART support, and Pseudo-Terminal support)</i>
 |-- spi/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common SPI-related drivers and helper functions)</i>
+|   `-- <i>(SPI-related drivers and helper functions)</i>
 |-- syslog/
 |   |-- Kconfig
 |   |-- Make.defs
@@ -1033,20 +1102,28 @@ drivers/
 |-- usbdev/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common USB device driver source files)</i>
+|   `-- <i>(USB device driver source files)</i>
 |-- usbhost/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common USB host driver source files)</i>
+|   `-- <i>(USB host driver source files)</i>
+|-- usbmisc/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(Miscellaneous USB driver source files)</i>
 |-- usbmonitor/
 |   |-- Kconfig
 |   |-- Make.defs
 |   `-- <i>(USB monitor source files)</i>
+|-- video/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(Video driver source files)</i>
 |-- wireless/
 |   |-- Kconfig
 |   |-- Make.defs
-|   `-- <i>(Common wireless driver source files)</i>
-`-- <i>(Various common driver source files)</i>
+|   `-- <i>(Wireless driver source files)</i>
+`-- <i>(Various uncategorized driver source files)</i>
 </pre></ul>
 
 <h2>2.8 <a name="DirStructFs">nuttx/fs</a></h2>
@@ -1059,14 +1136,46 @@ drivers/
 fs/
 |-- Kconfig
 |-- Makefile
+|-- binfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(BINFS file system source files)</i>
+|-- cromfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(CROMFS file system source files)</i>
+|-- dirent/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(VFS directory access source files)</i>
+|-- driver/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(Driver registration OS internal interfaces)</i>
 |-- fat/
 |   |-- Kconfig
 |   |-- Make.defs
 |   `-- <i>(FAT file system source files)</i>
+|-- inode/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(Pseudo-file system OS internal interfaces)</i>
+|-- hostfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(HOSTFS file system source files)</i>
 |-- mmap/
 |   |-- Kconfig
 |   |-- Make.defs
 |   `-- <i>(RAM-based file mapping source files)</i>
+|-- mount/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(Mount point-related OS internal interfaces)</i>
+|-- mqueue/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(POSIX message queue OS internal interfaces)</i>
 |-- nfs/
 |   |-- Kconfig
 |   |-- Make.defs
@@ -1075,10 +1184,30 @@ fs/
 |   |-- Kconfig
 |   |-- Make.defs
 |   `-- <i>(NuttX Flash File System (NXFFS) source files)</i>
+|-- procfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(PROCFS pseudo-file system source files)</i>
 |-- romfs/
 |   |-- Kconfig
 |   |-- Make.defs
 |   `-- <i>(ROMFS file system source files)</i>
+|-- smartfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(SmartFS file system source files)</i>
+|-- unionfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(UnionFS file system source files)</i>
+|-- userfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(UserFS file system source files)</i>
+|-- vfs/
+|   |-- Kconfig
+|   |-- Make.defs
+|   `-- <i>(VFS OS internal interfaces)</i>
  `-- <i>(common file system source files)</i>
 </pre></ul>
 
@@ -1094,18 +1223,18 @@ graphics/
 |-- nxbe/
 |   |-- Make.defs
 |   `-- <i>(NuttX graphics back-end (NXBE) source files)</i>
-|-- nxfont/
-|   |-- Make.defs
-|   `-- <i>(NuttX graphics font-related (NXFONT) source files)</i>
 |-- nxglib/
 |   |-- Make.defs
 |   `-- <i>(NuttX graphics library (NXGL) source files)</i>
 |-- nxmu/
 |   |-- Make.defs
 |   `-- <i>(NuttX graphics multi-user (NXMU) server source files)</i>
-|-- nxsu/
+|-- nxterm/
 |   |-- Make.defs
-|   `-- <i>(NuttX graphics single-user (NXSU) source files)</i>
+|   `-- <i>(NX terminal (NxTerm) source files)</i>
+|-- vnc/
+|   |-- Make.defs
+|   `-- <i>(VNC client/server source files)</i>
 `-- <i>(common file system source files)</i>
 </pre></ul>
 
@@ -1131,7 +1260,11 @@ include/
 |   `-- <i>(C++ standard header files)</i>
 |-- netinet/
 |   `-- <i>(Standard header files)</i>
+|-- netpacket/
+|   `-- <i>(Protocol-specific header files.  Most non-standard)</i>
 |-- nuttx/
+|   |-1wire/
+|   |  `-- <i>(1-wire driver header files)</i>
 |   |-analog/
 |   |  `-- <i>(Analog driver header files)</i>
 |   |-audio/
@@ -1148,6 +1281,8 @@ include/
 |   |  `-- <i>(EEPROM driver header files)</i>
 |   |-fs/
 |   |  `-- <i>(File System header files)</i>
+|   |-i2c/
+|   |  `-- <i>(I2C-related header files)</i>
 |   |-input/
 |   |  `-- <i>(Input device driver header files)</i>
 |   |-ioexpander/
@@ -1175,7 +1310,7 @@ include/
 |   |-serial/
 |   |  `-- <i>(Serial driver header files)</i>
 |   |-spi/
-|   |  `-- <i>(SPI driver header files)</i>
+|   |  `-- <i>(SPI-related header files)</i>
 |   |-syslog/
 |   |  `-- <i>(SYSLOG header files)</i>
 |   |-timers/
@@ -1198,7 +1333,7 @@ include/
   These libraries are then in a known place for the final link phase where they are accessed to generated the final binaries.
 </p>
 
-<h2>2.12 <a name="DirStructLibC">nuttx/libc</a></h2>
+<h2>2.12 <a name="DirStructLibC">nuttx/libs/libc</a></h2>
 <p>
   This directory holds a collection of standard libc-like functions with custom
   interfaces into NuttX.
@@ -1222,16 +1357,28 @@ libc/
 |   `-- <i>(Implementation of audio-related functions)</i>
 |-- dirent/
 |   `-- <i>(Implementation of functions from dirent.h)</i>
+|-- dllfch/
+|   `-- <i>(Implementation of functions from dllfcn.h)</i>
 |-- fixedmath/
 |   `-- <i>(Implementation of functions from fixedmath.h)</i>
 |-- hex2bin/
 |   `-- <i>(Implementation of functions from hex2bin.h)</i>
+|-- inttypes/
+|   `-- <i>(Implementation of functions from inttypes.h)</i>
 |-- libgen/
 |   `-- <i>(Implementation of functions from libgen.h)</i>
+|-- locale/
+|   `-- <i>(Implementation of functions from locale.h)</i>
+|-- lzf/
+|   `-- <i>(Implementation of functions from lzf.h)</i>
+|-- machine/
+|   `-- <i>(Implementations of platform-specific logic)</i>
 |-- math/
 |   `-- <i>(Implementation of functions from fixedmath.h)</i>
 |-- misc/
 |   `-- <i>(Implementation of miscellaneous library functions)</i>
+|-- modlib/
+|   `-- <i>(Implementation of functions from nuttx/lib/modlib.h)</i>
 |-- net/
 |   `-- <i>(Implementation of network-related library functions)</i>
 |-- netdb/
@@ -1264,16 +1411,24 @@ libc/
 |   `-- <i>(Implementation of some functions from time.h)</i>
 |-- tls/
 |   `-- <i>(Implementation of some functions from tls.h)</i>
-|-- wqueue/
-|   `-- <i>(Implementation of some functions from wqueue.h)</i>
+|-- uio/
+|   `-- <i>(Implementation of some functions from uio.h)</i>
 |-- unistd/
 |   `-- <i>(Implementation of some functions from unistd.h)</i>
+|-- userfs/
+|   `-- <i>(Implementation of application side internals of UserFS)</i>
+|-- wchar/
+|   `-- <i>(Implementation of some functions from wchar.h.  Not fully functional.)</i>
+|-- wctype/
+|   `-- <i>(Implementation of some functions from wctype.h.  Not fully functional.)</i>
+|-- wqueue/
+|   `-- <i>(Implementation of some functions from wqueue.h)</i>
 `-- zoneinfo/
     `-- <i>(Implementation of timezone database)</i>
 
 </pre></ul>
 
-<h2>2.13 <a name="DirStructLibXX">nuttx/libxx</a></h2>
+<h2>2.13 <a name="DirStructLibXX">nuttx/libs/libxx</a></h2>
 <p>
   This directory holds a tiny, minimal standard std C++ that can be used to
   build some, simple C++ applications in NuttX.
@@ -1311,27 +1466,46 @@ libc/
 tools/
 |-- Makefile.host
 |-- Makefile.export
+|-- Makefile.unix, Makefile.win, FlatLibs.mk, KernelLibs.mk, LibTargets.mk, ProtectedLibs.mk
 |-- README.txt
-|-- configure.sh / configure.bat
+|-- b16.c
+|-- bdf-converter.c
 |-- cfgparser.c
 |-- cfgparser.h
 |-- cmpconfig.c
 |-- cnvwindeps.c
+|-- configure.sh / configure.bat
 |-- copydir.sh / copydir.bat
 |-- define.sh / define.bat
+|-- discovery.py
 |-- incdir.sh / incdir.bat
 |-- indent.sh
+|-- initialconfig.c
+|-- kconfig2html.c / mkconfigvars.sh
 |-- link.sh / link.bat
 |-- mkconfig.c
+|-- mkctags.sh
+|-- mkdeps.c
 |-- mkexport.sh
+|-- mkfsdata.pl
 |-- mkimage.sh
 |-- mknulldeps.sh
 |-- mkromfsimg.sh
+|-- mksymtab.c
 |-- mksyscall.c
 |-- mkversion.c
 |-- mkwindeps.sh
+|-- noteinfo.c
+|-- nxstyle.c
+|-- pic32mx/mkpichex.c
+|-- refresh.sh
+|-- sethost.sh
+|-- showsize.sh
+|-- testbuild.sh
+|-- uncrustify.cfg
 |-- unlink.sh / unlink.bat
 |-- version.sh
+|-- xmlrpc_test.py
 `-- zipme.sh
 </pre></ul>
 
@@ -1387,28 +1561,45 @@ tools/
   accomplish the same configuration:
 </p>
 <ul><pre>
-  cd tools
-  ./configure.sh <i>&lt;board-name&gt;</i>[/<i>&lt;config-dir&gt;</i>]
+  tools/configure.sh [OPTIONS] <i>&lt;board-name&gt;</i>[/<i>&lt;config-dir&gt;</i>]
 </pre></ul>
 
 <p>
   There is an alternative Windows batch file, <code>configure.bat</code>,  that can be used instead of <code>configure.sh</code> in the windows native environment like:
 </p>
 <ul><pre>
-  cd tools
-  configure.bat <i>&lt;board-name&gt;</i>[\<i>&lt;config-dir&gt;</i>]
+  tools\configure.bat <i>&lt;board-name&gt;</i>[\<i>&lt;config-dir&gt;</i>]
 </pre></ul>
 <p>
   See <code>tools/README.txt</code> for more information about these scripts.
+  Or use the -h option with <code>configure.sh></code>
 </p>
+<ul><pre>
+$ tools/configure.sh -h
+
+USAGE: tools/configure.sh [-d] [-l|m|c|u|g|n] [-a &lt;app-dir&gt;] &lt;board-name&gt;/&lt;config-name&gt;
+
+Where:
+  -l selects the Linux (l) host environment.
+  -m selects the macOS (m) host environment.
+  -c selects the Windows host and Cygwin (c) environment.
+  -u selects the Windows host and Ubuntu under Windows 10 (u) environment.
+  -g selects the Windows host and MinGW/MSYS environment.
+  -n selects the Windows host and Windows native (n) environment.
+  Default: Use host setup in the defconfig file
+  Default Windows: Cygwin
+  &lt;board-name&gt; is the name of the board in the configs directory
+  &lt;config-name&gt; is the name of the board configuration sub-directory
+  &lt;app-dir&gt; is the path to the apps/ directory, relative to the nuttx
+     directory
+</pre></ul>
 
 <p>
   If your application directory is not in the standard location (<code>../apps</code> or <code>../apps-&lt;version&gt;</code>),
   then you should also specify the location of the application directory on the command line like:
 </p>
 <ul><pre>
-  cd tools
-  ./configure.sh -a &lt;app-dir&gt; <i>&lt;board-name&gt;</i>[/<i>&lt;config-dir&gt;</i>]
+  tools/configure.sh -a &lt;app-dir&gt; <i>&lt;board-name&gt;</i>[/<i>&lt;config-dir&gt;</i>]
 </pre></ul>
 
 <p>
@@ -1430,15 +1621,19 @@ tools/
 $ tools/version.sh -h
 tools/version.sh is a tool for generation of proper version files for the NuttX build
 
-USAGE: tools/version.sh [-d|-h] [-b build] -v &lt;major.minor&gt; &lt;outfile-path&gt;
+USAGE: tools/version.sh [-d|-h] [-b &lt;build&gt;] -v &lt;major.minor&gt; &lt;outfile-path&gt;
 
 Where:
+        -b <build>
+                Use this build identification string.  Default: use GIT build ID
+                NOTE: GIT build information may not be available in a snapshot
         -d
                 Enable script debug
         -h
                 show this help message and exit
+        -v <major.minor>
         -v &lt;major.minor&gt;
-                The NuttX version number expressed a major and minor number separated
+                The NuttX version number expressed as a major and minor number separated
                 by a period
         &lt;outfile-path&gt;
                 The full path to the version file to be created
@@ -1561,6 +1756,33 @@ The specific environmental definitions are unique for each board but should incl
       Any interface which is unique to a board should be prefixed with the board name, for example <code>stm32f4discovery_</code>.
       Sometimes the board name is too long so <code>stm32_</code> would be okay too.
       These should be prototyped in <code>configs/&lt;board&gt;/src/&lt;board&gt;.h</code> and should not be used outside of that directory since board-specific definitions have no meaning outside of the board directory.
+  </li>
+  <li>
+    <p>
+      <b>Scope of Inclusions</b>.
+      Header files are made accessible to internal OS logic and to applications through symbolic links and through <i>include paths</i> that are provided to the C/C++ compiler.
+      Through these include paths, the NuttX build system also enforces modularity in the design.
+      For example, one important design principle is architectural <i>layering</i>.
+      In this case I am referring to the OS as layered into application interface, common internal OS logic, and lower level platform-specific layers.
+      The platform-specific layers all reside in the either <code>arch/</code> sub-directories on the <code>config/</code> subdirectories:  The former sub-directories are reserved for microcontroller-specific logic and the latter for board-specific logic.
+    </p>
+    <p>
+      In the strict, layered NuttX architecture, the upper level OS services are always available to platform-specific logic.  However, the opposite is <i>not</i> true:  Common OS logic must never have any dependency on the lower level platform-specific code.  The OS logic must be totally agnostic about its hardware environment.  Similarly, microcontroller-specific logic was be completely ignorant of board-specific logic.
+    </p>
+    <p>
+      This strict layering is enforced in the NuttX build system by controlling the compiler include paths:  Higher level code can never include header files from either; of the platform-specific source directories;  microcontroller-specific code can never include header files from the board-specific source directories.  The board-specific directories are, then, at the bottom of the layered hierarchy.
+    </p>
+    <p>
+      An exception to these inclusion restrictions is the platform-specific <i>include/</i>.  These are made available to higher level OS logic.  The microcontroller-specific include directory will be linked at <code>include/arch/chip</code> and, hence, can be included like <code>#include &lt;arch/chip/chip.h</code>.
+      Similarly, the board-specific include directory will be linked at <code>include/arch/board</code> and, hence, can be included like <code>#include &lt;arch/board/board.h</code>.
+    </p>
+    <p>
+      Keeping in the spirit of the layered architecture, these publicly visible header files must <i>not</i> export platform-specific definitions; Only platform-specific realizations of standardized declarations should be visible.
+      Those <i>standardized declarations</i> should appear in common header files such as those provided by <code>include/nuttx/arch.h</code> and <code>include/nuttx/board.h</code>.
+      Similarly, these publicly visible header file must <i>not</i> include files that reside in the inaccessible platform-specific source directories.
+      For example, the board-specific <code>configs/&lt;board&gt;/include/board.h</code> header file must never include microcontroller-specific header files that reside in <code>arch/&lt;arch&gt;/src/&lt;mcu&gt;</code>.
+      That practice will cause inclusion failures when the publicly visible file is included in common logic outside of the platform-specific source directories.
+    </p>
   </li>
 </ul>
 
@@ -2604,7 +2826,7 @@ pointer to a watchdog structure.
 <p>
 <b>Returned Value:</b>
 <ul>
-<li>OK or ERROR
+<li>Zero (<code>OK</code>) is returned on success; a negated <code>errno</code> value is return to indicate the nature of any failure.
 </ul>
 
 <p>
@@ -2661,7 +2883,7 @@ wd_start() on a given watchdog ID has any effect.
 <p>
 <b>Returned Value:</b>
 <ul>
-<li>OK or ERROR
+<li>Zero (<code>OK</code>) is returned on success; a negated <code>errno</code> value is return to indicate the nature of any failure.
 </ul>
 
 <p>
@@ -2787,10 +3009,18 @@ typedef uint32_t  wdparm_t;
   The dedicated high-priority work queue is intended to handle delayed processing from interrupt handlers.  This work queue is required for some drivers but, if there are no complaints, can be safely disabled.  The high priority worker thread also performs garbage collection -- completing any delayed memory deallocations from interrupt handlers.  If the high-priority worker thread is disabled, then that clean up will be performed either by (1) the low-priority worker thread, if enabled, and if not (2) the IDLE thread instead (which runs at the lowest of priority and may not be appropriate if memory reclamation is of high priority)
 </p>
 <p><b>Device Driver Bottom Half</b>.
-  The higher priority worker thread is intended to serve as the <i>bottom half</i> for device drivers.  As a consequence it must run at a very high, fixed priority rivalling the priority of the interrupt handler itself.  Typically, the high priority work queue should be the highest priority thread in your system (the default priority is 224).
+  The high-priority worker thread is intended to serve as the <i>bottom half</i> for device drivers.  As a consequence it must run at a very high, fixed priority rivalling the priority of the interrupt handler itself.  Typically, the high priority work queue should be the highest priority thread in your system (the default priority is 224).
+</p>
+<p>
+  <b>Thread Pool</b>.
+  The work queues can be configured to support multiple, low-priority threads.  This is essentially a <i>thread pool</i> that provides multi-threaded servicing of the queue work.  This breaks the strict serialization of the &quot;queue&quot; (and hence, the work queue is no longer a queue at all).
+</p>
+<p>
+  Multiple worker threads are required to support, for example, I/O operations that stall waiting for input.  If there is only a single thread, then the entire work queue processing would stall in such cases.
+  Such behavior is necessary to support asynchronous I/O, AIO, for example.
 </p>
 <p><b>Compared to the Low Priority Kernel Work Queue</b>.
-  For less critical, lower priority, application oriented worker thread support, consider enabling the lower priority work queue.  The lower priority work queue runs at a lower priority, of course, but has the added advantage that it supports <i>priority inheritance</i> (if &lt;config&gt; CONFIG_PRIORITY_INHERITANCE</code> is also selected):  The priority of the lower priority worker thread can then be adjusted to match the highest priority client.
+  For less critical, lower priority, application oriented worker thread support, consider enabling the lower priority work queue.  The lower priority work queue runs at a lower priority, of course, but has the added advantage that it supports <i>priority inheritance</i> (if <code>CONFIG_PRIORITY_INHERITANCE=y</code> is also selected):  The priority of the lower priority worker thread can then be adjusted to match the highest priority client.
 </p>
 <p>
   <b>Configuration Options</b>.
@@ -2799,11 +3029,12 @@ typedef uint32_t  wdparm_t;
   <li><code>CONFIG_SCHED_HPWORK</code>.
     Enables the hight priority work queue.
   </li>
+  <li><code>CONFIG_SCHED_HPNTHREADS</code>.
+    The number of threads in the high-priority queue's thread pool.  Default: 1
+  </li>
   <li><code>CONFIG_SCHED_HPWORKPRIORITY</code>.
     The execution priority of the high-priority worker thread.  Default: 224
   </li>
-  <li><code>CONFIG_SCHED_HPWORKPERIOD</code>.
-    How often the worker thread re-checks for work in units of microseconds.  This work period is really only necessary if the high priority thread is performing periodic garbage collection.  The worker thread will be awakened immediately with it is queued work to be done.  If the high priority worker thread is performing garbage collection, then the default is 50*1000 (50 MS).  Otherwise, if the lower priority worker thread is performing garbage collection, the default is 100*1000.
   <li><code>CONFIG_SCHED_HPWORKSTACKSIZE</code>.
     The stack size allocated for the worker thread in bytes.  Default: 2048.
   </li>
@@ -2825,30 +3056,19 @@ typedef uint32_t  wdparm_t;
 </p>
 <p>
   <b>Compared to the High Priority Work Queue</b>.
-  The lower priority work queue runs at a lower priority than the high priority work queue, of course, and so is inappropriate to serve as a driver <i>bottom half</i>.  The lower priority work queue has the other advantages, however, that make it better suited for some tasks:
+  The lower priority work queue runs at a lower priority than the high priority work queue, of course, and so is inappropriate to serve as a driver <i>bottom half</i>.
+  It is, otherwise, very similar to the high priority work queue and most of the discussion above for the high priority work queue applies equally here.
+  The lower priority work queue does have one important, however, that make it better suited for some tasks:
 </p>
-<ul>
-  <li>
-    <p><b>Priority Inheritance</b>.
-      The lower priority worker thread(s) support <i>priority inheritance</i> (if &lt;config&gt; CONFIG_PRIORITY_INHERITANCE</code> is also selected):  The priority of the lower priority worker thread can then be adjusted to match the highest priority client.
-    </p>
-    <blockquote>
-      <b>NOTE:</b> This priority inheritance feature is not automatic.  The lower priority worker thread will always a fixed priority unless additional logic implements that calls <code>lpwork_boostpriority()</code> to raise the priority of the lower priority worker thread (typically called before scheduling the work) and then calls the matching <code>lpwork_restorepriority()</code> when the work is completed (typically called within the work handler at the completion of the work). Currently, only the NuttX asynchronous I/O logic uses this dynamic prioritization feature.
-    </blockquote>
-    <p>
-      The higher priority worker thread, on the other hand, is intended to serve as the <i>bottom half</i> for device drivers.  As a consequence must run at a very high, fixed priority.  Typically, it should be the highest priority thread in your system.
-    </p>
-  </li>
-  <li>
-    <p>
-      <b>Thread Pool</b>.
-      The low-priority work queue can be configured to support multiple, low-priority threads.  This is essentially a <i>thread pool</i> that provides multi-threaded servicing of the low-priority work thread.  This breaks the strict serialization of the &quot;queue&quot; (and hence, the low-priority work queue is no longer a queue at all).
-    </p>
-    <p>
-      Multiple worker threads are required to support, for example, I/O operations that stall waiting for input.  If there is only a single thread, then the entire low-priority queue processing would stall in such cases. Such behavior is necessary to support asynchronous I/O, AIO, for example.
-    </p>
-  </li>
-</ul>
+  <p><b>Priority Inheritance</b>.
+  The lower priority worker thread(s) support <i>priority inheritance</i> (if &lt;config&gt; CONFIG_PRIORITY_INHERITANCE</code> is also selected):  The priority of the lower priority worker thread can then be adjusted to match the highest priority client.
+</p>
+<blockquote>
+  <b>NOTE:</b> This priority inheritance feature is not automatic.  The lower priority worker thread will always a fixed priority unless additional logic implements that calls <code>lpwork_boostpriority()</code> to raise the priority of the lower priority worker thread (typically called before scheduling the work) and then calls the matching <code>lpwork_restorepriority()</code> when the work is completed (typically called within the work handler at the completion of the work). Currently, only the NuttX asynchronous I/O logic uses this dynamic prioritization feature.
+</blockquote>
+<p>
+  The higher priority worker thread, on the other hand, is intended to serve as the <i>bottom half</i> for device drivers.  As a consequence must run at a very high, fixed priority.  Typically, it should be the highest priority thread in your system.
+</p>
 <p>
   <b>Configuration Options</b>.
 </p>
@@ -2857,16 +3077,13 @@ typedef uint32_t  wdparm_t;
     If CONFIG_SCHED_LPWORK is selected then a lower-priority work queue will be enabled.
   </li>
   <li><code>CONFIG_SCHED_LPNTHREADS</code>.
-    The number of thread in the low-priority queue's thread pool.  Default: 1
+    The number of threads in the low-priority queue's thread pool.  Default: 1
   </li>
   <li><code>CONFIG_SCHED_LPWORKPRIORITY</code>.
     The minimum execution priority of the lower priority worker thread.  The priority of the all worker threads start at this priority.  If priority inheritance is in effect, the priority may be boosted from this level.  Default: 50.
   </li>
   <li><code>CONFIG_SCHED_LPWORKPRIOMAX</code>.
-    The maximum execution priority of the lower priority worker thread.  Lower priority worker threads will be started at <code>CONFIG_SCHED_LPWORKPRIORITY</code> but their priority may be boosted due to priority inheritance.  The boosted priority of the low priority worker thread will not, however, ever exceed<code>CONFIG_SCHED_LPWORKPRIOMAX</code>.  This limit would be necessary, for example, if the higher priority worker thread were to defer work to the lower priority thread.  Clearly, in such a case, you would want to limit the maximum priority of the lower priority work thread.  Default: 176.
-  </li>
-  <li><code>CONFIG_SCHED_LPWORKPERIOD</code>.
-    How often the lower priority worker thread checks for garbage collection in units of microseconds.  Default: 50*1000 (50 MS).
+    The maximum execution priority of the lower priority worker thread.  Lower priority worker threads will be started at <code>CONFIG_SCHED_LPWORKPRIORITY</code> but their priority may be boosted due to priority inheritance.  The boosted priority of the low priority worker thread will not, however, ever exceed <code>CONFIG_SCHED_LPWORKPRIOMAX</code>.  This limit would be necessary, for example, if the higher priority worker thread were to defer work to the lower priority thread.  Clearly, in such a case, you would want to limit the maximum priority of the lower priority work thread.  Default: 176.
   </li>
   <li><code>CONFIG_SCHED_LPWORKSTACKSIZE</code>.
     The stack size allocated for the lower priority worker thread.  Default: 2048.
@@ -2890,8 +3107,6 @@ typedef uint32_t  wdparm_t;
     If CONFIG_LIB_USRWORK is also defined then the user-mode work queue will be enabled.
   <li><code>CONFIG_LIB_USRWORKPRIORITY</code>.
     The execution priority of the user-mode priority worker thread.  Default: 100
-  <li><code>CONFIG_LIB_USRWORKPERIOD</code>
-    How often the lower priority worker thread is awakened in units of microseconds.  Default: 100*1000 (100 MS).
   <li><code>CONFIG_LIB_USRWORKSTACKSIZE</code>.
     The stack size allocated for the lower priority worker thread.  Default: 2048.
 </ul>
@@ -3660,7 +3875,174 @@ void lpwork_restorepriority(uint8_t reqprio);
   Zero (<code>OK</code>) on success; a negated <code>errno</code> value on failure.
 </ul>
 
-<h2><a name="boardctl">4.6 <code>boardctl()</code> Application Interface</a></h2>
+<h2><a name="exports">4.6 APIs Exported by NuttX to Architecture-Specific Logic</a></h2>
+<p>
+  These are standard interfaces that are exported by the OS
+  for use by the architecture specific logic.
+</p>
+
+<h3><a name="osstart">4.6.1 <code>os_start()</code></a></h3>
+<p>
+  <b><i>To be provided</i></b>
+</p>
+
+<h3><a name="listmgmt">4.6.2 OS List Management APIs</a></h3></h3>
+<p>
+  <b><i>To be provided</i></b>
+</p>
+
+<h3><a name="schedprocesstimer">4.6.3 <code>sched_process_timer()</code></a></h3>
+<p><b>Function Prototype</b>:</p>
+<ul><pre>
+#include &lt;nuttx/arch.h&gt;
+void sched_process_timer(void);
+</pre></ul>
+
+<p><b>Description</b>.
+  This function handles system timer events.
+  The timer interrupt logic itself is implemented in the
+  architecture specific code, but must call the following OS
+  function periodically -- the calling interval must be
+  <code>CONFIG_USEC_PER_TICK</code>.
+</p>
+
+<h3><a name="schedtimerexpiration">4.6.4 <code>sched_timer_expiration()</code></a></h3>
+<p><b>Function Prototype</b>:<p>
+<ul><pre>
+#include &lt;nuttx/arch.h&gt;
+void sched_timer_expiration(void);
+</pre></ul>
+<p><b>Description</b>:</p>
+  Description: if <code>CONFIG_SCHED_TICKLESS</code> is defined, then this function is provided by the RTOS base code and called from platform-specific code when the interval timer used to implemented the tick-less OS expires.
+<ul>
+</ul>
+<p><b>Input Parameters</b>:</p>
+<ul>
+  None
+</ul>
+<p><b>Returned Value</b>:</p>
+<ul>
+  None
+</ul>
+<p><b>Assumptions</b>:</p>
+<ul>
+  Base code implementation assumes that this function is called from interrupt handling logic with interrupts disabled.
+</ul>
+
+<h3><a name="schedalarmexpiration">4.6.5 <code>sched_alarm_expiration()</code></a></h3>
+<p><b>Function Prototype</b>:<p>
+<ul><pre>
+#include &lt;nuttx/arch.h&gt;
+void sched_timer_expiration(void);
+</ul>
+<p><b>Description</b>:</p>
+  Description: if <code>CONFIG_SCHED_TICKLESS</code> is defined, then this function is provided by the RTOS base code and called from platform-specific code when the interval timer used to implemented the tick-less OS expires.
+<ul>
+</ul>
+<p><b>Input Parameters</b>:</p>
+<ul>
+  None
+</ul>
+<p><b>Returned Value</b>:</p>
+<ul>
+  None
+</ul>
+<p><b>Assumptions</b>:</p>
+<ul>
+  Base code implementation assumes that this function is called from interrupt handling logic with interrupts disabled.
+</ul>
+
+<h3><a name="irqdispatch">4.6.6 <code>irq_dispatch()</code></a></h3>
+<p><b>Function Prototype</b>: <code>void irq_dispatch(int irq, FAR void *context);</code></p>
+
+<p><b>Description</b>.
+  This function must be called from the architecture-
+  specific logic in order to display an interrupt to
+  the appropriate, registered handling logic.
+</p>
+
+<h2><a name="internalOS">4.7 Application OS vs. Internal OS Interfaces</a></h2>
+
+<p>
+  NuttX provides a standard, portable OS interface for use by applications.
+  This standard interface is controlled by the specifications proved at <a href="http://opengroup.org">OpenGroup.org</a>.
+  These application interfaces, in general, should not be used directly by logic executing within the OS.  The reason for this is that there are certain properties of the standard application interfaces that make them unsuitable for use within the OS
+  These properties include:
+</p>
+<ol>
+  <li>
+    <p>
+      <b>Use of the <i>per-thread</i> <code>errno</code> variable</b>:
+      Handling of return values, particularly, in the case of returned error indications.
+      Most legacy POSIX OS interface return information via a <i>per-thread</i> <code>errno</code>.
+      There must be no alteration of the <code>errno</code> value that must be stable from the point of view of the application.
+      So, as a general rule, internal OS logic must never modify the <code>errno</code> and particularly not by the inappropriate use of application OS interfaces within OS itself.
+    </p>
+    <p>
+      Within the OS, functions do not return error information via the <code>errno</code> variable.  Instead, the majority of internal OS function return error information as an integer value:  Returned values greater than or equal to zero are success values; returned values less than zero indicate failures.
+      Failures are reported by returning a negated <code>errno</code> value from <code>include/errno.h</code>,
+    </p>
+  <li>
+    <p><b>Cancellation Points</b>:
+      Many of the application OS interfaces are <i>cancellation points</i>, i.e., when the task is operating in <i>defferred cancellation</i> state, it cannot be deleted or cancelled until it calls an application OS interface that is a cancellation point.
+    </p>
+    <p>
+      The POSIX specification is very specific about this, specific both in identifying which application OS interfaces are cancellation points and specific in the fact that it is prohibited for any OS operation other than those listed in the specification to generate cancellation points.
+      If internal OS logic were to re-use application OS interfaces directly then it could very easily violate this POSIX requirement by incorrectly generating cancellation points on inappropriate OS operations and could result in very difficult to analyze application failures.
+    </p>
+  </li>
+  <li>
+     <p><b>Use of <i>per-task</i> Resources</b>:
+       Many resources are only valid in the task group context in which a thread operates.  Above we mentioned one:  <code>errno</code> is only valid for the thread that is currently executing.  So, for example, the <code>errno</code> at the time of a call is a completely different variable than, say, the <code>errno</code> while running in a work queue task.
+     </p>
+     <p>
+       File descriptors are an even better example:  An open file on file descriptor 5 on task A is <i>not</i> the same open file as might be used on file descriptor 5 on task B.
+     </p>
+     <p>
+       As a result, internal OS logic may not use application OS interfaces that use file descriptors or any other <i>per-task</i> resource.
+     </p>
+  </li>
+</ol>
+<p>
+  Within NuttX, this is handled by supporting equivalent internal OS interfaces that do not break the above rules.
+  These internal interfaces are intended for use <i>only</i> within the OS and should not be used by application logic.
+  Some examples include:
+</p>
+<ul>
+  <li>
+    <p>
+      <b><code>nxsem_wait()</code></b>:
+      <code>nxsem_wait()</code> is functionally equivalent to the standard application interface <code>sem_wait()</code>.  However, <code>nxsem_wait()</code> will not modify the errno value and will not cause a cancellation point.
+      (see <code>include/nuttx/semaphore.h</code> for other internal OS interfaces for semaphores).
+    </p>
+  </li>
+  <li>
+    <p>
+      <b><code>nxsig_waitinfo()</code></b>:
+      <code>nxsig_waitinfo()</code> is functionally equivalent to the standard application interface <code>sigwaitinfo()</code>.  However, <code>nxsig_waitinfo()</code> will not modify the errno value and will not cause a cancellation point (see <code>include/nuttx/signal.h</code> for other internal OS interfaces for signals).
+    </p>
+  </li>
+  <li>
+    <p>
+      <b><code>nxmq_send()</code></b>:
+      <code>nxmq_send()</code> is functionally equivalent to the standard application interface <code>mq_send()</code>.  However, <code>nxmq_send()</code> will not modify the errno value and will not cause a cancellation point (see <code>include/nuttx/mqueue.h</code> for other internal OS interfaces for POSIX message queues).
+    </p>
+  </li>
+  <li>
+    <p>
+      <b><code>file_read()</code></b>:
+      <code>file_read()</code> is functionally equivalent to the standard application interface <code>read()</code>.  However, <code>file_read()</code> will not modify the errno value, will not cause a cancellation point, and uses a special internal data structure in place of the file descriptor (see <code>include/nuttx/fs/fs.h</code> for other internal OS interfaces for VFS functions).
+    </p>
+  </li>
+  <li>
+    <p>
+      <b><code>psock_recvfrom()</code></b>:
+      <code>psock_recvfrom()</code> is functionally equivalent to the standard application interface <code>recvfrom()</code>.  However, <code>psock_recvfrom()</code> will not modify the errno value, will not cause a cancellation point, and uses a special internal data structure in place of the socket descriptor (see <code>include/nuttx/net/net.h</code> for other internal OS interfaces for sockets).
+    </p>
+  </li>
+</ul>
+
+<h2><a name="boardctl">4.8 <code>boardctl()</code> Application Interface</a></h2>
 
 <p><b>Function Prototype</b>:<p>
 <ul>
@@ -3684,7 +4066,7 @@ void lpwork_restorepriority(uint8_t reqprio);
   <p>
     <b>NOTE:</b> The other interfaces described in this document are internal OS interface.
     <code>boardctl()</code> is an application interface to the OS.
-    There is not point, in fact, of using <code>boardctl()</code> within the OS;
+    There is no point, in fact, of using <code>boardctl()</code> within the OS;
     the board interfaces prototyped in <code>include/nuttx/board.h</code> may be called directly from within the OS.
   </p>
   <p>
@@ -3710,7 +4092,7 @@ void lpwork_restorepriority(uint8_t reqprio);
   -1 (<code>ERROR</code>) is returned on failure with the <code>errno</code> variable to to indicate the nature of the failure.
 </ul>
 
-<h4><a name="boardsmp">4.7 Symmetric Multiprocessing (SMP) Application Interface</a></h4>
+<h4><a name="boardsmp">4.9 Symmetric Multiprocessing (SMP) Application Interface</a></h4>
 <p>
 According to Wikipedia: "Symmetric multiprocessing (SMP) involves a symmetric multiprocessor system hardware and software architecture where two or more identical processors connect to a single, shared main memory, have full access to all I/O devices, and are controlled by a single operating system instance that treats all processors equally, reserving none for special purposes. Most multiprocessor systems today use an SMP architecture. In the case of multi-core processors, the SMP architecture applies to the cores, treating them as separate processors.
 </p>
@@ -3724,7 +4106,7 @@ For a technical description of the NuttX implementation of SMP, see the NuttX <a
   None
 </ul>
 
-<h3><a name="uptestset">4.7.1 <code>up_testset()</code></a></h3>
+<h3><a name="uptestset">4.9.1 <code>up_testset()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/spinlock.h&gt;
@@ -3753,7 +4135,7 @@ spinlock_t up_testset(volatile FAR spinlock_t *lock);
   </p>
 </ul>
 
-<h3><a name="upcpuindex">4.7.2 <code>up_cpu_index()</code></a></h3>
+<h3><a name="upcpuindex">4.9.2 <code>up_cpu_index()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -3781,7 +4163,7 @@ int up_cpu_index(void);
   </p>
 </ul>
 
-<h3><a name="upcpustart">4.7.3 <code>up_cpu_start()</code></a></h3>
+<h3><a name="upcpustart">4.9.3 <code>up_cpu_start()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -3821,7 +4203,7 @@ int up_cpu_start(int cpu);
   </p>
 </ul>
 
-<h3><a name="upcpupause">4.7.4 <code>up_cpu_pause()</code></a></h3>
+<h3><a name="upcpupause">4.9.4 <code>up_cpu_pause()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -3853,7 +4235,7 @@ int up_cpu_pause(int cpu);
   </p>
 </ul>
 
-<h3><a name="upcpuresume">4.7.5 <code>up_cpu_resume()</code></a></h3>
+<h3><a name="upcpuresume">4.9.5 <code>up_cpu_resume()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -3885,93 +4267,7 @@ int up_cpu_resume(int cpu);
   </p>
 </ul>
 
-<h2><a name="exports">4.8 APIs Exported by NuttX to Architecture-Specific Logic</a></h2>
-<p>
-  These are standard interfaces that are exported by the OS
-  for use by the architecture specific logic.
-</p>
-
-<h3><a name="osstart">4.8.1 <code>os_start()</code></a></h3>
-<p>
-  <b><i>To be provided</i></b>
-</p>
-
-<h3><a name="listmgmt">4.8.2 OS List Management APIs</a></h3></h3>
-<p>
-  <b><i>To be provided</i></b>
-</p>
-
-<h3><a name="schedprocesstimer">4.8.3 <code>sched_process_timer()</code></a></h3>
-<p><b>Function Prototype</b>:</p>
-<ul><pre>
-#include &lt;nuttx/arch.h&gt;
-void sched_process_timer(void);
-</pre></ul>
-
-<p><b>Description</b>.
-  This function handles system timer events.
-  The timer interrupt logic itself is implemented in the
-  architecture specific code, but must call the following OS
-  function periodically -- the calling interval must be
-  <code>CONFIG_USEC_PER_TICK</code>.
-</p>
-
-<h3><a name="schedtimerexpiration">4.8.4 <code>sched_timer_expiration()</code></a></h3>
-<p><b>Function Prototype</b>:<p>
-<ul><pre>
-#include &lt;nuttx/arch.h&gt;
-void sched_timer_expiration(void);
-</pre></ul>
-<p><b>Description</b>:</p>
-  Description: if <code>CONFIG_SCHED_TICKLESS</code> is defined, then this function is provided by the RTOS base code and called from platform-specific code when the interval timer used to implemented the tick-less OS expires.
-<ul>
-</ul>
-<p><b>Input Parameters</b>:</p>
-<ul>
-  None
-</ul>
-<p><b>Returned Value</b>:</p>
-<ul>
-  None
-</ul>
-<p><b>Assumptions</b>:</p>
-<ul>
-  Base code implementation assumes that this function is called from interrupt handling logic with interrupts disabled.
-</ul>
-
-<h3><a name="schedalarmexpiration">4.8.5 <code>sched_alarm_expiration()</code></a></h3>
-<p><b>Function Prototype</b>:<p>
-<ul><pre>
-#include &lt;nuttx/arch.h&gt;
-void sched_timer_expiration(void);
-</ul>
-<p><b>Description</b>:</p>
-  Description: if <code>CONFIG_SCHED_TICKLESS</code> is defined, then this function is provided by the RTOS base code and called from platform-specific code when the interval timer used to implemented the tick-less OS expires.
-<ul>
-</ul>
-<p><b>Input Parameters</b>:</p>
-<ul>
-  None
-</ul>
-<p><b>Returned Value</b>:</p>
-<ul>
-  None
-</ul>
-<p><b>Assumptions</b>:</p>
-<ul>
-  Base code implementation assumes that this function is called from interrupt handling logic with interrupts disabled.
-</ul>
-
-<h3><a name="irqdispatch">4.8.6 <code>irq_dispatch()</code></a></h3>
-<p><b>Function Prototype</b>: <code>void irq_dispatch(int irq, FAR void *context);</code></p>
-
-<p><b>Description</b>.
-  This function must be called from the architecture-
-  specific logic in order to display an interrupt to
-  the appropriate, registered handling logic.
-</p>
-
-<h2><a name="shm">4.9 Shared Memory</a></h2>
+<h2><a name="shm">4.10 Shared Memory</a></h2>
 <p>
   Shared memory interfaces are only available with the NuttX kernel build (<code>CONFIG_BUILD_KERNEL=y</code>).
   These interfaces support user memory regions that can be shared between multiple user processes.
@@ -3980,7 +4276,7 @@ void sched_timer_expiration(void);
   Those interfaces are described below:
 </p>
 
-<h3><a name="upshmat">4.9.1 <code>up_shmat()</code></a></h3>
+<h3><a name="upshmat">4.10.1 <code>up_shmat()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -4009,7 +4305,7 @@ int up_shmat(FAR uintptr_t *pages, unsigned int npages, uintptr_t vaddr);
   Zero (<code>OK</code>) is returned on success; a negated <code>errno</code> value is returned on failure.
 </ul>
 
-<h3><a name="upshmdt">4.9.2 <code>up_shmdt()</code></a></h3>
+<h3><a name="upshmdt">4.10.2 <code>up_shmdt()</code></a></h3>
 <p><b>Function Prototype</b>:<p>
 <ul><pre>
 #include &lt;nuttx/arch.h&gt;
@@ -4035,7 +4331,7 @@ int up_shmdt(uintptr_t vaddr, unsigned int npages);
   Zero (<code>OK</code>) is returned on success; a negated <code>errno</code> value is returned on failure.
 </ul>
 
-<h2><a name="demandpaging">4.10 On-Demand Paging</a></h2>
+<h2><a name="demandpaging">4.11 On-Demand Paging</a></h2>
 <p>
   The NuttX On-Demand Paging feature permits embedded MCUs with some limited RAM space to execute large programs from some non-random access media.
   If the platform meets certain requirements, then NuttX can provide on-demand paging:
@@ -4044,7 +4340,7 @@ int up_shmdt(uintptr_t vaddr, unsigned int npages);
   Please see the <a href="NuttXDemandPaging.html">NuttX Demand Paging</a> design document for further information.
 </p>
 
-<h2><a name="ledsupport">4.11 LED Support</a></h2>
+<h2><a name="ledsupport">4.12 LED Support</a></h2>
 
 <p>
   A board architecture may or may not have LEDs.
@@ -4054,7 +4350,7 @@ int up_shmdt(uintptr_t vaddr, unsigned int npages);
   However, the support provided by each architecture is sufficiently similar that it can be documented here.
 </p>
 
-<h3><a name="ledheaders">4.11.1 Header Files</a></h3>
+<h3><a name="ledheaders">4.12.1 Header Files</a></h3>
 
 <p>
   LED-related definitions are provided in two header files:
@@ -4078,7 +4374,7 @@ int up_shmdt(uintptr_t vaddr, unsigned int npages);
   </ul>
 </p>
 
-<h3><a name="leddefinitions">4.11.2 LED Definitions</a></h3>
+<h3><a name="leddefinitions">4.12.2 LED Definitions</a></h3>
 
 <p>
    The implementation of LED support is very specific to a board architecture.
@@ -4142,7 +4438,7 @@ int up_shmdt(uintptr_t vaddr, unsigned int npages);
   </li>
 </ul>
 
-<h3><a name="ledapis">4.11.3 Common LED interfaces</a></h3>
+<h3><a name="ledapis">4.12.3 Common LED interfaces</a></h3>
 
 <p>
   The <code>include/nuttx/board.h</code> has declarations like:
@@ -4192,7 +4488,7 @@ void board_autoled_off(int led);
   </li>
 </ul>
 
-<h2><a name="iobs">4.12 I/O Buffer Management</a></h2>
+<h2><a name="iobs">4.13 I/O Buffer Management</a></h2>
 
 NuttX supports generic I/O buffer management (IOB) logic.
 This logic was originally added to support network I/O buffering, but has been generalized to meet buffering requirements by all device drivers.
@@ -4224,7 +4520,7 @@ This objectives of this feature are:
   </li>
 </ol>
 
-<h3><a name="iobconfig">4.12.1 Configuration Options</a></h3>
+<h3><a name="iobconfig">4.13.1 Configuration Options</a></h3>
 
 <dl>
   <dt><code>CONFIG_MM_IOB</code>
@@ -4256,12 +4552,12 @@ This objectives of this feature are:
   NOTE that this selection is not available if DEBUG features are not enabled (<code>CONFIG_DEBUG_FEATURES</code>) with IOBs are being used to syslog buffering logic (<code>CONFIG_SYSLOG_BUFFER</code>).
 </dl>
 
-<h3><a name="iobthrottle">4.12.2 Throttling</a></h3>
+<h3><a name="iobthrottle">4.13.2 Throttling</a></h3>
 
 <b></b>
 An allocation throttle was added.  I/O buffer allocation logic supports a throttle value originally for read-ahead buffering to prevent the read-ahead logic from consuming all available I/O buffers and blocking the write buffering logic.  This throttle logic is only needed for networking only if both write buffering and read-ahead buffering are used.  Of use of I/O buffering might have other motivations for throttling.
 
-<h3><a name="iobtypes">4.12.3 Public Types</a></h3>
+<h3><a name="iobtypes">4.13.3 Public Types</a></h3>
 
 <p>
   This structure represents one I/O buffer.  A packet is contained by one or more I/O buffers in a chain.  The <code>io_pktlen</code> is only valid for the I/O buffer at the head of the chain.
@@ -4324,33 +4620,33 @@ struct iob_queue_s
 #endif /* CONFIG_IOB_NCHAINS > 0 */
 </pre>
 
-<h3><a name="iobprotos">4.12.4 Public Function Prototypes</a></h3>
+<h3><a name="iobprotos">4.13.4 Public Function Prototypes</a></h3>
 
 <ul>
-  <li><a href="#iob_initialize">4.12.4.1 <code>iob_initialize()</code></a></li>
-  <li><a href="#iob_alloc">4.12.4.2 <code>iob_alloc()</code></a></li>
-  <li><a href="#iob_tryalloc">4.12.4.3 <code>iob_tryalloc()</code></a></li>
-  <li><a href="#iob_free">4.12.4.4 <code>iob_free()</code></a></li>
-  <li><a href="#iob_free_chain">4.12.4.5 <code>iob_free_chain()</code></a></li>
-  <li><a href="#iob_add_queue">4.12.4.6 <code>iob_add_queue()</code></a></li>
-  <li><a href="#iob_tryadd_queue">4.12.4.7 <code>iob_tryadd_queue()</code></a></li>
-  <li><a href="#iob_remove_queue">4.12.4.8 <code>iob_remove_queue()</code></a></li>
-  <li><a href="#iob_peek_queue">4.12.4.9 <code>iob_peek_queue()</code></a></li>
-  <li><a href="#iob_free_queue">4.12.4.10 <code>iob_free_queue()</code></a></li>
-  <li><a href="#iob_copyin">4.12.4.11 <code>iob_copyin()</code></a></li>
-  <li><a href="#iob_trycopyin">4.12.4.12 <code>iob_trycopyin()</code></a></li>
-  <li><a href="#iob_copyout">4.12.4.13 <code>iob_copyout()</code></a></li>
-  <li><a href="#iob_clone">4.12.4.14 <code>iob_clone()</code></a></li>
-  <li><a href="#iob_concat">4.12.4.15 <code>iob_concat()</code></a></li>
-  <li><a href="#iob_trimhead">4.12.4.16 <code>iob_trimhead()</code></a></li>
-  <li><a href="#iob_trimhead_queue">4.12.4.17 <code>iob_trimhead_queue()</code></a></li>
-  <li><a href="#iob_trimtail">4.12.4.18 <code>iob_trimtail()</code></a></li>
-  <li><a href="#iob_pack">4.12.4.19 <code>iob_pack()</code></a></li>
-  <li><a href="#iob_contig">4.12.4.20 <code>iob_contig()</code></a></li>
-  <li><a href="#iob_dump">4.12.4.21 <code>iob_dump()</code></a></li>
+  <li><a href="#iob_initialize">4.13.4.1 <code>iob_initialize()</code></a></li>
+  <li><a href="#iob_alloc">4.13.4.2 <code>iob_alloc()</code></a></li>
+  <li><a href="#iob_tryalloc">4.13.4.3 <code>iob_tryalloc()</code></a></li>
+  <li><a href="#iob_free">4.13.4.4 <code>iob_free()</code></a></li>
+  <li><a href="#iob_free_chain">4.13.4.5 <code>iob_free_chain()</code></a></li>
+  <li><a href="#iob_add_queue">4.13.4.6 <code>iob_add_queue()</code></a></li>
+  <li><a href="#iob_tryadd_queue">4.13.4.7 <code>iob_tryadd_queue()</code></a></li>
+  <li><a href="#iob_remove_queue">4.13.4.8 <code>iob_remove_queue()</code></a></li>
+  <li><a href="#iob_peek_queue">4.13.4.9 <code>iob_peek_queue()</code></a></li>
+  <li><a href="#iob_free_queue">4.13.4.10 <code>iob_free_queue()</code></a></li>
+  <li><a href="#iob_copyin">4.13.4.11 <code>iob_copyin()</code></a></li>
+  <li><a href="#iob_trycopyin">4.13.4.12 <code>iob_trycopyin()</code></a></li>
+  <li><a href="#iob_copyout">4.13.4.13 <code>iob_copyout()</code></a></li>
+  <li><a href="#iob_clone">4.13.4.14 <code>iob_clone()</code></a></li>
+  <li><a href="#iob_concat">4.13.4.15 <code>iob_concat()</code></a></li>
+  <li><a href="#iob_trimhead">4.13.4.16 <code>iob_trimhead()</code></a></li>
+  <li><a href="#iob_trimhead_queue">4.13.4.17 <code>iob_trimhead_queue()</code></a></li>
+  <li><a href="#iob_trimtail">4.13.4.18 <code>iob_trimtail()</code></a></li>
+  <li><a href="#iob_pack">4.13.4.19 <code>iob_pack()</code></a></li>
+  <li><a href="#iob_contig">4.13.4.20 <code>iob_contig()</code></a></li>
+  <li><a href="#iob_dump">4.13.4.21 <code>iob_dump()</code></a></li>
 </ul>
 
-<h4><a name="iob_initialize">4.12.4.1 <code>iob_initialize()</code></a></h4>
+<h4><a name="iob_initialize">4.13.4.1 <code>iob_initialize()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4361,7 +4657,7 @@ void iob_initialize(void);
   Set up the I/O buffers for normal operations.
 </p>
 
-<h4><a name="iob_alloc">4.12.4.2 <code>iob_alloc()</code></a></h4>
+<h4><a name="iob_alloc">4.13.4.2 <code>iob_alloc()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4372,7 +4668,7 @@ FAR struct iob_s *iob_alloc(bool throttled);
   Allocate an I/O buffer by taking the buffer at the head of the free list.
 </p>
 
-<h4><a name="iob_tryalloc">4.12.4.3 <code>iob_tryalloc()</code></a></h4>
+<h4><a name="iob_tryalloc">4.13.4.3 <code>iob_tryalloc()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4383,7 +4679,7 @@ FAR struct iob_s *iob_tryalloc(bool throttled);
   Try to allocate an I/O buffer by taking the buffer at the head of the free list without waiting for a buffer to become free.
 </p>
 
-<h4><a name="iob_free">4.12.4.4 <code>iob_free()</code></a></h4>
+<h4><a name="iob_free">4.13.4.4 <code>iob_free()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4394,7 +4690,7 @@ FAR struct iob_s *iob_free(FAR struct iob_s *iob);
    Free the I/O buffer at the head of a buffer chain returning it to the free list.  The link to  the next I/O buffer in the chain is return.
 </p>
 
-<h4><a name="iob_free_chain">4.12.4.5 <code>iob_free_chain()</code></a></h4>
+<h4><a name="iob_free_chain">4.13.4.5 <code>iob_free_chain()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4405,7 +4701,7 @@ void iob_free_chain(FAR struct iob_s *iob);
   Free an entire buffer chain, starting at the beginning of the I/O buffer chain
 </p>
 
-<h4><a name="iob_add_queue">4.12.4.6 <code>iob_add_queue()</code></a></h4>
+<h4><a name="iob_add_queue">4.13.4.6 <code>iob_add_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4418,7 +4714,7 @@ int iob_add_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq);
   Add one I/O buffer chain to the end of a queue.  May fail due to lack of resources.
 </p>
 
-<h4><a name="iob_tryadd_queue">4.12.4.7 <code>iob_tryadd_queue()</code></a></h4>
+<h4><a name="iob_tryadd_queue">4.13.4.7 <code>iob_tryadd_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4431,7 +4727,7 @@ int iob_tryadd_queue(FAR struct iob_s *iob, FAR struct iob_queue_s *iobq);
   Add one I/O buffer chain to the end of a queue without waiting for resources to become free.
 </p>
 
-<h4><a name="iob_remove_queue">4.12.4.8 <code>iob_remove_queue()</code></a></h4>
+<h4><a name="iob_remove_queue">4.13.4.8 <code>iob_remove_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4448,7 +4744,7 @@ FAR struct iob_s *iob_remove_queue(FAR struct iob_queue_s *iobq);
   Returns a reference to the I/O buffer chain at the head of the queue.
 </p>
 
-<h4><a name="iob_peek_queue">4.12.4.9 <code>iob_peek_queue()</code></a></h4>
+<h4><a name="iob_peek_queue">4.13.4.9 <code>iob_peek_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4465,7 +4761,7 @@ FAR struct iob_s *iob_peek_queue(FAR struct iob_queue_s *iobq);
   Returns a reference to the I/O buffer chain at the head of the queue.
 </p>
 
-<h4><a name="iob_free_queue">4.12.4.10 <code>iob_free_queue()</code></a></h4>
+<h4><a name="iob_free_queue">4.13.4.10 <code>iob_free_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4478,7 +4774,7 @@ void iob_free_queue(FAR struct iob_queue_s *qhead);
   Free an entire queue of I/O buffer chains.
 </p>
 
-<h4><a name="iob_copyin">4.12.4.11 <code>iob_copyin()</code></a></h4>
+<h4><a name="iob_copyin">4.13.4.11 <code>iob_copyin()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4490,7 +4786,7 @@ int iob_copyin(FAR struct iob_s *iob, FAR const uint8_t *src,
   Copy data <code>len</code> bytes from a user buffer into the I/O buffer chain, starting at <code>offset</code>, extending the chain as necessary.
 </p>
 
-<h4><a name="iob_trycopyin">4.12.4.12 <code>iob_trycopyin()</code></a></h4>
+<h4><a name="iob_trycopyin">4.13.4.12 <code>iob_trycopyin()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4502,7 +4798,7 @@ int iob_trycopyin(FAR struct iob_s *iob, FAR const uint8_t *src,
  Copy data <code>len</code> bytes from a user buffer into the I/O buffer chain, starting at <code>offset</code>, extending the chain as necessary BUT without waiting if buffers are not available.
 </p>
 
-<h4><a name="iob_copyout">4.12.4.13 <code>iob_copyout()</code></a></h4>
+<h4><a name="iob_copyout">4.13.4.13 <code>iob_copyout()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4514,7 +4810,7 @@ int iob_copyout(FAR uint8_t *dest, FAR const struct iob_s *iob,
  Copy data <code>len</code> bytes of data into the user buffer starting at <code>offset</code> in the I/O buffer, returning that actual number of bytes copied out.
 </p>
 
-<h4><a name="iob_clone">4.12.4.14 <code>iob_clone()</code></a></h4>
+<h4><a name="iob_clone">4.13.4.14 <code>iob_clone()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4525,7 +4821,7 @@ int iob_clone(FAR struct iob_s *iob1, FAR struct iob_s *iob2, bool throttled);
   Duplicate (and pack) the data in <code>iob1</code> in <code>iob2</code>.  <code>iob2</code> must be empty.
 </p>
 
-<h4><a name="iob_concat">4.12.4.15 <code>iob_concat()</code></a></h4>
+<h4><a name="iob_concat">4.13.4.15 <code>iob_concat()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4536,7 +4832,7 @@ void iob_concat(FAR struct iob_s *iob1, FAR struct iob_s *iob2);
   Concatenate iob_s chain iob2 to iob1.
 </p>
 
-<h4><a name="iob_trimhead">4.12.4.16 <code>iob_trimhead()</code></a></h4>
+<h4><a name="iob_trimhead">4.13.4.16 <code>iob_trimhead()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4547,7 +4843,7 @@ FAR struct iob_s *iob_trimhead(FAR struct iob_s *iob, unsigned int trimlen);
   Remove bytes from the beginning of an I/O chain.  Emptied I/O buffers are freed and, hence, the beginning of the chain may change.
 </p>
 
-<h4><a name="iob_trimhead_queue">4.12.4.17 <code>iob_trimhead_queue()</code></a></h4>
+<h4><a name="iob_trimhead_queue">4.13.4.17 <code>iob_trimhead_queue()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4568,7 +4864,7 @@ FAR struct iob_s *iob_trimhead_queue(FAR struct iob_queue_s *qhead,
   The new iob at the head of the queue is returned.
 </p>
 
-<h4><a name="iob_trimtail">4.12.4.18 <code>iob_trimtail()</code></a></h4>
+<h4><a name="iob_trimtail">4.13.4.18 <code>iob_trimtail()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4579,7 +4875,7 @@ FAR struct iob_s *iob_trimtail(FAR struct iob_s *iob, unsigned int trimlen);
   Remove bytes from the end of an I/O chain.  Emptied I/O buffers are freed NULL will be returned in the special case where the entry I/O buffer chain is freed.
 </p>
 
-<h4><a name="iob_pack">4.12.4.19 <code>iob_pack()</code></a></h4>
+<h4><a name="iob_pack">4.13.4.19 <code>iob_pack()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4590,7 +4886,7 @@ FAR struct iob_s *iob_pack(FAR struct iob_s *iob);
   Pack all data in the I/O buffer chain so that the data offset is zero and all but the final buffer in the chain are filled.  Any emptied buffers at the end of the chain are freed.
 </p>
 
-<h4><a name="iob_contig">4.12.4.20 <code>iob_contig()</code></a></h4>
+<h4><a name="iob_contig">4.13.4.20 <code>iob_contig()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -4601,7 +4897,7 @@ int iob_contig(FAR struct iob_s *iob, unsigned int len);
   Ensure that there is <code>len</code> bytes of contiguous space at the beginning of the I/O buffer chain starting at <code>iob</code>.
 </p>
 
-<h4><a name="iob_dump">4.12.4.21 <code>iob_dump()</code></a></h4>
+<h4><a name="iob_dump">4.13.4.21 <code>iob_dump()</code></a></h4>
 <p><b>Function Prototype</b>:
 <pre>
 #include &lt;nuttx/mm/iob.h&gt;
@@ -5724,7 +6020,7 @@ int kbd_decode(FAR struct lib_instream_s *stream, FAR struct kbd_getstate_s *sta
   <li>
     <p>
       <b>Examples</b>:
-      <code>drivers/lcd/nokia6100.c</code>, <code>drivers/lcd/p14201.c</code>, <code>configs/sam3u-ek/src/up_lcd.c.</code>
+      <code>drivers/lcd/p14201.c</code>, <code>configs/sam3u-ek/src/up_lcd.c.</code>
       See also the usage of the LCD driver in the <code>graphics/</code> directory.
     </p>
   </li>
@@ -6705,7 +7001,7 @@ void pm_initialize(void);
 </pre></ul>
 <p><b>Description:</b>
 This function is called by MCU-specific one-time at power on reset in order to initialize the power management capabilities.
-This function must be called <i>very</i> early in the initialization sequence <i>before</i> any other device drivers are initialize (since they may attempt to register with the power management subsystem).
+This function must be called <i>very</i> early in the initialization sequence <i>before</i> any other device drivers are initialized (since they may attempt to register with the power management subsystem).
 </p>
 <p><b>Input Parameters:</b>
 None
@@ -6734,7 +7030,27 @@ int pm_register(FAR struct pm_callback_s *callbacks);
 Zero (<code>OK</code>) on success; otherwise a negated <code>errno</code> value is returned.
 </p>
 
-<h4><a name="pmactivity">6.5.2.3 <code>pm_activity()</code></a></h4>
+<h4><a name="pmunregister">6.5.2.3 <code>pm_unregister()</code></a></h4>
+<p><b>Function Prototype:</b></p>
+<ul><pre>
+#include &lt;nuttx/power/pm.h&gt;
+int pm_unregister(FAR struct pm_callback_s *callbacks);
+</pre></ul>
+<p><b>Description:</b>
+  This function is called by a device driver in order to unregister previously registered power management event callbacks.
+  Refer to the <a href="#pmcallbacks">PM Callback</a> section for more details.
+</p>
+<p><b>Input Parameters:</b>
+ <dl>
+   <dt><code>callbacks</code>
+   <dd>An instance of <code>struct pm_callback_s</code> providing the driver callback functions.
+ </dl>
+</p>
+<p><b>Returned Value:</b>
+Zero (<code>OK</code>) on success; otherwise a negated <code>errno</code> value is returned.
+</p>
+
+<h4><a name="pmactivity">6.5.2.4 <code>pm_activity()</code></a></h4>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/power/pm.h&gt;
@@ -6763,7 +7079,7 @@ void pm_activity(int domain, int priority);
   This function may be called from an interrupt handler (this is the ONLY PM function that may be called from an interrupt handler!).
 </p>
 
-<h4><a name="pmcheckstate">6.5.2.4 <code>pm_checkstate()</code></a></h4>
+<h4><a name="pmcheckstate">6.5.2.5 <code>pm_checkstate()</code></a></h4>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/power/pm.h&gt;
@@ -6793,7 +7109,7 @@ enum pm_state_e pm_checkstate(int domain);
   The recommended power management state.
 </p>
 
-<h4><a name="pmchangestate">6.5.2.5 <code>pm_changestate()</code></a></h4>
+<h4><a name="pmchangestate">6.5.2.6 <code>pm_changestate()</code></a></h4>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/power/pm.h&gt;

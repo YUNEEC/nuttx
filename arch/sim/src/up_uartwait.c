@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/sim/src/up_uartwait.c
  *
- *   Copyright (C) 20014Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,8 +63,8 @@ void simuart_initialize(void)
    * have priority inheritance enabled.
    */
 
-  sem_init(&g_uartavail, 0, 0);
-  sem_setprotocol(&g_uartavail, SEM_PRIO_NONE);
+  nxsem_init(&g_uartavail, 0, 0);
+  nxsem_setprotocol(&g_uartavail, SEM_PRIO_NONE);
 }
 
 /****************************************************************************
@@ -73,7 +73,7 @@ void simuart_initialize(void)
 
 void simuart_post(void)
 {
-  sem_post(&g_uartavail);
+  nxsem_post(&g_uartavail);
 }
 
 /****************************************************************************
@@ -84,5 +84,5 @@ void simuart_wait(void)
 {
   /* Should only fail if interrupted by a signal */
 
-  while (sem_wait(&g_uartavail) < 0);
+  while (nxsem_wait(&g_uartavail) < 0);
 }

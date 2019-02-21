@@ -1,7 +1,8 @@
 /****************************************************************************
  *  sched/group/group_setupidlefiles.c
  *
- *   Copyright (C) 2007-2010, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2010, 2012-2013, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,10 +64,10 @@
  * Description:
  *   Configure the idle thread's TCB.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - tcb of the idle task.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -112,11 +113,11 @@ int group_setupidlefiles(FAR struct task_tcb_s *tcb)
 #if CONFIG_NFILE_DESCRIPTORS > 0 && (defined(CONFIG_DEV_CONSOLE) || \
   defined(CONFIG_DEV_NULL))
 #  if defined(CONFIG_DEV_CONSOLE)
-  fd = open("/dev/console", O_RDWR);
+  fd = nx_open("/dev/console", O_RDWR);
 #  endif
 #  if defined(CONFIG_DEV_NULL)
   if (fd < 0) {
-	  fd = open("/dev/null", O_RDWR);
+	  fd = nx_open("/dev/null", O_RDWR);
   }
 #  endif
 
@@ -140,7 +141,7 @@ int group_setupidlefiles(FAR struct task_tcb_s *tcb)
         }
       else
         {
-          serr("ERROR: Failed to open /dev/console or /dev/null: %d\n", errno);
+          serr("ERROR: Failed to open /dev/console or /dev/null: %d\n", fd);
         }
 
       return -ENFILE;

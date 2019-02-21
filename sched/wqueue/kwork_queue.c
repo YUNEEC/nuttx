@@ -71,7 +71,7 @@
  *   from the queue, or (2) work_cancel() has been called to cancel the work
  *   and remove it from the work queue.
  *
- * Input parameters:
+ * Input Parameters:
  *   qid    - The work queue ID (index)
  *   work   - The work structure to queue
  *   worker - The worker callback to be invoked.  The callback will invoked
@@ -88,7 +88,7 @@
 
 static void work_qqueue(FAR struct kwork_wqueue_s *wqueue,
                         FAR struct work_s *work, worker_t worker,
-                        FAR void *arg, systime_t delay)
+                        FAR void *arg, clock_t delay)
 {
   irqstate_t flags;
 
@@ -144,7 +144,7 @@ static void work_qqueue(FAR struct kwork_wqueue_s *wqueue,
  *   previous work as been performed and removed from the queue, then any
  *   pending work will be canceled and lost.
  *
- * Input parameters:
+ * Input Parameters:
  *   qid    - The work queue ID (index)
  *   work   - The work structure to queue
  *   worker - The worker callback to be invoked.  The callback will invoked
@@ -160,7 +160,7 @@ static void work_qqueue(FAR struct kwork_wqueue_s *wqueue,
  ****************************************************************************/
 
 int work_queue(int qid, FAR struct work_s *work, worker_t worker,
-               FAR void *arg, systime_t delay)
+               FAR void *arg, clock_t delay)
 {
   /* Queue the new work */
 

@@ -201,7 +201,7 @@ static void stm32_enable_irq(FAR const struct mrf24j40_lower_s *lower,
 
   if (state)
     {
-      (void)stm32_gpiosetevent(priv->intcfg, true, true, true,
+      (void)stm32_gpiosetevent(priv->intcfg, false, true, true,
                                priv->handler, priv->arg);
     }
   else
@@ -290,6 +290,7 @@ static int stm32_mrf24j40_devsetup(FAR struct stm32_priv_s *priv)
     }
 #endif
 
+  UNUSED(ret);
   return OK;
 }
 

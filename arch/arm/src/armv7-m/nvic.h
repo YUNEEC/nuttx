@@ -1,7 +1,7 @@
 /********************************************************************************************
  * arch/arm/src/armv7-m/nvic.h
  *
- *   Copyright (C) 2009, 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,26 @@
 /********************************************************************************************
  * Pre-processor Definitions
  ********************************************************************************************/
+
+/* Exception/interrupt vector numbers *******************************************************/
+
+                                               /* Vector  0: Reset stack pointer value */
+                                               /* Vector  1: Reset */
+#define NVIC_IRQ_NMI                    (2)    /* Vector  2: Non-Maskable Interrupt (NMI) */
+#define NVIC_IRQ_HARDFAULT              (3)    /* Vector  3: Hard fault */
+#define NVIC_IRQ_MEMFAULT               (4)    /* Vector  4: Memory management (MPU) */
+#define NVIC_IRQ_BUSFAULT               (5)    /* Vector  5: Bus fault */
+#define NVIC_IRQ_USAGEFAULT             (6)    /* Vector  6: Usage fault */
+                                               /* Vectors 7-10: Reserved */
+#define NVIC_IRQ_SVCALL                 (11)   /* Vector 11: SVC call */
+#define NVIC_IRQ_DBGMONITOR             (12)   /* Vector 12: Debug Monitor */
+                                               /* Vector 13: Reserved */
+#define NVIC_IRQ_PENDSV                 (14)   /* Vector 14: Pendable system service request */
+#define NVIC_IRQ_SYSTICK                (15)   /* Vector 15: System tick */
+
+/* External interrupts (vectors >= 16).  These definitions are chip-specific */
+
+#define NVIC_IRQ_FIRST                  (16)    /* Vector number of the first interrupt */
 
 /* NVIC base address ************************************************************************/
 
@@ -220,7 +240,7 @@
 #define NVIC_MVFR2_OFFSET               0x0f48 /* Media and VFP Feature Register 2 */
 #define NVIC_ICIALLU_OFFSET             0x0f50 /* I-Cache Invalidate All to PoU (Cortex-M7) */
 #define NVIC_ICIMVAU_OFFSET             0x0f58 /* I-Cache Invalidate by MVA to PoU (Cortex-M7) */
-#define NVIC_DCIMVAU_OFFSET             0x0f5c /* D-Cache Invalidate by MVA to PoC (Cortex-M7) */
+#define NVIC_DCIMVAC_OFFSET             0x0f5c /* D-Cache Invalidate by MVA to PoC (Cortex-M7) */
 #define NVIC_DCISW_OFFSET               0x0f60 /* D-Cache Invalidate by Set-way (Cortex-M7) */
 #define NVIC_DCCMVAU_OFFSET             0x0f64 /* D-Cache Clean by MVA to PoU (Cortex-M7) */
 #define NVIC_DCCMVAC_OFFSET             0x0f68 /* D-Cache Clean by MVA to PoC (Cortex-M7) */
@@ -409,6 +429,7 @@
 #define NVIC_ICIALLU                    (ARMV7M_NVIC_BASE + NVIC_ICIALLU_OFFSET)
 #define NVIC_ICIMVAU                    (ARMV7M_NVIC_BASE + NVIC_ICIMVAU_OFFSET)
 #define NVIC_DCIMVAU                    (ARMV7M_NVIC_BASE + NVIC_DCIMVAU_OFFSET)
+#define NVIC_DCIMVAC                    (ARMV7M_NVIC_BASE + NVIC_DCIMVAC_OFFSET)
 #define NVIC_DCISW                      (ARMV7M_NVIC_BASE + NVIC_DCISW_OFFSET)
 #define NVIC_DCCMVAU                    (ARMV7M_NVIC_BASE + NVIC_DCCMVAU_OFFSET)
 #define NVIC_DCCMVAC                    (ARMV7M_NVIC_BASE + NVIC_DCCMVAC_OFFSET)
@@ -436,7 +457,7 @@
 
 /* NVIC register bit definitions ************************************************************/
 
-/* Interrrupt controller type (INCTCTL_TYPE) */
+/* Interrupt controller type (INCTCTL_TYPE) */
 
 #define NVIC_ICTR_INTLINESNUM_SHIFT     0    /* Bits 0-3: Number of interrupt inputs / 32 - 1 */
 #define NVIC_ICTR_INTLINESNUM_MASK      (15 << NVIC_ICTR_INTLINESNUM_SHIFT)

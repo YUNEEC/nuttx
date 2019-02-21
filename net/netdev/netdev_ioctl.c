@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/netdev/netdev_ioctl.c
  *
- *   Copyright (C) 2007-2012, 2015-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2012, 2015-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,6 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
 
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -64,23 +63,23 @@
 #  include <nuttx/net/sixlowpan.h>
 #endif
 
-#ifdef CONFIG_NET_IGMP
-#  include <sys/sockio.h>
-#  include <nuttx/net/igmp.h>
-#endif
+#include <sys/sockio.h>
+#include <nuttx/net/igmp.h>
 
 #ifdef CONFIG_NETDEV_WIRELESS_IOCTL
 #  include <nuttx/wireless/wireless.h>
 #endif
 
-#if defined(CONFIG_NETDEV_IOCTL) && defined(CONFIG_NET_6LOWPAN)
-#  ifdef CONFIG_WIRELESS_IEEE802154
-#    include <nuttx/wireless/ieee802154/ieee802154_mac.h>
-#  endif
+#ifdef CONFIG_WIRELESS_BLUETOOTH
+#  include <nuttx/wireless/bluetooth/bt_ioctl.h>
+#endif
 
-#  ifdef CONFIG_WIRELESS_PKTRADIO
-#    include <nuttx/wireless/pktradio.h>
-#  endif
+#ifdef CONFIG_WIRELESS_IEEE802154
+#  include <nuttx/wireless/ieee802154/ieee802154_mac.h>
+#endif
+
+#ifdef CONFIG_WIRELESS_PKTRADIO
+#  include <nuttx/wireless/pktradio.h>
 #endif
 
 #include "arp/arp.h"
@@ -91,9 +90,51 @@
 #include "icmpv6/icmpv6.h"
 #include "route/route.h"
 
+#if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+/* Configuration */
+
+#undef HAVE_WRITABLE_IPv4ROUTE
+#undef HAVE_WRITABLE_IPv6ROUTE
+
+#ifdef CONFIG_NET_ROUTE
+#  if defined(CONFIG_NET_IPv4) && !defined(CONFIG_ROUTE_IPv4_ROMROUTE)
+#    define HAVE_WRITABLE_IPv4ROUTE 1
+#  endif
+
+#  if defined(CONFIG_NET_IPv6) && !defined(CONFIG_ROUTE_IPv6_ROMROUTE)
+#    define HAVE_WRITABLE_IPv6ROUTE 1
+#  endif
+#endif
+
+#undef HAVE_IEEE802154_IOCTL
+#undef HAVE_PKTRADIO_IOCTL
+#undef HAVE_BLUETOOTH_IOCTL
+
+#ifdef CONFIG_NETDEV_IOCTL
+/* IEEE 802.15.4 6LoWPAN or raw packet support */
+
+#if defined(CONFIG_NET_IEEE802154) || (defined(CONFIG_NET_6LOWPAN) && \
+    defined(CONFIG_WIRELESS_IEEE802154))
+#  define HAVE_IEEE802154_IOCTL 1
+#endif
+
+/* pktradio raw packet support not implemented */
+
+#if defined(CONFIG_NET_6LOWPAN) && defined(CONFIG_WIRELESS_PKTRADIO)
+#  define HAVE_PKTRADIO_IOCTL 1
+#endif
+
+/* Bluetooth 6LoWPAN support not implemented */
+
+#if defined(CONFIG_NET_BLUETOOTH)
+#  define HAVE_BLUETOOTH_IOCTL 1
+#endif
+#endif /* CONFIG_NETDEV_IOCTL */
 
 /* This is really kind of bogus.. When asked for an IP address, this is
  * family that is returned in the ifr structure.  Probably could just skip
@@ -121,7 +162,7 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ROUTE) && defined(CONFIG_NET_IPv4)
+#ifdef HAVE_WRITABLE_IPv4ROUTE
 static int ioctl_add_ipv4route(FAR struct rtentry *rtentry)
 {
   FAR struct sockaddr_in *addr;
@@ -149,7 +190,7 @@ static int ioctl_add_ipv4route(FAR struct rtentry *rtentry)
 
   return net_addroute_ipv4(target, netmask, router);
 }
-#endif /* CONFIG_NET_ROUTE && CONFIG_NET_IPv4 */
+#endif /* HAVE_WRITABLE_IPv4ROUTE */
 
 /****************************************************************************
  * Name: ioctl_add_ipv6route
@@ -162,7 +203,7 @@ static int ioctl_add_ipv4route(FAR struct rtentry *rtentry)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ROUTE) && defined(CONFIG_NET_IPv6)
+#ifdef HAVE_WRITABLE_IPv6ROUTE
 static int ioctl_add_ipv6route(FAR struct rtentry *rtentry)
 {
   FAR struct sockaddr_in6 *target;
@@ -187,7 +228,7 @@ static int ioctl_add_ipv6route(FAR struct rtentry *rtentry)
 
   return net_addroute_ipv6(target->sin6_addr.s6_addr16, netmask->sin6_addr.s6_addr16, router);
 }
-#endif /* CONFIG_NET_ROUTE && CONFIG_NET_IPv6 */
+#endif /* HAVE_WRITABLE_IPv6ROUTE */
 
 /****************************************************************************
  * Name: ioctl_del_ipv4route
@@ -200,7 +241,7 @@ static int ioctl_add_ipv6route(FAR struct rtentry *rtentry)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ROUTE) && defined(CONFIG_NET_IPv4)
+#ifdef HAVE_WRITABLE_IPv4ROUTE
 static int ioctl_del_ipv4route(FAR struct rtentry *rtentry)
 {
   FAR struct sockaddr_in *addr;
@@ -215,7 +256,7 @@ static int ioctl_del_ipv4route(FAR struct rtentry *rtentry)
 
   return net_delroute_ipv4(target, netmask);
 }
-#endif /* CONFIG_NET_ROUTE && CONFIG_NET_IPv4 */
+#endif /* HAVE_WRITABLE_IPv4ROUTE */
 
 /****************************************************************************
  * Name: ioctl_del_ipv6route
@@ -228,7 +269,7 @@ static int ioctl_del_ipv4route(FAR struct rtentry *rtentry)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ROUTE) && defined(CONFIG_NET_IPv6)
+#ifdef HAVE_WRITABLE_IPv6ROUTE
 static int ioctl_del_ipv6route(FAR struct rtentry *rtentry)
 {
   FAR struct sockaddr_in6 *target;
@@ -239,7 +280,7 @@ static int ioctl_del_ipv6route(FAR struct rtentry *rtentry)
 
   return net_delroute_ipv6(target->sin6_addr.s6_addr16, netmask->sin6_addr.s6_addr16);
 }
-#endif /* CONFIG_NET_ROUTE && CONFIG_NET_IPv6 */
+#endif /* HAVE_WRITABLE_IPv6ROUTE */
 
 /****************************************************************************
  * Name: ioctl_get_ipv4addr
@@ -261,6 +302,30 @@ static void ioctl_get_ipv4addr(FAR struct sockaddr *outaddr,
   dest->sin_family              = AF_INET;
   dest->sin_port                = 0;
   dest->sin_addr.s_addr         = inaddr;
+}
+#endif
+
+/****************************************************************************
+ * Name: ioctl_get_ipv4broadcast
+ *
+ * Description:
+ *   Return the sub-net broadcast address to user memory.
+ *
+ * Input Parameters:
+ *   outaddr - Pointer to the user-provided memory to receive the address.
+ *   inaddr  - The source IP address in the device structure.
+ *   netmask  - The netmask address mask in the device structure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_NET_IPv4
+static void inline ioctl_get_ipv4broadcast(FAR struct sockaddr *outaddr,
+                                           in_addr_t inaddr, in_addr_t netmask)
+{
+  FAR struct sockaddr_in *dest  = (FAR struct sockaddr_in *)outaddr;
+  dest->sin_family              = AF_INET;
+  dest->sin_port                = 0;
+  dest->sin_addr.s_addr         = net_ipv4addr_broadcast(inaddr, netmask);
 }
 #endif
 
@@ -317,7 +382,7 @@ static void ioctl_set_ipv4addr(FAR in_addr_t *outaddr,
  *
  * Input Parameters:
  *   outaddr - Pointer to the source IP address in the device structure.
- *   inaddr - Pointer to the user-provided memory to containing the new IP
+ *   inaddr  - Pointer to the user-provided memory to containing the new IP
  *     address.
  *
  ****************************************************************************/
@@ -332,25 +397,87 @@ static void ioctl_set_ipv6addr(FAR net_ipv6addr_t outaddr,
 #endif
 
 /****************************************************************************
- * Name: netdev_iee802154_ioctl
+ * Name: netdev_bluetooth_ioctl
  *
  * Description:
- *   Perform IEEE802.15.4 network device specific operations.
+ *   Perform Bluetooth network device specific operations.
  *
- * Parameters:
- *   psock    Socket structure
- *   dev      Ethernet driver device structure
- *   cmd      The ioctl command
- *   req      The argument of the ioctl cmd
+ * Input Parameters:
+ *   psock  - Socket structure
+ *   dev    - Ethernet driver device structure
+ *   cmd    - The ioctl command
+ *   req    - The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NETDEV_IOCTL) && defined(CONFIG_NET_6LOWPAN) && \
-    defined(CONFIG_WIRELESS_IEEE802154)
+#ifdef HAVE_BLUETOOTH_IOCTL
+static int netdev_bluetooth_ioctl(FAR struct socket *psock, int cmd,
+                                  unsigned long arg)
+{
+  FAR struct net_driver_s *dev;
+  FAR char *ifname;
+  int ret = -EINVAL;
+
+  if (arg != 0ul)
+    {
+      if (WL_IBLUETOOTHCMD(cmd))
+        {
+          /* Get the name of the Bluetooth device to receive the IOCTL
+           * command
+           */
+
+          FAR struct btreq_s *btreq =
+            (FAR struct btreq_s *)((uintptr_t)arg);
+
+          ifname = btreq->btr_name;
+        }
+      else
+        {
+          /* Not a Bluetooth IOCTL command */
+
+          return -ENOTTY;
+        }
+
+      /* Find the device with this name */
+
+      dev = netdev_findbyname(ifname);
+      ret = -ENODEV;
+
+      if (dev != NULL && dev->d_lltype == NET_LL_BLUETOOTH)
+        {
+          /* Perform the device IOCTL */
+
+          ret = dev->d_ioctl(dev, cmd, arg);
+        }
+    }
+
+  return ret;
+}
+#endif
+
+/****************************************************************************
+ * Name: netdev_iee802154_ioctl
+ *
+ * Description:
+ *   Perform IEEE802.15.4 network device specific operations.
+ *
+ * Input Parameters:
+ *   psock  - Socket structure
+ *   dev    - Ethernet driver device structure
+ *   cmd    - The ioctl command
+ *   req    - The argument of the ioctl cmd
+ *
+ * Returned Value:
+ *   >=0 on success (positive non-zero values are cmd-specific)
+ *   Negated errno returned on failure.
+ *
+ ****************************************************************************/
+
+#ifdef HAVE_IEEE802154_IOCTL
 static int netdev_iee802154_ioctl(FAR struct socket *psock, int cmd,
                                   unsigned long arg)
 {
@@ -391,7 +518,7 @@ static int netdev_iee802154_ioctl(FAR struct socket *psock, int cmd,
 
   return ret;
 }
-#endif
+#endif /* HAVE_IEEE802154_IOCTL */
 
 /****************************************************************************
  * Name: netdev_pktradio_ioctl
@@ -399,20 +526,19 @@ static int netdev_iee802154_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Perform non-IEEE802.15.4 packet radio network device specific operations.
  *
- * Parameters:
- *   psock    Socket structure
- *   dev      Ethernet driver device structure
- *   cmd      The ioctl command
- *   req      The argument of the ioctl cmd
+ * Input Parameters:
+ *   psock  - Socket structure
+ *   dev    - Ethernet driver device structure
+ *   cmd    - The ioctl command
+ *   req    - The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NETDEV_IOCTL) && defined(CONFIG_NET_6LOWPAN) && \
-    defined(CONFIG_WIRELESS_PKTRADIO)
+#ifdef HAVE_PKTRADIO_IOCTL
 static int netdev_pktradio_ioctl(FAR struct socket *psock, int cmd,
                                  unsigned long arg)
 {
@@ -454,7 +580,7 @@ static int netdev_pktradio_ioctl(FAR struct socket *psock, int cmd,
 
   return ret;
 }
-#endif
+#endif /* HAVE_PKTRADIO_IOCTL */
 
 /****************************************************************************
  * Name: netdev_wifr_ioctl
@@ -462,13 +588,13 @@ static int netdev_pktradio_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Perform wireless network device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure
  *   dev      Ethernet driver device structure
  *   cmd      The ioctl command
  *   req      The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
@@ -506,10 +632,10 @@ static int netdev_wifr_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Verify the struct ifreq and get the Ethernet device.
  *
- * Parameters:
+ * Input Parameters:
  *   req - The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *  A pointer to the driver structure on success; NULL on failure.
  *
  ****************************************************************************/
@@ -534,12 +660,12 @@ static FAR struct net_driver_s *netdev_ifr_dev(FAR struct ifreq *req)
  * Description:
  *   Perform network device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure
  *   cmd      The ioctl command
  *   req      The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
@@ -569,7 +695,6 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
         }
         break;
 #endif
-
 
 #ifdef CONFIG_NET_IPv4
       case SIOCSIFADDR:  /* Set IP address */
@@ -612,6 +737,19 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
 
 #ifdef CONFIG_NET_IPv4
       case SIOCGIFBRDADDR:  /* Get broadcast IP address */
+        {
+          dev = netdev_ifr_dev(req);
+          if (dev)
+            {
+              ioctl_get_ipv4broadcast(&req->ifr_broadaddr, dev->d_ipaddr,
+                                      dev->d_netmask);
+              ret = OK;
+            }
+        }
+        break;
+#endif
+
+#ifdef CONFIG_NET_IPv4
       case SIOCSIFBRDADDR:  /* Set broadcast IP address */
         {
           ret = -ENOSYS;
@@ -749,7 +887,7 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
           dev = netdev_ifr_dev(req);
           if (dev)
             {
-              req->ifr_mtu = NET_DEV_MTU(dev);
+              req->ifr_mtu = NETDEV_PKTSIZE(dev);
               ret = OK;
             }
         }
@@ -818,7 +956,8 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
           if (dev)
             {
 #ifdef CONFIG_NET_ETHERNET
-              if (dev->d_lltype == NET_LL_ETHERNET)
+              if (dev->d_lltype == NET_LL_ETHERNET ||
+                  dev->d_lltype == NET_LL_IEEE80211)
                 {
                   req->ifr_hwaddr.sa_family = AF_INETX;
                   memcpy(req->ifr_hwaddr.sa_data,
@@ -975,10 +1114,10 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Verify the struct ip_msfilter and get the Ethernet device.
  *
- * Parameters:
+ * Input Parameters:
  *   req - The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *  A pointer to the driver structure on success; NULL on failure.
  *
  ****************************************************************************/
@@ -986,16 +1125,16 @@ static int netdev_ifr_ioctl(FAR struct socket *psock, int cmd,
 #ifdef CONFIG_NET_IGMP
 static FAR struct net_driver_s *netdev_imsfdev(FAR struct ip_msfilter *imsf)
 {
-  if (!imsf)
+  if (imsf == NULL)
     {
       return NULL;
     }
 
-  /* Find the network device associated with the device name
-   * in the request data.
+  /* Find the network device associated with the address of the IP address
+   * of the local device.
    */
 
-  return netdev_findbyname(imsf->imsf_name);
+  return netdev_findby_lipv4addr(imsf->imsf_interface.s_addr);
 }
 #endif
 
@@ -1005,13 +1144,13 @@ static FAR struct net_driver_s *netdev_imsfdev(FAR struct ip_msfilter *imsf)
  * Description:
  *   Perform network device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure
  *   dev      Ethernet driver device structure
  *   cmd      The ioctl command
  *   imsf     The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
@@ -1064,13 +1203,13 @@ static int netdev_imsf_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Perform ARP table specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock  Socket structure
  *   dev    Ethernet driver device structure
  *   cmd    The ioctl command
  *   req    The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
@@ -1118,7 +1257,7 @@ static int netdev_arp_ioctl(FAR struct socket *psock, int cmd,
 
               /* Find the existing ARP table entry for this protocol address. */
 
-              FAR struct arp_entry *entry = arp_find(addr->sin_addr.s_addr);
+              FAR struct arp_entry_s *entry = arp_lookup(addr->sin_addr.s_addr);
               if (entry != NULL)
                 {
                   /* The ARP table is fixed size; an entry is deleted
@@ -1147,22 +1286,18 @@ static int netdev_arp_ioctl(FAR struct socket *psock, int cmd,
               FAR struct sockaddr_in *addr =
                 (FAR struct sockaddr_in *)&req->arp_pa;
 
-              /* Find the existing ARP table entry for this protocol address. */
+              /* Get the hardware address from an existing ARP table entry
+               * matching this protocol address.
+               */
 
-              FAR struct arp_entry *entry = arp_find(addr->sin_addr.s_addr);
-              if (entry != NULL)
+              ret = arp_find(addr->sin_addr.s_addr,
+                            (FAR struct ether_addr *)req->arp_ha.sa_data);
+              if (ret >= 0)
                 {
                   /* Return the mapped hardware address. */
 
                   req->arp_ha.sa_family = ARPHRD_ETHER;
-                  memcpy(req->arp_ha.sa_data,
-                         entry->at_ethaddr.ether_addr_octet,
-                         ETHER_ADDR_LEN);
                   ret = OK;
-                }
-              else
-                {
-                  ret = -ENOENT;
                 }
             }
           else
@@ -1187,13 +1322,13 @@ static int netdev_arp_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Perform routing table specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure
  *   dev      Ethernet driver device structure
  *   cmd      The ioctl command
  *   rtentry  The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   Negated errno returned on failure.
  *
@@ -1223,7 +1358,11 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
           if (rtentry->rt_target->ss_family == AF_INET)
 #endif
             {
+#ifdef HAVE_WRITABLE_IPv4ROUTE
               ret = ioctl_add_ipv4route(rtentry);
+#else
+              ret = -EACCES;
+#endif
             }
 #endif /* CONFIG_NET_IPv4 */
 
@@ -1232,7 +1371,11 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
           else
 #endif
             {
+#ifdef HAVE_WRITABLE_IPv6ROUTE
               ret = ioctl_add_ipv6route(rtentry);
+#else
+              ret = -EACCES;
+#endif
             }
 #endif /* CONFIG_NET_IPv6 */
         }
@@ -1252,7 +1395,11 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
           if (rtentry->rt_target->ss_family == AF_INET)
 #endif
             {
+#ifdef HAVE_WRITABLE_IPv4ROUTE
               ret = ioctl_del_ipv4route(rtentry);
+#else
+              ret = -EACCES;
+#endif
             }
 #endif /* CONFIG_NET_IPv4 */
 
@@ -1261,7 +1408,11 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
           else
 #endif
             {
+#ifdef HAVE_WRITABLE_IPv6ROUTE
               ret = ioctl_del_ipv6route(rtentry);
+#else
+              ret = -EACCES;
+#endif
             }
 #endif /* CONFIG_NET_IPv6 */
         }
@@ -1277,8 +1428,156 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
 #endif
 
 /****************************************************************************
+ * Name: netdev_usrsock_ioctl
+ *
+ * Description:
+ *   Perform user private ioctl operations.
+ *
+ * Parameters:
+ *   psock    Socket structure
+ *   cmd      The ioctl command
+ *   arg      The argument of the ioctl cmd
+ *
+ * Return:
+ *   >=0 on success (positive non-zero values are cmd-specific)
+ *   Negated errno returned on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_NET_USRSOCK
+static int netdev_usrsock_ioctl(FAR struct socket *psock, int cmd,
+                                unsigned long arg)
+{
+  if (psock->s_sockif && psock->s_sockif->si_ioctl)
+    {
+      ssize_t arglen;
+
+      arglen = net_ioctl_arglen(cmd);
+      if (arglen < 0)
+        {
+          return arglen;
+        }
+
+      return psock->s_sockif->si_ioctl(psock, cmd, (FAR void *)arg, arglen);
+    }
+  else
+    {
+      return -ENOTTY;
+    }
+}
+#endif
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: net_ioctl_arglen
+ *
+ * Description:
+ *   Calculate the ioctl argument buffer length.
+ *
+ * Input Parameters:
+ *
+ *   cmd      The ioctl command
+ *
+ * Returned Value:
+ *   The argument buffer length, or error code.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_NET_USRSOCK
+ssize_t net_ioctl_arglen(int cmd)
+{
+  switch (cmd)
+    {
+      case SIOCGIFADDR:
+      case SIOCSIFADDR:
+      case SIOCGIFDSTADDR:
+      case SIOCSIFDSTADDR:
+      case SIOCGIFBRDADDR:
+      case SIOCSIFBRDADDR:
+      case SIOCGIFNETMASK:
+      case SIOCSIFNETMASK:
+      case SIOCGIFMTU:
+      case SIOCGIFHWADDR:
+      case SIOCSIFHWADDR:
+      case SIOCDIFADDR:
+      case SIOCGIFCOUNT:
+      case SIOCSIFFLAGS:
+      case SIOCGIFFLAGS:
+        return sizeof(struct ifreq);
+
+      case SIOCGLIFADDR:
+      case SIOCSLIFADDR:
+      case SIOCGLIFDSTADDR:
+      case SIOCSLIFDSTADDR:
+      case SIOCGLIFBRDADDR:
+      case SIOCSLIFBRDADDR:
+      case SIOCGLIFNETMASK:
+      case SIOCSLIFNETMASK:
+      case SIOCGLIFMTU:
+      case SIOCIFAUTOCONF:
+        return sizeof(struct lifreq);
+
+      case SIOCGIFCONF:
+        return sizeof(struct ifconf);
+
+      case SIOCGLIFCONF:
+        return sizeof(struct lifconf);
+
+      case SIOCGIPMSFILTER:
+      case SIOCSIPMSFILTER:
+        return sizeof(struct ip_msfilter);
+
+      case SIOCSARP:
+      case SIOCDARP:
+      case SIOCGARP:
+        return sizeof(struct arpreq);
+
+      case SIOCADDRT:
+      case SIOCDELRT:
+        return sizeof(struct rtentry);
+
+      case SIOCMIINOTIFY:
+        return sizeof(struct mii_iotcl_notify_s);
+
+      case SIOCGMIIPHY:
+      case SIOCGMIIREG:
+      case SIOCSMIIREG:
+        return sizeof(struct mii_ioctl_data_s);
+
+      default:
+#ifdef CONFIG_NETDEV_IOCTL
+#  ifdef CONFIG_NETDEV_WIRELESS_IOCTL
+        if (_WLIOCVALID(cmd) && _IOC_NR(cmd) <= WL_NNETCMDS)
+          {
+            return sizeof(struct iwreq);
+          }
+#  endif
+#  ifdef CONFIG_WIRELESS_IEEE802154
+        if (_MAC802154IOCVALID(cmd))
+          {
+            return sizeof(struct ieee802154_netmac_s);
+          }
+#  endif
+#  ifdef CONFIG_WIRELESS_PKTRADIO
+        if (WL_ISPKTRADIOCMD(cmd))
+          {
+            return sizeof(struct pktradio_ifreq_s);
+          }
+#  endif
+#  ifdef CONFIG_WIRELESS_BLUETOOTH
+        if (WL_IBLUETOOTHCMD(cmd))
+          {
+            return sizeof(struct btreq_s);
+          }
+#  endif
+#endif
+        return -ENOTTY;
+    }
+}
+#endif
 
 /****************************************************************************
  * Name: psock_ioctl
@@ -1286,14 +1585,14 @@ static int netdev_rt_ioctl(FAR struct socket *psock, int cmd,
  * Description:
  *   Perform network device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   cmd      The ioctl command
  *   arg      The argument of the ioctl cmd
  *
- * Return:
- *   >=0 on success (positive non-zero values are cmd-specific)
- *   On a failure, -1 is returned with errno set appropriately
+ * Returned Value:
+ *   A non-negative value is returned on success; a negated errno value is
+ *   returned on any failure to indicate the nature of the failure:
  *
  *   EBADF
  *     'psock' is not a valid, connected socket structure.
@@ -1319,13 +1618,22 @@ int psock_ioctl(FAR struct socket *psock, int cmd, unsigned long arg)
 
   if (psock == NULL || psock->s_crefs <= 0)
     {
-      ret = -EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Execute the command.  First check for a standard network IOCTL command. */
 
-  ret = netdev_ifr_ioctl(psock, cmd, (FAR struct ifreq *)((uintptr_t)arg));
+#ifdef CONFIG_NET_USRSOCK
+  /* Check for a USRSOCK ioctl command */
+
+  ret = netdev_usrsock_ioctl(psock, cmd, arg);
+  if (ret == -ENOTTY)
+#endif
+    {
+      /* Check for a standard network IOCTL command. */
+
+      ret = netdev_ifr_ioctl(psock, cmd, (FAR struct ifreq *)((uintptr_t)arg));
+    }
 
 #if defined(CONFIG_NETDEV_IOCTL) && defined(CONFIG_NETDEV_WIRELESS_IOCTL)
   /* Check for a wireless network command */
@@ -1339,23 +1647,31 @@ int psock_ioctl(FAR struct socket *psock, int cmd, unsigned long arg)
     }
 #endif
 
-#if defined(CONFIG_NETDEV_IOCTL) && defined(CONFIG_NET_6LOWPAN)
-#ifdef CONFIG_WIRELESS_IEEE802154
-  /* Check for a IEEE802.15.4 network device command */
+#ifdef HAVE_IEEE802154_IOCTL
+  /* Check for a IEEE802.15.4 network device IOCTL command */
 
   if (ret == -ENOTTY)
     {
       ret = netdev_iee802154_ioctl(psock, cmd, arg);
     }
 #endif
-#ifdef CONFIG_WIRELESS_PKTRADIO
-  /* Check for a non-IEEE802.15.4 packet radio network device command */
+
+#ifdef HAVE_PKTRADIO_IOCTL
+  /* Check for a non-IEEE802.15.4 packet radio network device IOCTL command */
 
   if (ret == -ENOTTY)
     {
       ret = netdev_pktradio_ioctl(psock, cmd, arg);
     }
 #endif
+
+#ifdef HAVE_BLUETOOTH_IOCTL
+  /* Check for Bluetooth network device IOCTL command */
+
+  if (ret == -ENOTTY)
+    {
+      ret = netdev_bluetooth_ioctl(psock, cmd, arg);
+    }
 #endif
 
 #ifdef CONFIG_NET_IGMP
@@ -1388,18 +1704,7 @@ int psock_ioctl(FAR struct socket *psock, int cmd, unsigned long arg)
     }
 #endif
 
-  /* Check for success or failure */
-
-  if (ret >= 0)
-    {
-      return ret;
-    }
-
-/* On failure, set the errno and return -1 */
-
-errout:
-  set_errno(-ret);
-  return ERROR;
+  return ret;
 }
 
 /****************************************************************************
@@ -1408,14 +1713,14 @@ errout:
  * Description:
  *   Perform network device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   sockfd   Socket descriptor of device
  *   cmd      The ioctl command
  *   arg      The argument of the ioctl cmd
  *
- * Return:
- *   >=0 on success (positive non-zero values are cmd-specific)
- *   On a failure, -1 is returned with errno set appropriately
+ * Returned Value:
+ *   A non-negative value is returned on success; a negated errno value is
+ *   returned on any failure to indicate the nature of the failure:
  *
  *   EBADF
  *     'sockfd' is not a valid socket descriptor.
@@ -1493,6 +1798,15 @@ void netdev_ifdown(FAR struct net_driver_s *dev)
       /* Notify clients that the network has been taken down */
 
       (void)devif_dev_event(dev, NULL, NETDEV_DOWN);
+
+#ifdef CONFIG_NETDOWN_NOTIFIER
+      /* Provide signal notifications to threads that want to be
+       * notified of the network down state via signal.
+       */
+
+      netdown_notifier_signal(dev);
+#endif
+
     }
 }
 

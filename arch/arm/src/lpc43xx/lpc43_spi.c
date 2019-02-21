@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc43xx/lpc43_spi.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -176,25 +176,31 @@ static struct lpc43_spidev_s g_spidev =
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct lpc43_spidev_s *priv = (FAR struct lpc43_spidev_s *)dev;
+  int ret;
 
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+          ret = nxsem_wait(&priv->exclsem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
-  return OK;
+
+  return ret;
 }
 
 /****************************************************************************
@@ -499,7 +505,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  * Description:
  *   Initialize the SPI port
  *
- * Input Parameter:
+ * Input Parameters:
  *   port Port number (must be zero)
  *
  * Returned Value:
@@ -540,7 +546,7 @@ static FAR struct spi_dev_s *lpc43_spiport_initialize(int port)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   return &priv->spidev;
 }
 #endif /* CONFIG_LPC43_SPI */
@@ -558,7 +564,7 @@ static FAR struct spi_dev_s *lpc43_spiport_initialize(int port)
  *   1 - SSP0
  *   2 - SSP1
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has multiple SPI interfaces)
  *
  * Returned Value:

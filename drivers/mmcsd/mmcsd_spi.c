@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/mmcsd/mmcsd_spi.c
  *
- *   Copyright (C) 2008-2010, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2010, 2011-2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,9 +50,11 @@
 #include <time.h>
 #include <errno.h>
 #include <debug.h>
+#include <unistd.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mmcsd.h>
@@ -354,6 +356,8 @@ static const struct mmcsd_cmdinfo_s g_acmd41 = {ACMD41, MMCSD_CMDRESP_R1, 0xff};
 
 static void mmcsd_semtake(FAR struct mmcsd_slot_s *slot)
 {
+  int ret;
+
   /* Get exclusive access to the SPI bus (if necessary) */
 
   (void)SPI_LOCK(slot->spi, true);
@@ -371,14 +375,19 @@ static void mmcsd_semtake(FAR struct mmcsd_slot_s *slot)
    * SPI_LOCK is also implemented as a semaphore).
    */
 
-  while (sem_wait(&slot->sem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&slot->sem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -389,7 +398,7 @@ static void mmcsd_semgive(FAR struct mmcsd_slot_s *slot)
 {
   /* Relinquish the lock on the MMC/SD device */
 
-  sem_post(&slot->sem);
+  nxsem_post(&slot->sem);
 
   /* Relinquish the lock on the SPI bus */
 
@@ -419,8 +428,8 @@ static int mmcsd_waitready(FAR struct mmcsd_slot_s *slot)
 {
   FAR struct spi_dev_s *spi = slot->spi;
   uint8_t response;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
 
   /* Wait until the card is no longer busy (up to 500MS) */
 
@@ -434,6 +443,13 @@ static int mmcsd_waitready(FAR struct mmcsd_slot_s *slot)
         }
 
       elapsed = ELAPSED_TIME(start);
+
+      if (elapsed > MMCSD_DELAY_10MS)
+      {
+        /* Give other threads time to run */
+
+        nxsig_usleep(10000);
+      }
     }
   while (elapsed < MMCSD_DELAY_500MS);
 
@@ -524,8 +540,8 @@ static uint32_t mmcsd_sendcmd(FAR struct mmcsd_slot_s *slot,
     case MMCSD_CMDRESP_R1B:
       {
         uint32_t busy = 0;
-        systime_t start;
-        systime_t elapsed;
+        clock_t start;
+        clock_t elapsed;
 
         start = START_TIME;
         do
@@ -800,7 +816,7 @@ static void mmcsd_decodecsd(FAR struct mmcsd_slot_s *slot, uint8_t *csd)
 
   /* SDHC ver2.x cards have fixed block transfer size of 512 bytes.  SDC
    * ver1.x cards with capacity less than 1Gb, will have sector size
-   * 512 byes. SDC ver1.x cards with capacity of 2Gb will report readbllen
+   * 512 bytes. SDC ver1.x cards with capacity of 2Gb will report readbllen
    * of 1024 but should use 512 bytes for block transfers.  SDC ver1.x 4Gb
    * cards will report readbllen of 2048 bytes -- are they also 512 bytes?
    */
@@ -937,8 +953,8 @@ static int mmcsd_recvblock(FAR struct mmcsd_slot_s *slot, uint8_t *buffer,
                            int nbytes)
 {
   FAR struct spi_dev_s *spi = slot->spi;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   uint8_t token;
 
   /* Wait up to the maximum to receive a valid data token.  taccess is the
@@ -1553,8 +1569,8 @@ static int mmcsd_mediainitialize(FAR struct mmcsd_slot_s *slot)
   FAR struct spi_dev_s *spi = slot->spi;
   uint8_t csd[16];
   uint32_t result = MMCSD_SPIR1_IDLESTATE;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   int i;
   int j;
 
@@ -1790,7 +1806,7 @@ static int mmcsd_mediainitialize(FAR struct mmcsd_slot_s *slot)
 
   /* SDHC ver2.x cards have fixed block transfer size of 512 bytes.  SDC
    * ver1.x cards with capacity less than 1Gb, will have sector size
-   * 512 byes. SDC ver1.x cards with capacity of 2Gb will report readbllen
+   * 512 bytes. SDC ver1.x cards with capacity of 2Gb will report readbllen
    * of 1024 but should use 512 bytes for block transfers.  SDC ver1.x 4Gb
    * cards will report readbllen of 2048 bytes -- are they also 512 bytes?
    * I think that none of these high capacity cards support setting the
@@ -1933,7 +1949,7 @@ int mmcsd_spislotinitialize(int minor, int slotno, FAR struct spi_dev_s *spi)
 
   slot = &g_mmcsdslot[slotno];
   memset(slot, 0, sizeof(struct mmcsd_slot_s));
-  sem_init(&slot->sem, 0, 1);
+  nxsem_init(&slot->sem, 0, 1);
 
 #ifdef CONFIG_DEBUG_FEATURES
   if (slot->spi)

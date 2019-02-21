@@ -53,7 +53,9 @@ include analog$(DELIM)Make.defs
 include audio$(DELIM)Make.defs
 include bch$(DELIM)Make.defs
 include can$(DELIM)Make.defs
+include crypto$(DELIM)Make.defs
 include i2c$(DELIM)Make.defs
+include i2s$(DELIM)Make.defs
 include input$(DELIM)Make.defs
 include ioexpander$(DELIM)Make.defs
 include lcd$(DELIM)Make.defs
@@ -66,6 +68,7 @@ include eeprom$(DELIM)Make.defs
 include net$(DELIM)Make.defs
 include pipes$(DELIM)Make.defs
 include power$(DELIM)Make.defs
+include pwm$(DELIM)Make.defs
 include sensors$(DELIM)Make.defs
 include serial$(DELIM)Make.defs
 include spi$(DELIM)Make.defs
@@ -78,6 +81,7 @@ include usbmonitor$(DELIM)Make.defs
 include video$(DELIM)Make.defs
 include wireless$(DELIM)Make.defs
 include contactless$(DELIM)Make.defs
+include 1wire$(DELIM)Make.defs
 
 ifneq ($(CONFIG_NFILE_DESCRIPTORS),0)
   CSRCS += dev_null.c dev_zero.c
@@ -90,16 +94,6 @@ else
 ifeq ($(CONFIG_DRVR_READAHEAD),y)
   CSRCS += rwbuffer.c
 endif
-endif
-endif
-
-ifeq ($(CONFIG_PWM),y)
-  CSRCS += pwm.c
-endif
-
-ifeq ($(CONFIG_DEV_URANDOM),y)
-ifneq ($(CONFIG_DEV_URANDOM_ARCH),y)
-  CSRCS += dev_urandom.c
 endif
 endif
 endif # CONFIG_NFILE_DESCRIPTORS != 0

@@ -2,7 +2,7 @@
 ############################################################################
 # tools/link.sh
 #
-#   Copyright (C) 2008 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2008, 2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -94,3 +94,19 @@ fi
 
 ln -s "${src}" "${dest}" || \
 	{ echo "Failed to create link: $dest" ; exit 1 ; }
+
+# Verify that the link was created
+
+if [ ! -h ${dest} ]; then
+	# The MSYS 'ln' command actually does a directory copy
+
+	if [ -d ${dest} ]; then
+		# Create the .fakelnk for unlink.sh
+
+		touch ${dest}/.fakelnk
+	else
+		echo "Error:  link at ${dest} not created."
+		exit 1
+	fi
+fi
+

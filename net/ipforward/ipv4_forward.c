@@ -77,7 +77,7 @@
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DEBUG_NET_WARNx)
+#ifdef CONFIG_DEBUG_NET_WARN
 static int ipv4_hdrsize(FAR struct ipv4_hdr_s *ipv4)
 {
   /* Size is determined by the following protocol header, */
@@ -221,7 +221,7 @@ static int ipv4_dev_forward(FAR struct net_driver_s *dev,
    * We provide no support for fragmenting forwarded packets.
    */
 
-  if (NET_LL_HDRLEN(fwddev) + dev->d_len > NET_DEV_MTU(fwddev))
+  if (NET_LL_HDRLEN(fwddev) + dev->d_len > NETDEV_PKTSIZE(fwddev))
     {
       nwarn("WARNING: Packet > MTU... Dropping\n");
       ret = -EFBIG;
@@ -436,7 +436,7 @@ int ipv4_forward(FAR struct net_driver_s *dev, FAR struct ipv4_hdr_s *ipv4)
   destipaddr = net_ip4addr_conv32(ipv4->destipaddr);
   srcipaddr  = net_ip4addr_conv32(ipv4->srcipaddr);
 
-  fwddev     = netdev_findby_ipv4addr(srcipaddr, destipaddr);
+  fwddev     = netdev_findby_ripv4addr(srcipaddr, destipaddr);
   if (fwddev == NULL)
     {
       nwarn("WARNING: Not routable\n");

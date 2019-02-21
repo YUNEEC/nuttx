@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/inet/inet_sockif.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,6 +50,8 @@
 
 #include "tcp/tcp.h"
 #include "udp/udp.h"
+#include "icmp/icmp.h"
+#include "icmpv6/icmpv6.h"
 #include "sixlowpan/sixlowpan.h"
 #include "socket/socket.h"
 #include "inet/inet.h"
@@ -60,12 +62,16 @@
  * Private Function Prototypes
  ****************************************************************************/
 
+#if defined(NET_UDP_HAVE_STACK) || defined(NET_TCP_HAVE_STACK)
+
 static int        inet_setup(FAR struct socket *psock, int protocol);
 static sockcaps_t inet_sockcaps(FAR struct socket *psock);
 static void       inet_addref(FAR struct socket *psock);
 static int        inet_bind(FAR struct socket *psock,
                     FAR const struct sockaddr *addr, socklen_t addrlen);
 static int        inet_getsockname(FAR struct socket *psock,
+                    FAR struct sockaddr *addr, FAR socklen_t *addrlen);
+static int        inet_getpeername(FAR struct socket *psock,
                     FAR struct sockaddr *addr, FAR socklen_t *addrlen);
 static int        inet_listen(FAR struct socket *psock, int backlog);
 static int        inet_connect(FAR struct socket *psock,
@@ -88,16 +94,17 @@ static ssize_t    inet_sendfile(FAR struct socket *psock, FAR struct file *infil
 #endif
 
 /****************************************************************************
- * Public Data
+ * Private Data
  ****************************************************************************/
 
-const struct sock_intf_s g_inet_sockif =
+static const struct sock_intf_s g_inet_sockif =
 {
   inet_setup,       /* si_setup */
   inet_sockcaps,    /* si_sockcaps */
   inet_addref,      /* si_addref */
   inet_bind,        /* si_bind */
   inet_getsockname, /* si_getsockname */
+  inet_getpeername, /* si_getpeername */
   inet_listen,      /* si_listen */
   inet_connect,     /* si_connect */
   inet_accept,      /* si_accept */
@@ -200,12 +207,12 @@ static int inet_udp_alloc(FAR struct socket *psock)
  *   NOTE:  This is common logic for both the AF_INET and AF_INET6 address
  *   families.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a user allocated socket structure to be initialized.
  *   protocol (see sys/socket.h)
  *
  * Returned Value:
- *   Zero (OK) is returned on success.  Otherwise, a negater errno value is
+ *   Zero (OK) is returned on success.  Otherwise, a negated errno value is
  *   returned.
  *
  ****************************************************************************/
@@ -216,7 +223,7 @@ static int inet_setup(FAR struct socket *psock, int protocol)
    * the connection structure is is unallocated at this point.  It will
    * not actually be initialized until the socket is connected.
    *
-   * Only SOCK_STREAM and SOCK_DGRAM and possible SOCK_RAW are supported.
+   * REVISIT:  Only SOCK_STREAM and SOCK_DGRAM are supported.
    */
 
   switch (psock->s_type)
@@ -269,7 +276,7 @@ static int inet_setup(FAR struct socket *psock, int protocol)
  * Description:
  *   Return the bit encoded capabilities of this socket.
  *
- * Parameters:
+ * Input Parameters:
  *   psock - Socket structure of the socket whose capabilities are being
  *           queried.
  *
@@ -284,6 +291,10 @@ static sockcaps_t inet_sockcaps(FAR struct socket *psock)
     {
 #ifdef NET_TCP_HAVE_STACK
       case SOCK_STREAM:
+        /* REVISIT:  Non-blocking recv() depends on CONFIG_NET_TCP_READAHEAD,
+         * but non-blocking send() depends on CONFIG_NET_TCP_WRITE_BUFFERS.
+         */
+
 #ifdef CONFIG_NET_TCP_READAHEAD
         return SOCKCAP_NONBLOCKING;
 #else
@@ -293,6 +304,10 @@ static sockcaps_t inet_sockcaps(FAR struct socket *psock)
 
 #ifdef NET_UDP_HAVE_STACK
       case SOCK_DGRAM:
+        /* REVISIT:  Non-blocking recvfrom() depends on CONFIG_NET_UDP_READAHEAD,
+         * but non-blocking sendto() depends on CONFIG_NET_UDP_WRITE_BUFFERS.
+         */
+
 #ifdef CONFIG_NET_UDP_READAHEAD
         return SOCKCAP_NONBLOCKING;
 #else
@@ -311,7 +326,7 @@ static sockcaps_t inet_sockcaps(FAR struct socket *psock)
  * Description:
  *   Increment the reference count on the underlying connection structure.
  *
- * Parameters:
+ * Input Parameters:
  *   psock - Socket structure of the socket whose reference count will be
  *           incremented.
  *
@@ -356,7 +371,7 @@ static void inet_addref(FAR struct socket *psock)
  *   name to a socket."  When a socket is created with socket(), it exists
  *   in a name space (address family) but has no name assigned.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure of the socket to bind
  *   addr     Socket local address
  *   addrlen  Length of 'addr'
@@ -472,7 +487,7 @@ static int inet_bind(FAR struct socket *psock,
  *   If the socket has not been bound to a local name, the value stored in
  *   the object pointed to by address is unspecified.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure of the socket to be queried
  *   addr     sockaddr structure to receive data [out]
  *   addrlen  Length of sockaddr structure [in/out]
@@ -511,6 +526,59 @@ static int inet_getsockname(FAR struct socket *psock,
 }
 
 /****************************************************************************
+ * Name: inet_getpeername
+ *
+ * Description:
+ *   The inet_getpeername() function retrieves the remote-connected name of
+ *   the specified INET socket, stores this address in the sockaddr
+ *   structure pointed to by the 'addr' argument, and stores the length of
+ *   this address in the object pointed to by the 'addrlen' argument.
+ *
+ *   If the actual length of the address is greater than the length of the
+ *   supplied sockaddr structure, the stored address will be truncated.
+ *
+ *   If the socket has not been bound to a local name, the value stored in
+ *   the object pointed to by address is unspecified.
+ *
+ * Parameters:
+ *   psock    Socket structure of the socket to be queried
+ *   addr     sockaddr structure to receive data [out]
+ *   addrlen  Length of sockaddr structure [in/out]
+ *
+ * Returned Value:
+ *   On success, 0 is returned, the 'addr' argument points to the address
+ *   of the socket, and the 'addrlen' argument points to the length of the
+ *   address.  Otherwise, a negated errno value is returned.  See
+ *   getpeername() for the list of appropriate error numbers.
+ *
+ ****************************************************************************/
+
+static int inet_getpeername(FAR struct socket *psock,
+                            FAR struct sockaddr *addr,
+                            FAR socklen_t *addrlen)
+{
+  /* Handle by address domain */
+
+  switch (psock->s_domain)
+    {
+#ifdef CONFIG_NET_IPv4
+    case PF_INET:
+      return ipv4_getpeername(psock, addr, addrlen);
+      break;
+#endif
+
+#ifdef CONFIG_NET_IPv6
+    case PF_INET6:
+      return ipv6_getpeername(psock, addr, addrlen);
+      break;
+#endif
+
+    default:
+      return -EAFNOSUPPORT;
+    }
+}
+
+/****************************************************************************
  * Name: inet_listen
  *
  * Description:
@@ -522,7 +590,7 @@ static int inet_getsockname(FAR struct socket *psock,
  *   psock_listen() call applies only to sockets of type SOCK_STREAM or
  *   SOCK_SEQPACKET.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Reference to an internal, boound socket structure.
  *   backlog  The maximum length the queue of pending connections may grow.
  *            If a connection request arrives with the queue full, the client
@@ -614,7 +682,7 @@ int inet_listen(FAR struct socket *psock, int backlog)
  *   Connectionless sockets may dissolve the association by connecting to
  *   an address with the sa_family member of sockaddr set to AF_UNSPEC.
  *
- * Parameters:
+ * Input Parameters:
  *   psock   - Pointer to a socket structure initialized by psock_socket()
  *   addr    - Server address (form depends on type of socket).  The upper
  *             socket layer has verified that this address is non-NULL.
@@ -685,14 +753,36 @@ static int inet_connect(FAR struct socket *psock,
 #if defined(CONFIG_NET_UDP) && defined(NET_UDP_HAVE_STACK)
       case SOCK_DGRAM:
         {
-          int ret = udp_connect(psock->s_conn, addr);
-          if (ret < 0)
+          FAR struct udp_conn_s *conn;
+          int ret;
+
+          /* We will accept connecting to a addr == NULL for disconnection.
+           * However, the correct way is to disconnect is to provide an
+           * address with sa_family == AF_UNSPEC.
+           */
+
+          if (addr != NULL && addr->sa_family == AF_UNSPEC)
             {
+              addr = NULL;
+            }
+
+          /* Perform the connect/disconnect operation */
+
+          conn = (FAR struct udp_conn_s *)psock->s_conn;
+          ret  = udp_connect(conn, addr);
+          if (ret < 0 || addr == NULL)
+            {
+              /* Failed to connect or explicitly disconnected */
+
               psock->s_flags &= ~_SF_CONNECTED;
+              conn->flags    &= ~_UDP_FLAG_CONNECTMODE;
             }
           else
             {
+              /* Successfully connected */
+
               psock->s_flags |= _SF_CONNECTED;
+              conn->flags    |= _UDP_FLAG_CONNECTMODE;
             }
 
           return ret;
@@ -732,7 +822,7 @@ static int inet_connect(FAR struct socket *psock,
  *   pending connections are present on the queue, inet_accept returns
  *   EAGAIN.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Reference to the listening socket structure
  *   addr     Receives the address of the connecting client
  *   addrlen  Input: allocated size of 'addr', Return: returned size of 'addr'
@@ -987,7 +1077,7 @@ static int inet_poll(FAR struct socket *psock, FAR struct pollfd *fds,
  *   The inet_send() call may be used only when the socket is in a connected
  *   state  (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
@@ -1081,7 +1171,7 @@ static ssize_t inet_send(FAR struct socket *psock, FAR const void *buf,
  *   Implements the sendto() operation for the case of the AF_INET and
  *   AF_INET6 sockets.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Data to send
  *   len      Length of data to send
@@ -1144,7 +1234,7 @@ static ssize_t inet_sendto(FAR struct socket *psock, FAR const void *buf,
 #if defined(CONFIG_NET_6LOWPAN)
   /* Try 6LoWPAN UDP packet sendto() */
 
-  nsent = psock_6lowpan_udp_sendto(psock, buf, len, flags, to, tolen);
+  nsent = psock_6lowpan_udp_sendto(psock, buf, len, flags, to, minlen);
 
 #ifdef NET_UDP_HAVE_STACK
   if (nsent < 0)
@@ -1175,7 +1265,7 @@ static ssize_t inet_sendto(FAR struct socket *psock, FAR const void *buf,
  *   The inet_sendfile() call may be used only when the INET socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
@@ -1194,28 +1284,79 @@ static ssize_t inet_sendfile(FAR struct socket *psock,
                              size_t count)
 {
 #if defined(CONFIG_NET_TCP) && !defined(CONFIG_NET_TCP_NO_STACK)
-  return tcp_sendfile(psock, infile, offset, size_t count);
-#else
-  return -ENOSYS;
+  if (psock->s_type == SOCK_STREAM)
+    {
+      return tcp_sendfile(psock, infile, offset, count);
+    }
 #endif
+
+  return -ENOSYS;
 }
 #endif
+
+#endif /* NET_UDP_HAVE_STACK || NET_TCP_HAVE_STACK */
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name:
+ * Name: inet_sockif
  *
  * Description:
+ *   Return the socket interface associated with the inet address family.
  *
- * Parameters:
+ * Input Parameters:
+ *   family   - Socket address family
+ *   type     - Socket type
+ *   protocol - Socket protocol
  *
  * Returned Value:
- *
- * Assumptions:
+ *   On success, a non-NULL instance of struct sock_intf_s is returned.  NULL
+ *   is returned only if the address family is not supported.
  *
  ****************************************************************************/
+
+FAR const struct sock_intf_s *
+  inet_sockif(sa_family_t family, int type, int protocol)
+{
+  DEBUGASSERT(family == PF_INET || family == PF_INET6);
+
+#if defined(HAVE_PFINET_SOCKETS) && defined(CONFIG_NET_ICMP_SOCKET)
+  /* PF_INET, ICMP data gram sockets are a special case of raw sockets */
+
+  if (family == PF_INET && type == SOCK_DGRAM && protocol == IPPROTO_ICMP)
+    {
+      return &g_icmp_sockif;
+    }
+  else
+#endif
+#if defined(HAVE_PFINET6_SOCKETS) && defined(CONFIG_NET_ICMPv6_SOCKET)
+  /* PF_INET, ICMP data gram sockets are a special case of raw sockets */
+
+  if (family == PF_INET6 && type == SOCK_DGRAM && protocol == IPPROTO_ICMP6)
+    {
+      return &g_icmpv6_sockif;
+    }
+  else
+#endif
+#ifdef NET_UDP_HAVE_STACK
+  if (type == SOCK_DGRAM && (protocol == 0 || protocol == IPPROTO_UDP))
+    {
+      return &g_inet_sockif;
+    }
+  else
+#endif
+#ifdef NET_TCP_HAVE_STACK
+  if (type == SOCK_STREAM && (protocol == 0 || protocol == IPPROTO_TCP))
+    {
+      return &g_inet_sockif;
+    }
+  else
+#endif
+    {
+      return NULL;
+    }
+}
 
 #endif /* HAVE_INET_SOCKETS */

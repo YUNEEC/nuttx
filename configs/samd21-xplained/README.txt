@@ -356,12 +356,12 @@ SAMD21 Xplained Pro-specific Configuration Options
 
     CONFIG_ARCH_CHIP - Identifies the arch/*/chip subdirectory
 
-       CONFIG_ARCH_CHIP="samdl"
+       CONFIG_ARCH_CHIP="samd2l2"
 
     CONFIG_ARCH_CHIP_name - For use in C code to identify the exact
        chip:
 
-       CONFIG_ARCH_CHIP_SAMD
+       CONFIG_ARCH_CHIP_SAMD2X
        CONFIG_ARCH_CHIP_SAMD21
        CONFIG_ARCH_CHIP_ATSAMD21J18
 
@@ -400,49 +400,42 @@ SAMD21 Xplained Pro-specific Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
-    CONFIG_SAMDL_AC      - Analog Comparator
-    CONFIG_SAMDL_ADC     - Analog-to-Digital Converter
-    CONFIG_SAMDL_DAC     - Digital-to-Analog Converter
-    CONFIG_SAMDL_DMAC    - Analog Comparator
-    CONFIG_SAMDL_EVSYS   - Event System
-    CONFIG_SAMDL_NVMCTRL - Non-Volatile Memory Controller
-    CONFIG_SAMDL_PTC     - Peripheral Touch Controller
-    CONFIG_SAMDL_RTC     - Real Time Counter
-    CONFIG_SAMDL_SERCOM0 - Serial Communication Interface 0
-    CONFIG_SAMDL_SERCOM1 - Serial Communication Interface 1
-    CONFIG_SAMDL_SERCOM2 - Serial Communication Interface 2
-    CONFIG_SAMDL_SERCOM3 - Serial Communication Interface 3
-    CONFIG_SAMDL_SERCOM4 - Serial Communication Interface 4
-    CONFIG_SAMDL_SERCOM5 - Serial Communication Interface 5
-    CONFIG_SAMDL_TCC0    - Timer/Counter 0 for Control
-    CONFIG_SAMDL_TCC1    - Timer/Counter 1 for Control
-    CONFIG_SAMDL_TCC2    - Timer/Counter 2 for Control
-    CONFIG_SAMDL_TC3     - Timer/Counter 3
-    CONFIG_SAMDL_TC4     - Timer/Counter 4
-    CONFIG_SAMDL_TC5     - Timer/Counter 5
-    CONFIG_SAMDL_TC6     - Timer/Counter 6
-    CONFIG_SAMDL_TC7     - Timer/Counter 6
-    CONFIG_SAMDL_USB     - USB device or host
-    CONFIG_SAMDL_WDT     - Watchdog Timer
+    CONFIG_SAMD2L2_AC      - Analog Comparator
+    CONFIG_SAMD2L2_ADC     - Analog-to-Digital Converter
+    CONFIG_SAMD2L2_DAC     - Digital-to-Analog Converter
+    CONFIG_SAMD2L2_DMAC    - Analog Comparator
+    CONFIG_SAMD2L2_EVSYS   - Event System
+    CONFIG_SAMD2L2_NVMCTRL - Non-Volatile Memory Controller
+    CONFIG_SAMD2L2_PTC     - Peripheral Touch Controller
+    CONFIG_SAMD2L2_RTC     - Real Time Counter
+    CONFIG_SAMD2L2_SERCOM0 - Serial Communication Interface 0
+    CONFIG_SAMD2L2_SERCOM1 - Serial Communication Interface 1
+    CONFIG_SAMD2L2_SERCOM2 - Serial Communication Interface 2
+    CONFIG_SAMD2L2_SERCOM3 - Serial Communication Interface 3
+    CONFIG_SAMD2L2_SERCOM4 - Serial Communication Interface 4
+    CONFIG_SAMD2L2_SERCOM5 - Serial Communication Interface 5
+    CONFIG_SAMD2L2_TCC0    - Timer/Counter 0 for Control
+    CONFIG_SAMD2L2_TCC1    - Timer/Counter 1 for Control
+    CONFIG_SAMD2L2_TCC2    - Timer/Counter 2 for Control
+    CONFIG_SAMD2L2_TC3     - Timer/Counter 3
+    CONFIG_SAMD2L2_TC4     - Timer/Counter 4
+    CONFIG_SAMD2L2_TC5     - Timer/Counter 5
+    CONFIG_SAMD2L2_TC6     - Timer/Counter 6
+    CONFIG_SAMD2L2_TC7     - Timer/Counter 6
+    CONFIG_SAMD2L2_USB     - USB device or host
+    CONFIG_SAMD2L2_WDT     - Watchdog Timer
 
   Some subsystems can be configured to operate in different ways. The drivers
   need to know how to configure the subsystem.
 
-    CONFIG_SAMDL_SERCOM0_ISI2C, CONFIG_SAMDL_SERCOM0_ISSPI, or CONFIG_SAMDL_SERCOM0_ISUSART
-    CONFIG_SAMDL_SERCOM1_ISI2C, CONFIG_SAMDL_SERCOM1_ISSPI, or CONFIG_SAMDL_SERCOM1_ISUSART
-    CONFIG_SAMDL_SERCOM2_ISI2C, CONFIG_SAMDL_SERCOM2_ISSPI, or CONFIG_SAMDL_SERCOM2_ISUSART
-    CONFIG_SAMDL_SERCOM3_ISI2C, CONFIG_SAMDL_SERCOM3_ISSPI, or CONFIG_SAMDL_SERCOM3_ISUSART
-    CONFIG_SAMDL_SERCOM4_ISI2C, CONFIG_SAMDL_SERCOM4_ISSPI, or CONFIG_SAMDL_SERCOM4_ISUSART
-    CONFIG_SAMDL_SERCOM5_ISI2C, CONFIG_SAMDL_SERCOM5_ISSPI, or CONFIG_SAMDL_SERCOM5_ISUSART
+    CONFIG_SAMD2L2_SERCOM0_ISI2C, CONFIG_SAMD2L2_SERCOM0_ISSPI, or CONFIG_SAMD2L2_SERCOM0_ISUSART
+    CONFIG_SAMD2L2_SERCOM1_ISI2C, CONFIG_SAMD2L2_SERCOM1_ISSPI, or CONFIG_SAMD2L2_SERCOM1_ISUSART
+    CONFIG_SAMD2L2_SERCOM2_ISI2C, CONFIG_SAMD2L2_SERCOM2_ISSPI, or CONFIG_SAMD2L2_SERCOM2_ISUSART
+    CONFIG_SAMD2L2_SERCOM3_ISI2C, CONFIG_SAMD2L2_SERCOM3_ISSPI, or CONFIG_SAMD2L2_SERCOM3_ISUSART
+    CONFIG_SAMD2L2_SERCOM4_ISI2C, CONFIG_SAMD2L2_SERCOM4_ISSPI, or CONFIG_SAMD2L2_SERCOM4_ISUSART
+    CONFIG_SAMD2L2_SERCOM5_ISI2C, CONFIG_SAMD2L2_SERCOM5_ISSPI, or CONFIG_SAMD2L2_SERCOM5_ISUSART
 
   SAMD21 specific device driver settings
 
@@ -463,9 +456,7 @@ Configurations
   Each SAMD21 Xplained Pro configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh samd21-xplained/<subdir>
-    cd -
+    tools/configure.sh samd21-xplained/<subdir>
 
   Before building, make sure the PATH environment varaible include the
   correct path to the directory than holds your toolchain binaries.
@@ -505,8 +496,8 @@ Configurations
      SERCOM4:
 
        System Type -> SAMD/L Peripheral Support
-         CONFIG_SAMDL_SERCOM3=y           : Enable one or both
-         CONFIG_SAMDL_SERCOM4=n
+         CONFIG_SAMD2L2_SERCOM3=y  : Enable one or both
+         CONFIG_SAMD2L2_SERCOM4=n
 
        Device Drivers -> Serial Driver Support -> Serial Console
          CONFIG_USART4_SERIAL_CONSOLE=y  : Select only one for the console
@@ -549,7 +540,7 @@ Configurations
      Any re-configuration should be done before making NuttX or else the
      subsequent 'make' will fail.  If you have already attempted building
      NuttX then you will have to 1) 'make distclean' to remove the old
-     configuration, 2) 'cd tools; ./configure.sh sam3u-ek/ksnh' to start
+     configuration, 2) 'tools/configure.sh sam3u-ek/ksnh' to start
      with a fresh configuration, and 3) perform the configuration changes
      above.
 
@@ -620,8 +611,8 @@ Configuration sub-directories
          details.
 
        System Type -> Peripherals:
-         CONFIG_SAMDL_SERCOM0=y            : Use SERCOM0 if the I/O is in EXT1
-         CONFIG_SAMDL_SERCOM0_ISSPI=y      : Configure SERCOM0 as an SPI master
+         CONFIG_SAMD2L2_SERCOM0=y          : Use SERCOM0 if the I/O is in EXT1
+         CONFIG_SAMD2L2_SERCOM0_ISSPI=y    : Configure SERCOM0 as an SPI master
 
        Device Drivers
          CONFIG_SPI=y                      : Enable SPI support
@@ -631,7 +622,7 @@ Configuration sub-directories
          CONFIG_MMCSD_NSLOTS=1             : Only one MMC/SD card slot
          CONFIG_MMCSD_MULTIBLOCK_DISABLE=n : Should not need to disable multi-block transfers
          CONFIG_MMCSD_MMCSUPPORT=n         : May interfere with some SD cards
-         CONFIG_MMCSD_HAVECARDDETECT=y     : I/O1 module as a card detect GPIO
+         CONFIG_MMCSD_HAVE_CARDDETECT=y     : I/O1 module as a card detect GPIO
          CONFIG_MMCSD_SPI=y                : Use the SPI interface to the MMC/SD card
          CONFIG_MMCSD_SPICLOCK=20000000    : This is a guess for the optimal MMC/SD frequency
          CONFIG_MMCSD_SPIMODE=0            : Mode 0 is required
@@ -680,8 +671,8 @@ Configuration sub-directories
          EXT3: SPI is provided through SERCOM5
 
        System Type -> Peripherals:
-         CONFIG_SAMDL_SERCOM1=y             : Use SERCOM1 if the I/O is in EXT2
-         CONFIG_SAMDL_SERCOM1_ISSPI=y       : Configure SERCOM1 as an SPI master
+         CONFIG_SAMD2L2_SERCOM1=y           : Use SERCOM1 if the I/O is in EXT2
+         CONFIG_SAMD2L2_SERCOM1_ISSPI=y     : Configure SERCOM1 as an SPI master
 
        Device Drivers -> SPI
          CONFIG_SPI=y                       : Enable SPI support
@@ -713,6 +704,7 @@ Configuration sub-directories
          CONFIG_NX_DISABLE_24BPP=y
          CONFIG_NX_DISABLE_32BPP=y
          CONFIG_NX_PACKEDMSFIRST=y          : LSB packed first (shouldn't matter)
+         CONFIG_NXSTART_EXTERNINIT=y        : We have board_graphics_setup()
          CONFIG_NXTK_BORDERWIDTH=2          : Use a small border
          CONFIG_NXTK_DEFAULT_BORDERCOLORS=y : Default border colors
          CONFIG_NXFONTS_CHARBITS=7          : 7-bit fonts

@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/task/task_cancelpt.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -75,6 +75,7 @@
 
 #include "sched/sched.h"
 #include "semaphore/semaphore.h"
+#include "signal/signal.h"
 #include "mqueue/mqueue.h"
 #include "task/task.h"
 
@@ -102,7 +103,7 @@
  * Input Parameters:
  *   None
  *
- * Returned Value
+ * Returned Value:
  *   true is returned if a cancellation is pending but cannot be performed
  *   now due to the nesting level.
  *
@@ -193,7 +194,7 @@ bool enter_cancellation_point(void)
  * Input Parameters:
  *   None
  *
- * Returned Value
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -261,6 +262,59 @@ void leave_cancellation_point(void)
 }
 
 /****************************************************************************
+ * Name: check_cancellation_point
+ *
+ * Description:
+ *   Returns true if:
+ *
+ *   1. Deferred cancellation does applies to this thread,
+ *   2. We are within a cancellation point (i.e., the nesting level in the
+ *      TCB is greater than zero).
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   true is returned if a cancellation is pending but cannot be performed
+ *   now due to the nesting level.
+ *
+ ****************************************************************************/
+
+bool check_cancellation_point(void)
+{
+  FAR struct tcb_s *tcb = this_task();
+  bool ret = false;
+
+  /* Disabling pre-emption should provide sufficient protection.  We only
+   * need the TCB to be stationary (no interrupt level modification is
+   * anticipated).
+   *
+   * REVISIT: is locking the scheduler sufficent in SMP mode?
+   */
+
+  sched_lock();
+
+  /* If cancellation is disabled on this thread or if this thread is using
+   * asynchronous cancellation, then return false.
+   *
+   * If the cpcount count is greater than zero, then we within a
+   * cancellation and will true if there is a pending cancellation.
+   */
+
+  if (((tcb->flags & TCB_FLAG_NONCANCELABLE) == 0 &&
+       (tcb->flags & TCB_FLAG_CANCEL_DEFERRED) != 0) ||
+      tcb->cpcount > 0)
+    {
+      /* Check if there is a pending cancellation.  If so, return true. */
+
+      ret = ((tcb->flags & TCB_FLAG_CANCEL_PENDING) != 0);
+    }
+
+  sched_unlock();
+  return ret;
+}
+
+/****************************************************************************
  * Name: notify_cancellation
  *
  * Description:
@@ -302,18 +356,29 @@ void notify_cancellation(FAR struct tcb_s *tcb)
 
       if (tcb->task_state == TSTATE_WAIT_SEM)
         {
-          sem_waitirq(tcb, ECANCELED);
+          nxsem_wait_irq(tcb, ECANCELED);
         }
 
+#ifndef CONFIG_DISABLE_SIGNALS
+      /* If the thread is blocked waiting on a signal, then the
+       * thread must be unblocked to handle the cancellation.
+       */
+
+      else if (tcb->task_state == TSTATE_WAIT_SIG)
+        {
+          nxsig_wait_irq(tcb, ECANCELED);
+        }
+#endif
+
+#ifndef CONFIG_DISABLE_MQUEUE
       /* If the thread is blocked waiting on a message queue, then the
        * thread must be unblocked to handle the cancellation.
        */
 
-#ifndef CONFIG_DISABLE_MQUEUE
-      if (tcb->task_state == TSTATE_WAIT_MQNOTEMPTY ||
-          tcb->task_state == TSTATE_WAIT_MQNOTFULL)
+      else if (tcb->task_state == TSTATE_WAIT_MQNOTEMPTY ||
+               tcb->task_state == TSTATE_WAIT_MQNOTFULL)
         {
-          mq_waitirq(tcb, ECANCELED);
+          nxmq_wait_irq(tcb, ECANCELED);
         }
 #endif
     }

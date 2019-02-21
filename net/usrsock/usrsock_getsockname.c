@@ -42,7 +42,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
@@ -50,11 +49,10 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
-#include <nuttx/kmalloc.h>
 
-#include "socket/socket.h"
 #include "usrsock/usrsock.h"
 
 /****************************************************************************
@@ -83,7 +81,7 @@ static uint16_t getsockname_event(FAR struct net_driver_s *dev,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
   else if (flags & USRSOCK_EVENT_REQ_COMPLETE)
     {
@@ -109,7 +107,7 @@ static uint16_t getsockname_event(FAR struct net_driver_s *dev,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
 
   return flags;
@@ -143,27 +141,6 @@ static int do_getsockname_request(FAR struct usrsock_conn_s *conn,
 }
 
 /****************************************************************************
- * Name: setup_conn_getsockopt
- ****************************************************************************/
-
-static void setup_conn_getsockname(FAR struct usrsock_conn_s *conn,
-                                   FAR struct iovec *iov,
-                                   unsigned int iovcnt)
-{
-  unsigned int i;
-
-  conn->resp.datain.iov = iov;
-  conn->resp.datain.pos = 0;
-  conn->resp.datain.total = 0;
-  conn->resp.datain.iovcnt = iovcnt;
-
-  for (i = 0; i < iovcnt; i++)
-    {
-      conn->resp.datain.total += iov[i].iov_len;
-    }
-}
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -182,7 +159,7 @@ static void setup_conn_getsockname(FAR struct usrsock_conn_s *conn,
  *   If the socket has not been bound to a local name, the value stored in
  *   the object pointed to by address is unspecified.
  *
- * Parameters:
+ * Input Parameters:
  *   conn     usrsock socket connection structure
  *   addr     sockaddr structure to receive data [out]
  *   addrlen  Length of sockaddr structure [in/out]
@@ -226,7 +203,7 @@ int usrsock_getsockname(FAR struct socket *psock,
   inbufs[0].iov_base = (FAR void *)addr;
   inbufs[0].iov_len = *addrlen;
 
-  setup_conn_getsockname(conn, inbufs, ARRAY_SIZE(inbufs));
+  usrsock_setup_datain(conn, inbufs, ARRAY_SIZE(inbufs));
 
   /* Request user-space daemon to close socket. */
 
@@ -237,7 +214,7 @@ int usrsock_getsockname(FAR struct socket *psock,
 
       while ((ret = net_lockedwait(&state.reqstate.recvsem)) < 0)
         {
-          DEBUGASSERT(ret == -EINTR);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
         }
 
       ret = state.reqstate.result;
@@ -253,7 +230,7 @@ int usrsock_getsockname(FAR struct socket *psock,
         }
     }
 
-  setup_conn_getsockname(conn, NULL, 0);
+  usrsock_teardown_datain(conn);
   usrsock_teardown_data_request_callback(&state);
 
 errout_unlock:

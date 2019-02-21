@@ -56,13 +56,13 @@
  * Description:
  *   Return the inode of the block driver specified by 'pathname'
  *
- * Inputs:
+ * Input Parameters:
  *   pathname - the full path to the block driver to be opened
  *   mountflags - if MS_RDONLY is not set, then driver must support write
  *     operations (see include/sys/mount.h)
  *   ppinode - address of the location to return the inode reference
  *
- * Return:
+ * Returned Value:
  *   Returns zero on success or a negated errno on failure:
  *
  *   EINVAL  - pathname or pinode is NULL
@@ -84,8 +84,7 @@ int open_blockdriver(FAR const char *pathname, int mountflags,
 #ifdef CONFIG_DEBUG_FEATURES
   if (!ppinode)
     {
-      ret = -EINVAL;
-      goto errout;
+      return -EINVAL;
     }
 #endif
 
@@ -96,8 +95,14 @@ int open_blockdriver(FAR const char *pathname, int mountflags,
   ret = find_blockdriver(pathname, mountflags, &inode);
   if (ret < 0)
     {
+#ifdef CONFIG_MTD
+      /* Not block device, mtd device? let's try it. */
+
+      return mtd_proxy(pathname, mountflags, ppinode);
+#else
       ferr("ERROR: Failed to file %s block driver\n", pathname);
-      goto errout;
+      return ret;
+#endif
     }
 
   /* Open the block driver.  Note that no mutually exclusive access
@@ -111,15 +116,11 @@ int open_blockdriver(FAR const char *pathname, int mountflags,
       if (ret < 0)
         {
           ferr("ERROR: %s driver open failed\n", pathname);
-          goto errout_with_inode;
+          inode_release(inode);
+          return ret;
         }
     }
 
   *ppinode = inode;
   return OK;
-
-errout_with_inode:
-  inode_release(inode);
-errout:
-  return ret;
 }

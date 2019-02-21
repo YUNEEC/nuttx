@@ -1,7 +1,8 @@
 /****************************************************************************
  * sched/sched/sched_waitpid.c
  *
- *   Copyright (C) 2011-2013, 2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,7 +46,9 @@
 #include <errno.h>
 
 #include <nuttx/sched.h>
+#include <nuttx/signal.h>
 #include <nuttx/cancelpt.h>
+#include <nuttx/semaphore.h>
 
 #include "sched/sched.h"
 #include "group/group.h"
@@ -140,12 +143,12 @@
  *   WIFCONTINUED(stat_val) - Evaluates to a non-zero value if status was
  *    returned for a child process that has continued from a job control stop.
  *
- * Parameters:
+ * Input Parameters:
  *   pid - The task ID of the thread to waid for
  *   stat_loc - The location to return the exit status
  *   options - ignored
  *
- * Return Value:
+ * Returned Value:
  *   If waitpid() returns because the status of a child process is available,
  *   it will return a value equal to the process ID of the child process for
  *   which status is reported.
@@ -190,17 +193,6 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
 
   (void)enter_cancellation_point();
 
-  /* None of the options are supported */
-
-#ifdef CONFIG_DEBUG_FEATURES
-  if (options != 0)
-    {
-      set_errno(ENOSYS);
-      leave_cancellation_point();
-      return ERROR;
-    }
-#endif
-
   /* Disable pre-emption so that nothing changes in the following tests */
 
   sched_lock();
@@ -229,19 +221,30 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
    * others?
    */
 
-  if (stat_loc != NULL && group->tg_statloc == NULL)
+  if (group->tg_waitflags == 0)
     {
+      /* Save the waitpid() options, setting the non-standard WCLAIMED bit to
+       * assure that tg_waitflags is non-zero.
+       */
+
+      group->tg_waitflags = (uint8_t)options | WCLAIMED;
+
+      /* Save the return status location (which may be NULL) */
+
       group->tg_statloc = stat_loc;
+
+      /* We are the waipid() instance that gets the return status */
+
       mystat = true;
     }
 
   /* Then wait for the task to exit */
 
-  if (options & WNOHANG)
+  if ((options & WNOHANG) != 0)
     {
       /* Don't wait if status is not available */
 
-      ret = sem_trywait(&group->tg_exitsem);
+      ret = nxsem_trywait(&group->tg_exitsem);
       group_delwaiter(group);
 
       if (ret < 0)
@@ -253,22 +256,24 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
     {
       /* Wait if necessary for status to become available */
 
-      ret = sem_wait(&group->tg_exitsem);
+      ret = nxsem_wait(&group->tg_exitsem);
       group_delwaiter(group);
 
       if (ret < 0)
         {
-          /* Unlock pre-emption and return the ERROR (sem_wait has already set
+          /* Unlock pre-emption and return the ERROR (nxsem_wait has already set
            * the errno).  Handle the awkward case of whether or not we need to
            * nullify the stat_loc value.
            */
 
           if (mystat)
             {
-              group->tg_statloc = NULL;
+              group->tg_statloc   = NULL;
+              group->tg_waitflags = 0;
             }
 
-          goto errout;
+          errcode = -ret;
+          goto errout_with_errno;
         }
     }
 
@@ -280,7 +285,7 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
 
 errout_with_errno:
   set_errno(errcode);
-errout:
+
   leave_cancellation_point();
   sched_unlock();
   return ERROR;
@@ -318,17 +323,6 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
   /* waitpid() is a cancellation point */
 
   (void)enter_cancellation_point();
-
-  /* None of the options are supported */
-
-#ifdef CONFIG_DEBUG_FEATURES
-  if (options != 0)
-    {
-      set_errno(ENOSYS);
-      leave_cancellation_point();
-      return ERROR;
-    }
-#endif
 
   /* Create a signal set that contains only SIGCHLD */
 
@@ -483,11 +477,11 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
         }
       else
         {
-          /* We can use kill() with signal number 0 to determine if that
-           * task is still alive.
+          /* We can use nxsig_kill() with signal number 0 to determine if
+           * that task is still alive.
            */
 
-          ret = kill(pid, 0);
+          ret = nxsig_kill(pid, 0);
           if (ret < 0)
             {
               /* It is no longer running.  We know that the child task
@@ -511,9 +505,9 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
        */
 
       if (rtcb->group->tg_nchildren == 0 ||
-          (pid != (pid_t)-1 && (ret = kill(pid, 0)) < 0))
+          (pid != (pid_t)-1 && (ret = nxsig_kill(pid, 0)) < 0))
         {
-          /* We know that the child task was running okay we stared,
+          /* We know that the child task was running okay we started,
            * so we must have lost the signal.  What can we do?
            * Let's return ECHILD.. that is at least informative.
            */
@@ -526,10 +520,11 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
 
       /* Wait for any death-of-child signal */
 
-      ret = sigwaitinfo(&set, &info);
+      ret = nxsig_waitinfo(&set, &info);
       if (ret < 0)
         {
-          goto errout_with_lock;
+          errcode = -ret;
+          goto errout_with_errno;
         }
 
       /* Was this the death of the thread we were waiting for? In the of
@@ -567,7 +562,6 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options)
 errout_with_errno:
   set_errno(errcode);
 
-errout_with_lock:
   leave_cancellation_point();
   sched_unlock();
   return ERROR;

@@ -128,16 +128,21 @@ int smartfs_readchain(struct smartfs_mountpt_s *fs, uint16_t sector)
 
 void smartfs_semtake(struct smartfs_mountpt_s *fs)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(fs->fs_sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(fs->fs_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(*get_errno_ptr() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -146,7 +151,7 @@ void smartfs_semtake(struct smartfs_mountpt_s *fs)
 
 void smartfs_semgive(struct smartfs_mountpt_s *fs)
 {
-   sem_post(fs->fs_sem);
+   nxsem_post(fs->fs_sem);
 }
 
 /****************************************************************************
@@ -238,7 +243,7 @@ void smartfs_wrle32(uint8_t *dest, uint32_t val)
 /****************************************************************************
  * Name: smartfs_mount
  *
- * Desciption: This function is called only when the mountpoint is first
+ * Description: This function is called only when the mountpoint is first
  *   established.  It initializes the mountpoint structure and verifies
  *   that a valid SMART filesystem is provided by the block driver.
  *
@@ -386,7 +391,7 @@ errout:
 /****************************************************************************
  * Name: smartfs_unmount
  *
- * Desciption: This function is called only when the mountpoint is being
+ * Description: This function is called only when the mountpoint is being
  *   unbound.  If we are serving multiple directories, then we have to
  *   remove ourselves from the mount linked list, and potentially free
  *   the shared buffers.
@@ -1299,7 +1304,7 @@ errout:
  ****************************************************************************/
 
 int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
-        struct smartfs_entry_s *entry, FAR struct smartfs_ofile_s *sf)
+        FAR struct smartfs_entry_s *entry, FAR struct smartfs_ofile_s *sf)
 {
   int                             ret;
   uint16_t                        nextsector;

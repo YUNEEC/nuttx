@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_gpio.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2016,2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
@@ -239,12 +239,12 @@ int lc823450_gpio_mux(uint16_t gpiocfg)
 
   if (port <= (GPIO_PORT5 >> GPIO_PORT_SHIFT))
     {
-      irqstate_t flags = enter_critical_section();
+      irqstate_t flags = spin_lock_irqsave();
       val = getreg32(PMDCNT0 + (port * 4));
       val &= ~(3 << (2 * pin));
       val |= (mux << (2 *pin));
       putreg32(val, PMDCNT0 + (port * 4));
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(flags);
     }
   else
     {
@@ -287,7 +287,7 @@ int lc823450_gpio_config(uint16_t gpiocfg)
 
       /* Handle the GPIO configuration by the basic mode of the pin */
 
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave();
 
       /* pull up/down specified */
 
@@ -312,7 +312,7 @@ int lc823450_gpio_config(uint16_t gpiocfg)
             break;
         }
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(flags);
     }
 #ifdef CONFIG_IOEX
   else if (port <= (GPIO_PORTEX >> GPIO_PORT_SHIFT))
@@ -400,24 +400,24 @@ void lc823450_gpio_write(uint16_t gpiocfg, bool value)
 
       regaddr = lc823450_get_gpio_data(port);
 
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave();
 
       /* Write the value (0 or 1).  To the data register */
 
       regval  = getreg32(regaddr);
 
-    if (value)
-      {
-        regval |= (1 << pin);
-      }
-    else
-      {
-        regval &= ~(1 << pin);
-      }
+      if (value)
+        {
+          regval |= (1 << pin);
+        }
+      else
+        {
+          regval &= ~(1 << pin);
+        }
 
-    putreg32(regval, regaddr);
+      putreg32(regval, regaddr);
 
-    leave_critical_section(flags);
+      spin_unlock_irqrestore(flags);
   }
 #ifdef CONFIG_IOEX
   else if (port <= (GPIO_PORTEX >> GPIO_PORT_SHIFT))

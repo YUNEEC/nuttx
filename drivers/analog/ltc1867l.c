@@ -237,9 +237,9 @@ static int adc_ioctl(FAR struct adc_dev_s *dev, int cmd, unsigned long arg)
   int32_t dataToPost;
   int ret = OK;
 
-  if(cmd == ANIOC_TRIGGER)
+  if (cmd == ANIOC_TRIGGER)
     {
-      while (sem_wait(&priv->sem) != OK);
+      while (nxsem_wait(&priv->sem) < 0);
 
       adc_lock(spi);
 
@@ -281,7 +281,7 @@ static int adc_ioctl(FAR struct adc_dev_s *dev, int cmd, unsigned long arg)
         }
 
       adc_unlock(spi);
-      sem_post(&priv->sem);
+      nxsem_post(&priv->sem);
     }
   else
     {
@@ -344,18 +344,18 @@ int ltc1867l_register(FAR const char *devpath, FAR struct spi_dev_s *spi,
   adcpriv->channel_config = channel_config;
   adcpriv->channel_config_count = channel_config_count;
 
-  ret = sem_init(&adcpriv->sem, 1, 1);
-  if(ret == -1)
+  ret = nxsem_init(&adcpriv->sem, 1, 1);
+  if (ret < 0)
     {
       kmm_free(adcpriv);
-      return -errno;
+      return ret;
     }
 
   adcdev = (FAR struct adc_dev_s *)kmm_malloc(sizeof(struct adc_dev_s));
   if (adcdev == NULL)
     {
       aerr("ERROR: Failed to allocate adc_dev_s instance\n");
-      sem_destroy(&adcpriv->sem);
+      nxsem_destroy(&adcpriv->sem);
       kmm_free(adcpriv);
       return -ENOMEM;
     }
@@ -371,7 +371,7 @@ int ltc1867l_register(FAR const char *devpath, FAR struct spi_dev_s *spi,
     {
       aerr("ERROR: Failed to register adc driver: %d\n", ret);
       kmm_free(adcdev);
-      sem_destroy(&adcpriv->sem);
+      nxsem_destroy(&adcpriv->sem);
       kmm_free(adcpriv);
     }
 

@@ -1,8 +1,7 @@
 /****************************************************************************
  * net/pkt/pkt_send.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,7 +67,7 @@
  ****************************************************************************/
 
 /* This structure holds the state of the send operation until it can be
- * operated upon from the interrupt level.
+ * operated upon by the event handler.
  */
 
 struct send_s
@@ -100,9 +99,9 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
   if (pstate)
     {
       /* Check if the outgoing packet is available. It may have been claimed
-       * by a send interrupt serving a different thread -OR- if the output
-       * buffer currently contains unprocessed incoming data. In these cases
-       * we will just have to wait for the next polling cycle.
+       * by a send event handler serving a different thread -OR- if the
+       * output buffer currently contains unprocessed incoming data. In
+       * these cases we will just have to wait for the next polling cycle.
        */
 
       if (dev->d_sndlen > 0 || (flags & PKT_NEWDATA) != 0)
@@ -141,7 +140,7 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->snd_sem);
+      nxsem_post(&pstate->snd_sem);
     }
 
   return flags;
@@ -158,53 +157,15 @@ static uint16_t psock_send_eventhandler(FAR struct net_driver_s *dev,
  *   The psock_pkt_send() call may be used only when the packet socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
  *
  * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
- *   -1 is returned, and errno is set appropriately:
- *
- *   EAGAIN or EWOULDBLOCK
- *     The socket is marked non-blocking and the requested operation
- *     would block.
- *   EBADF
- *     An invalid descriptor was specified.
- *   ECONNRESET
- *     Connection reset by peer.
- *   EDESTADDRREQ
- *     The socket is not connection-mode, and no peer address is set.
- *   EFAULT
- *      An invalid user space address was specified for a parameter.
- *   EINTR
- *      A signal occurred before any data was transmitted.
- *   EINVAL
- *      Invalid argument passed.
- *   EISCONN
- *     The connection-mode socket was connected already but a recipient
- *     was specified. (Now either this error is returned, or the recipient
- *     specification is ignored.)
- *   EMSGSIZE
- *     The socket type requires that message be sent atomically, and the
- *     size of the message to be sent made this impossible.
- *   ENOBUFS
- *     The output queue for a network interface was full. This generally
- *     indicates that the interface has stopped sending, but may be
- *     caused by transient congestion.
- *   ENOMEM
- *     No memory available.
- *   ENOTCONN
- *     The socket is not connected, and no target has been given.
- *   ENOTSOCK
- *     The argument s is not a socket.
- *   EPIPE
- *     The local end has been shut down on a connection oriented socket.
- *     In this case the process will also receive a SIGPIPE unless
- *     MSG_NOSIGNAL is set.
- *
- * Assumptions:
+ *   a negated errno value is retruend.  See send() for the complete list
+ *   of return values.
  *
  ****************************************************************************/
 
@@ -213,15 +174,13 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
 {
   FAR struct net_driver_s *dev;
   struct send_s state;
-  int errcode;
   int ret = OK;
 
   /* Verify that the sockfd corresponds to valid, allocated socket */
 
   if (!psock || psock->s_crefs <= 0)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Get the device driver that will service this transfer */
@@ -229,8 +188,7 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
   dev = pkt_find_device((FAR struct pkt_conn_s *)psock->s_conn);
   if (dev == NULL)
     {
-      errcode = ENODEV;
-      goto errout;
+      return -ENODEV;
     }
 
   /* Set the socket state to sending */
@@ -239,9 +197,8 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
 
   /* Perform the send operation */
 
-  /* Initialize the state structure. This is done with interrupts
-   * disabled because we don't want anything to happen until we
-   * are ready.
+  /* Initialize the state structure. This is done with the network locked
+   * because we don't want anything to happen until we are ready.
    */
 
   net_lock();
@@ -251,8 +208,8 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&state.snd_sem, 0, 0); /* Doesn't really fail */
-  (void)sem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&state.snd_sem, 0, 0); /* Doesn't really fail */
+  (void)nxsem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
 
   state.snd_sock      = psock;          /* Socket descriptor to use */
   state.snd_buflen    = len;            /* Number of bytes to send */
@@ -277,21 +234,19 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
 
           netdev_txnotify_dev(dev);
 
-          /* Wait for the send to complete or an error to occur: NOTES: (1)
-           * net_lockedwait will also terminate if a signal is received, (2)
-           * interrupts may be disabled! They will be re-enabled while the
-           * task sleeps and automatically re-enabled when the task restarts.
+          /* Wait for the send to complete or an error to occur.
+           * net_lockedwait will also terminate if a signal is received.
            */
 
           ret = net_lockedwait(&state.snd_sem);
 
-          /* Make sure that no further interrupts are processed */
+          /* Make sure that no further events are processed */
 
           pkt_callback_free(dev, conn, state.snd_cb);
         }
     }
 
-  sem_destroy(&state.snd_sem);
+  nxsem_destroy(&state.snd_sem);
   net_unlock();
 
   /* Set the socket state to idle */
@@ -304,8 +259,7 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
 
   if (state.snd_sent < 0)
     {
-      errcode = state.snd_sent;
-      goto errout;
+      return state.snd_sent;
     }
 
   /* If net_lockedwait failed, then we were probably reawakened by a signal. In
@@ -314,17 +268,12 @@ ssize_t psock_pkt_send(FAR struct socket *psock, FAR const void *buf,
 
   if (ret < 0)
     {
-      errcode = -ret;
-      goto errout;
+      return ret;
     }
 
   /* Return the number of bytes actually sent */
 
   return state.snd_sent;
-
-errout:
-  set_errno(errcode);
-  return ERROR;
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_PKT */

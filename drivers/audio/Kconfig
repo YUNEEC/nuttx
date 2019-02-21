@@ -3,38 +3,6 @@
 # see the file kconfig-language.txt in the NuttX tools repository.
 #
 
-config AUDIO_I2SCHAR
-	bool "I2S character driver (for testing only)"
-	default n
-	depends on I2S && AUDIO
-	---help---
-		This selection enables a simple character driver that supports I2S
-		transfers via a read() and write().  The intent of this driver is to
-		support I2S testing.  It is not an audio driver but does conform to
-		some of the buffer management heuristics of an audio driver.  It is
-		not suitable for use in any real driver application in its current
-		form.
-
-if AUDIO_I2SCHAR
-
-config AUDIO_I2SCHAR_RXTIMEOUT
-	int "RX timeout"
-	default 0
-	---help---
-		This is a fixed timeout value that will be used for all receiver
-		transfers.  This is in units of system clock ticks (configurable).
-		The special value of zero disables RX timeouts.  Default: 0
-
-config AUDIO_I2SCHAR_TXTIMEOUT
-	int "TX timeout"
-	default 0
-	---help---
-		This is a fixed timeout value that will be used for all transmitter
-		transfers.  This is in units of system clock ticks (configurable).
-		The special value of zero disables RX timeouts.  Default: 0
-
-endif # AUDIO_I2SCHAR
-
 config AUDIO_TONE
 	bool "Audio Tone Generator using PWM"
 	default n
@@ -62,7 +30,7 @@ config VS1053_DEVICE_COUNT
 	int "Number of VS1053 devices attached"
 	default 1
 	---help---
-		Sets the number of VS1053 type devices availalbe to the system.
+		Sets the number of VS1053 type devices available to the system.
 		This is required to reserve global, static lower-half driver
 		context pointers for the DREQ ISR to use for lookup when it needs
 		to signal that additional data is being requested.
@@ -155,6 +123,34 @@ config CS43L22_CLKDEBUG
 
 endif # AUDIO_CS43L22
 
+config AUDIO_WM8776
+	bool "WM8776 audio chip"
+	default n
+	depends on AUDIO
+	---help---
+		Select to enable support for the WM8776 Audio codec by Wolfson
+		Microelectonics.
+
+if AUDIO_WM8776
+
+config WM8776_INFLIGHT
+	int "WM8776 maximum in-flight audio buffers"
+	default 2
+
+config WM8776_MSG_PRIO
+	int "WM8776 message priority"
+	default 1
+
+config WM8776_WORKER_STACKSIZE
+	int "WM8776 worker thread stack size"
+	default 768
+
+config WM8776_SWAP_HPOUT
+	bool "Swap WM8776 HP out signals"
+	default n
+
+endif # AUDIO_WM8776
+
 config AUDIO_WM8904
 	bool "WM8904 audio chip"
 	default n
@@ -221,7 +217,7 @@ config AUDIO_NULL
 	default n
 	depends on AUDIO
 	---help---
-		A do-nothinig audio device driver to simplify testing of audio
+		A do-nothing audio device driver to simplify testing of audio
 		decoders.
 
 if AUDIO_NULL
@@ -243,3 +239,9 @@ config AUDIO_NULL_WORKER_STACKSIZE
 	default 768
 
 endif # AUDIO_NULL
+
+config AUDIO_I2S
+        bool "Audio I2S"
+        depends on AUDIO
+        depends on I2S
+

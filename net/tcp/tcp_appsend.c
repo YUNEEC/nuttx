@@ -67,12 +67,12 @@
  *   with dev->d_sndlen > 0, then this is an application attempting to send
  *   packet.
  *
- * Parameters:
+ * Input Parameters:
  *   dev    - The device driver structure to use in the send operation
  *   conn   - The TCP connection structure holding connection information
  *   result - App result event sent
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -192,12 +192,12 @@ void tcp_appsend(FAR struct net_driver_s *dev, FAR struct tcp_conn_s *conn,
  * Description:
  *   Handle application retransmission
  *
- * Parameters:
+ * Input Parameters:
  *   dev    - The device driver structure to use in the send operation
  *   conn   - The TCP connection structure holding connection information
  *   result - App result event sent
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:

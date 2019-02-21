@@ -88,7 +88,7 @@ struct pkt_recvfrom_s
  *   of data in buffer,  This logic accounts for the case where
  *   recvfrom_udpreadahead() sets state.pr_recvlen == -1 .
  *
- * Parameters:
+ * Input Parameters:
  *   pstate   recvfrom state structure
  *   recvlen  size of new data appended to buffer
  *
@@ -116,7 +116,7 @@ static inline void pkt_add_recvlen(FAR struct pkt_recvfrom_s *pstate,
  * Description:
  *   Copy the read data from the packet
  *
- * Parameters:
+ * Input Parameters:
  *   dev      The structure of the network driver that caused the event.
  *   pstate   recvfrom state structure
  *
@@ -157,9 +157,9 @@ static void pkt_recvfrom_newdata(FAR struct net_driver_s *dev,
  *
  * Description:
  *
- * Parameters:
+ * Input Parameters:
  *
- * Returned Values:
+ * Returned Value:
  *
  * Assumptions:
  *
@@ -175,9 +175,9 @@ static inline void pkt_recvfrom_sender(FAR struct net_driver_s *dev,
  *
  * Description:
  *
- * Parameters:
+ * Input Parameters:
  *
- * Returned Values:
+ * Returned Value:
  *
  * Assumptions:
  *
@@ -225,7 +225,7 @@ static uint16_t pkt_recvfrom_eventhandler(FAR struct net_driver_s *dev,
            * actually read.
            */
 
-          sem_post(&pstate->pr_sem);
+          nxsem_post(&pstate->pr_sem);
         }
     }
 
@@ -238,7 +238,7 @@ static uint16_t pkt_recvfrom_eventhandler(FAR struct net_driver_s *dev,
  * Description:
  *   Initialize the state structure
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Pointer to the socket structure for the socket
  *   buf      Buffer to receive data
  *   len      Length of buffer
@@ -264,8 +264,8 @@ static void pkt_recvfrom_initialize(FAR struct socket *psock, FAR void *buf,
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&pstate->pr_sem, 0, 0); /* Doesn't really fail */
-  (void)sem_setprotocol(&pstate->pr_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&pstate->pr_sem, 0, 0); /* Doesn't really fail */
+  (void)nxsem_setprotocol(&pstate->pr_sem, SEM_PRIO_NONE);
 
   pstate->pr_buflen = len;
   pstate->pr_buffer = buf;
@@ -275,7 +275,7 @@ static void pkt_recvfrom_initialize(FAR struct socket *psock, FAR void *buf,
  * semaphore.
  */
 
-#define pkt_recvfrom_uninitialize(s) sem_destroy(&(s)->pr_sem)
+#define pkt_recvfrom_uninitialize(s) nxsem_destroy(&(s)->pr_sem)
 
 /****************************************************************************
  * Name: pkt_recvfrom_result
@@ -283,7 +283,7 @@ static void pkt_recvfrom_initialize(FAR struct socket *psock, FAR void *buf,
  * Description:
  *   Evaluate the result of the recv operations
  *
- * Parameters:
+ * Input Parameters:
  *   result   The result of the net_lockedwait operation (may indicate EINTR)
  *   pstate   A pointer to the state structure to be initialized
  *
@@ -296,7 +296,7 @@ static void pkt_recvfrom_initialize(FAR struct socket *psock, FAR void *buf,
 
 static ssize_t pkt_recvfrom_result(int result, struct pkt_recvfrom_s *pstate)
 {
-  /* Check for a error/timeout detected by the interrupt handler.  Errors are
+  /* Check for a error/timeout detected by the event handler.  Errors are
    * signaled by negative errno values for the rcv length
    */
 
@@ -340,7 +340,7 @@ static ssize_t pkt_recvfrom_result(int result, struct pkt_recvfrom_s *pstate)
  *   modified on return to indicate the actual size of the address stored
  *   there.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Buffer to receive data
  *   len      Length of buffer

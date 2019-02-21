@@ -3,7 +3,7 @@
  *
  *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@yahoogroups.com>
+ *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@googlegroups.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -56,6 +56,12 @@
 #    include <sys/mount.h>
 #    include <nuttx/fs/nxffs.h>
 #  endif
+#endif
+
+#ifdef CONFIG_LPC43_SDMMC
+#  include <nuttx/sdio.h>
+#  include <nuttx/mmcsd.h>
+#  include "lpc43_sdmmc.h"
 #endif
 
 #include "bambino-200e.h"
@@ -162,9 +168,36 @@ static int nsh_spifi_initialize(void)
 
 int board_app_initialize(uintptr_t arg)
 {
+#ifdef HAVE_MMCSD
+  struct sdio_dev_s *sdmmc;
+#endif
+  int ret = 0;
+
   /* Initialize the SPIFI block device */
 
   (void)nsh_spifi_initialize();
+
+#ifdef HAVE_MMCSD
+  /* Get an instance of the SDIO interface */
+
+  sdmmc = lpc43_sdmmc_initialize(0);
+  if (!sdmmc)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SD/MMC\n");
+    }
+  else
+    {
+      /* Bind the SDIO interface to the MMC/SD driver */
+
+      ret = mmcsd_slotinitialize(MMCSD_MINOR, sdmmc);
+      if (ret != OK)
+        {
+          syslog(LOG_ERR,
+                 "ERROR: Failed to bind SDIO to the MMC/SD driver: %d\n",
+                 ret);
+        }
+    }
+#endif
 
 #ifdef CONFIG_TIMER
   /* Registers the timers */
@@ -172,5 +205,5 @@ int board_app_initialize(uintptr_t arg)
   lpc43_timerinitialize();
 #endif
 
-  return 0;
+  return ret;
 }

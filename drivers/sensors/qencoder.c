@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/sensors/qencoder.c
  *
- *   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -128,10 +128,9 @@ static int qe_open(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -errno;
       goto errout;
     }
 
@@ -173,7 +172,7 @@ static int qe_open(FAR struct file *filep)
   ret = OK;
 
 errout_with_sem:
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
 
 errout:
   return ret;
@@ -197,10 +196,9 @@ static int qe_close(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -errno;
       goto errout;
     }
 
@@ -228,7 +226,7 @@ static int qe_close(FAR struct file *filep)
       lower->ops->shutdown(lower);
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   ret = OK;
 
 errout:
@@ -238,7 +236,7 @@ errout:
 /************************************************************************************
  * Name: qe_read
  *
- * Description:O
+ * Description:
  *   A dummy read method.  This is provided only to satsify the VFS layer.
  *
  ************************************************************************************/
@@ -288,7 +286,7 @@ static int qe_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
       return ret;
@@ -332,7 +330,7 @@ static int qe_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   return ret;
 }
 
@@ -376,7 +374,7 @@ int qe_register(FAR const char *devpath, FAR struct qe_lowerhalf_s *lower)
 
   /* Initialize the PWM device structure (it was already zeroed by kmm_zalloc()) */
 
-  sem_init(&upper->exclsem, 0, 1);
+  nxsem_init(&upper->exclsem, 0, 1);
   upper->lower = lower;
 
   /* Register the PWM device */

@@ -56,11 +56,11 @@
  *   suitable for calculating relative time delays and does not depend on
  *   the other clock_* logic.
  *
- * Parameters:
+ * Input Parameters:
  *   reltime - Convert this relative time to system clock ticks.
  *   ticks - Return the converted number of ticks here.
  *
- * Return Value:
+ * Returned Value:
  *   Always returns OK
  *
  * Assumptions:
@@ -68,7 +68,7 @@
  ****************************************************************************/
 
 int clock_time2ticks(FAR const struct timespec *reltime,
-                     FAR ssystime_t *ticks)
+                     FAR sclock_t *ticks)
 {
 #ifdef CONFIG_HAVE_LONG_LONG
   int64_t relnsec;
@@ -84,7 +84,7 @@ int clock_time2ticks(FAR const struct timespec *reltime,
    * that is greater than or equal to the exact number of tick.
    */
 
-  *ticks = (ssystime_t)((relnsec + NSEC_PER_TICK - 1) / NSEC_PER_TICK);
+  *ticks = (sclock_t)((relnsec + NSEC_PER_TICK - 1) / NSEC_PER_TICK);
   return OK;
 #else
   int32_t relusec;
@@ -111,7 +111,7 @@ int clock_time2ticks(FAR const struct timespec *reltime,
    * that is greater than or equal to the exact number of tick.
    */
 
-  *ticks = (ssystime_t)((relusec + USEC_PER_TICK - 1) / USEC_PER_TICK);
+  *ticks = (sclock_t)((relusec + USEC_PER_TICK - 1) / USEC_PER_TICK);
   return OK;
 #endif
 }

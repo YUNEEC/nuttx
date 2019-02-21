@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/audio/tone.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Alan Carvalho de Assis <acassis@gmail.com>
  *
  * This driver is based on Tone Alarm driver from PX4 project. It was
@@ -778,10 +778,9 @@ static int tone_open(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout;
     }
 
@@ -804,7 +803,7 @@ static int tone_open(FAR struct file *filep)
   ret = OK;
 
 errout_with_sem:
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
 
 errout:
   return ret;
@@ -828,10 +827,9 @@ static int tone_close(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout;
     }
 
@@ -843,7 +841,7 @@ static int tone_close(FAR struct file *filep)
       upper->crefs--;
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   ret = OK;
 
 errout:
@@ -924,7 +922,7 @@ static ssize_t tone_write(FAR struct file *filep, FAR const char *buffer,
  *   be used by application code.
  *
  *
- * Input parameters:
+ * Input Parameters:
  *   path - The full path to the driver to be registers in the NuttX pseudo-
  *     filesystem.  The recommended convention is to name of PWM driver
  *     as "/dev/tone0".
@@ -962,7 +960,7 @@ int tone_register(FAR const char *path, FAR struct pwm_lowerhalf_s *tone,
    * kmm_zalloc()).
    */
 
-  sem_init(&upper->exclsem, 0, 1);
+  nxsem_init(&upper->exclsem, 0, 1);
   upper->devtone = tone;
   upper->oneshot = oneshot;
 #ifdef CONFIG_PWM_MULTICHAN

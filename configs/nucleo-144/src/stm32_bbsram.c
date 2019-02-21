@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/nucleo-144/src/stm32_bbsram.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: David Sidrane <david_s5@nscdg.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,6 @@
 
 #include <sys/ioctl.h>
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -51,8 +50,10 @@
 #include <debug.h>
 #include <syslog.h>
 
-#include <up_internal.h>
-#include <stm32_bbsram.h>
+#include <nuttx/fs/fs.h>
+
+#include "up_internal.h"
+#include "stm32_bbsram.h"
 
 #include "nucleo-144.h"
 
@@ -290,29 +291,25 @@ static uint8_t g_sdata[STM32F7_BBSRAM_SIZE];
 
 static int hardfault_get_desc(struct bbsramd_s *desc)
 {
-  int ret = -ENOENT;
-  int fd = open(HARDFAULT_PATH, O_RDONLY);
-  int rv;
+  FAR struct file filestruct;
+  int ret;
 
-  if (fd < 0)
+  ret = file_open(&filestruct, HARDFAULT_PATH, O_RDONLY);
+  if (ret < 0)
     {
       syslog(LOG_INFO, "stm32 bbsram: Failed to open Fault Log file [%s] "
-          "(%d)\n", HARDFAULT_PATH, fd);
+             "(%d)\n", HARDFAULT_PATH, ret);
     }
   else
     {
-      ret = -EIO;
-      rv  = ioctl(fd, STM32F7_BBSRAM_GETDESC_IOCTL,
-                 (unsigned long)((uintptr_t)desc));
+      ret = file_ioctl(&filestruct, STM32F7_BBSRAM_GETDESC_IOCTL,
+                       (unsigned long)((uintptr_t)desc));
+      (void)file_close(&filestruct);
 
-      if (rv >= 0)
-        {
-          ret = fd;
-        }
-      else
+      if (ret < 0)
         {
           syslog(LOG_INFO, "stm32 bbsram: Failed to get Fault Log descriptor "
-              "(%d)\n", rv);
+              "(%d)\n", ret);
         }
     }
 
@@ -351,7 +348,6 @@ int stm32_bbsram_int(void)
   struct tm tt;
   time_t time_sec;
 
-
   /* Using Battery Backed Up SRAM */
 
   stm32_bbsraminitialize(BBSRAM_PATH, filesizes);
@@ -363,7 +359,7 @@ int stm32_bbsram_int(void)
   rv = hardfault_get_desc(&desc);
   if (rv >= OK)
     {
-      printf("There is a hard fault logged.\n");
+      syslog(LOG_EMERG, "There is a hard fault logged.\n");
       state = (desc.lastwrite.tv_sec || desc.lastwrite.tv_nsec) ?  OK : 1;
 
       syslog(LOG_INFO, "Fault Log info File No %d Length %d flags:0x%02x "
@@ -379,7 +375,6 @@ int stm32_bbsram_int(void)
           syslog(LOG_INFO, "Fault Logged on %s - Valid\n", buf);
         }
 
-      close(rv);
       rv = unlink(HARDFAULT_PATH);
       if (rv < 0)
         {
@@ -546,10 +541,6 @@ void board_crashdump(uintptr_t currentsp, FAR void *tcb,
 
       up_lowputc('!');
     }
-
-#if defined(CONFIG_BOARD_RESET_ON_CRASH)
-  up_systemreset();
-#endif
 }
 #endif /* CONFIG_STM32F7_SAVE_CRASHDUMP */
 

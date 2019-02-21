@@ -146,10 +146,20 @@ FPU Configuration Options
 
 There are two version of the FPU support built into the STM32 port.
 
-1. Lazy Floating Point Register Save.
+1. Non-Lazy Floating Point Register Save
 
-   This is an implementation that saves and restores FPU registers only on
-   context switches.  This means: (1) floating point registers are not
+   In this configuration floating point register save and restore is
+   implemented on interrupt entry and return, respectively.  In this
+   case, you may use floating point operations for interrupt handling
+   logic if necessary.  This FPU behavior logic is enabled by default
+   with:
+
+     CONFIG_ARCH_FPU=y
+
+2. Lazy Floating Point Register Save.
+
+   An alternative mplementation only saves and restores FPU registers only
+   on context switches.  This means: (1) floating point registers are not
    stored on each context switch and, hence, possibly better interrupt
    performance.  But, (2) since floating point registers are not saved,
    you cannot use floating point operations within interrupt handlers.
@@ -157,26 +167,8 @@ There are two version of the FPU support built into the STM32 port.
    This logic can be enabled by simply adding the following to your .config
    file:
 
-   CONFIG_ARCH_FPU=y
-   CONFIG_ARMV7M_CMNVECTOR=y
-   CONFIG_ARMV7M_LAZYFPU=y
-
-2. Non-Lazy Floating Point Register Save
-
-   Mike Smith has contributed an extensive re-write of the ARMv7-M exception
-   handling logic. This includes verified support for the FPU.  These changes
-   have not yet been incorporated into the mainline and are still considered
-   experimental.  These FPU logic can be enabled with:
-
-   CONFIG_ARCH_FPU=y
-   CONFIG_ARMV7M_CMNVECTOR=y
-
-   You will probably also changes to the ld.script in if this option is selected.
-   This should work:
-
-   -ENTRY(_stext)
-   +ENTRY(__start)         /* Treat __start as the anchor for dead code stripping */
-   +EXTERN(_vectors)       /* Force the vectors to be included in the output */
+     CONFIG_ARCH_FPU=y
+     CONFIG_ARMV7M_LAZYFPU=y
 
 STM32F746G-DISCO-specific Configuration Options
 ===============================================
@@ -264,13 +256,6 @@ STM32F746G-DISCO-specific Configuration Options
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
-
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibrate
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
 
   Individual subsystems can be enabled:
 
@@ -404,10 +389,14 @@ STM32F746G-DISCO-specific Configuration Options
       Default: 4
     CONFIG_CAN_LOOPBACK - A CAN driver may or may not support a loopback
       mode for testing. The STM32 CAN driver does support loopback mode.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32F7_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32F7_CAN2 is defined.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_STM32F7_CAN1_BAUD - CAN1 BAUD rate.  Required if
+      CONFIG_STM32F7_CAN1 is defined.
+    CONFIG_STM32F7_CAN2_BAUD - CAN1 BAUD rate.  Required if
+      CONFIG_STM32F7_CAN2 is defined.
+    CONFIG_STM32_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 6
+    CONFIG_STM32_CAN_TSEG2 - the number of CAN time quanta in segment 2.
+      Default: 7
     CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
@@ -462,9 +451,7 @@ Configurations
   Each STM32F746G-DISCO configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh stm32f746g-disco/<subdir>
-    cd -
+    tools/configure.sh stm32f746g-disco/<subdir>
 
   Where <subdir> is one of the sub-directories listed below.
 
@@ -515,9 +502,33 @@ Configurations
 Configuration Directories
 -------------------------
 
-  nsh:
+  nsh
   ---
     Configures the NuttShell (NSH) located at apps/examples/nsh.  The
     Configuration enables the serial interfaces on UART6.  Support for
-    builtin applications is enabled, but in the base configuration no
-    builtin applications are selected.
+    built-in applications is enabled, but in the base configuration no
+    built-in applications are selected.
+
+  netnsh
+  ------
+    This configuration is similar to the nsh but a lot more hardware
+    peripherals are enabled, in particular Ethernet, as well as networking
+    support.  It is similar to the stm32f769i-disco/netnsh
+    configuration. This configuration uses USART1 for the serial console.
+    USART1 is connected to the ST-link virtual com inside board.h to remove
+    the need of a extra serial connection to use this board.
+
+  lgvl
+  ----
+    STM32F746G-DISCO LittlevGL demo example.
+
+    The LTDC is initialized during boot up.
+    This configuration uses USART1 for the serial console.
+    USART1 is connected to the ST-link virtual com inside board.h to remove
+    the need of a extra serial connection to use this board.
+    From the nsh comand line execute the lvgldemo example:
+
+      nsh> lvgldemo
+
+    The test will execute the calibration process and then run the
+    LittlevGL demo project.

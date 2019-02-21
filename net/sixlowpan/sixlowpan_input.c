@@ -140,19 +140,20 @@ static uint8_t g_bitbucket[UNCOMP_MAXHDR];
  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *
  * Input Parameters:
- *   fptr - Pointer to the beginning of the frame under construction
- *   bptr - Output goes here.  Normally this is a known offset into d_buf,
- *          may be redirected to g_bitbucket on the case of FRAGN frames.
+ *   fptr  - Pointer to the beginning of the frame under construction
+ *   bptr  - Output goes here.  Normally this is a known offset into d_buf,
+ *           may be redirected to g_bitbucket on the case of FRAGN frames.
+ *   proto - True: Copy the protocol header following the IPv6 header too.
  *
  * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-static void sixlowpan_uncompress_ipv6hdr(FAR uint8_t *fptr, FAR uint8_t *bptr)
+static void sixlowpan_uncompress_ipv6hdr(FAR uint8_t *fptr,
+                                         FAR uint8_t *bptr)
 {
   FAR struct ipv6_hdr_s *ipv6 = (FAR struct ipv6_hdr_s *)bptr;
-  uint16_t protosize;
 
   /* Put uncompressed IPv6 header in d_buf. */
 
@@ -163,50 +164,75 @@ static void sixlowpan_uncompress_ipv6hdr(FAR uint8_t *fptr, FAR uint8_t *bptr)
 
   g_frame_hdrlen  += IPv6_HDRLEN;
   g_uncomp_hdrlen += IPv6_HDRLEN;
+}
 
-  /* Copy the following protocol header, */
+/****************************************************************************
+ * Name: sixlowpan_uncompress_ipv6proto
+ *
+ * Description:
+ *   Copy the protocol header following the IPv4 header
+ *
+ * Input Parameters:
+ *   fptr  - Pointer to the beginning of the frame under construction
+ *   bptr  - Output goes here.  Normally this is a known offset into d_buf,
+ *           may be redirected to g_bitbucket on the case of FRAGN frames.
+ *   proto - True: Copy the protocol header following the IPv6 header too.
+ *
+ * Returned Value:
+ *   The size of the protocol header that was copied.
+ *
+ ****************************************************************************/
 
-   switch (ipv6->proto)
-     {
+static uint16_t sixlowpan_uncompress_ipv6proto(FAR uint8_t *fptr,
+                                               FAR uint8_t *bptr)
+{
+  FAR struct ipv6_hdr_s *ipv6 = (FAR struct ipv6_hdr_s *)bptr;
+  uint16_t protosize = 0;
+
+  /* Copy the following protocol header. */
+
+  switch (ipv6->proto)
+    {
 #ifdef CONFIG_NET_TCP
-     case IP_PROTO_TCP:
-       {
-         FAR struct tcp_hdr_s *tcp =
-           (FAR struct tcp_hdr_s *)(fptr + g_frame_hdrlen);
+    case IP_PROTO_TCP:
+      {
+        FAR struct tcp_hdr_s *tcp =
+          (FAR struct tcp_hdr_s *)(fptr + g_frame_hdrlen);
 
-         /* The TCP header length is encoded in the top 4 bits of the
-          * tcpoffset field (in units of 32-bit words).
-          */
+        /* The TCP header length is encoded in the top 4 bits of the
+         * tcpoffset field (in units of 32-bit words).
+         */
 
-         protosize = ((uint16_t)tcp->tcpoffset >> 4) << 2;
-       }
-       break;
+        protosize = ((uint16_t)tcp->tcpoffset >> 4) << 2;
+      }
+      break;
 #endif
 
 #ifdef CONFIG_NET_UDP
-     case IP_PROTO_UDP:
-       protosize = sizeof(struct udp_hdr_s);
-       break;
+    case IP_PROTO_UDP:
+      protosize = sizeof(struct udp_hdr_s);
+      break;
 #endif
 
 #ifdef CONFIG_NET_ICMPv6
-     case IP_PROTO_ICMP6:
-       protosize = sizeof(struct icmpv6_hdr_s);
-       break;
+    case IP_PROTO_ICMP6:
+      protosize = sizeof(struct icmpv6_hdr_s);
+      break;
 #endif
 
-     default:
-       nwarn("WARNING: Unrecognized proto: %u\n", ipv6->proto);
-       return;
-     }
+    default:
+      nwarn("WARNING: Unrecognized proto: %u\n", ipv6->proto);
+      return 0;
+    }
 
   /* Copy the protocol header. */
 
   memcpy((FAR uint8_t *)ipv6 + g_uncomp_hdrlen, fptr + g_frame_hdrlen,
          protosize);
 
-  g_frame_hdrlen  += protosize;
-  g_uncomp_hdrlen += protosize;
+  g_frame_hdrlen   += protosize;
+  g_uncomp_hdrlen  += protosize;
+  return protosize;
 }
 
 /****************************************************************************
@@ -260,8 +286,9 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
   uint16_t paysize;           /* Size of the data payload */
   uint16_t fragtag   = 0;     /* Tag of the fragment */
   uint8_t fragoffset = 0;     /* Offset of the fragment in the IP packet */
+  uint8_t protosize  = 0;     /* Length of the protocol header (treated like payload) */
   bool isfrag        = false; /* true: Frame is a fragment */
-  bool isfirstfrag   = false; /* true: Frame is the first fragement of the series */
+  bool isfrag1       = false; /* true: Frame is the first fragement of the series */
   int reqsize;                /* Required buffer size */
   int hdrsize;                /* Size of the IEEE802.15.4 header */
   int ret;
@@ -313,9 +340,9 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
 
         /* Drop the packet if it cannot fit into the d_buf */
 
-        if (fragsize > CONFIG_NET_6LOWPAN_MTU)
+        if (fragsize > CONFIG_NET_6LOWPAN_PKTSIZE)
           {
-            nwarn("WARNING: Reassembled packet size exeeds CONFIG_NET_6LOWPAN_MTU\n");
+            nwarn("WARNING: Reassembled packet size exeeds CONFIG_NET_6LOWPAN_PKTSIZE\n");
             return -ENOSPC;
           }
 
@@ -344,7 +371,7 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
         /* Indicate the first fragment of the reassembly */
 
         bptr               = reass->rb_buf;
-        isfirstfrag        = true;
+        isfrag1            = true;
         isfrag             = true;
       }
       break;
@@ -411,6 +438,7 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
 
       DEBUGASSERT(radio->r_dev.d_buf != NULL);
       reass = (FAR struct sixlowpan_reassbuf_s *)radio->r_dev.d_buf;
+      reass->rb_pool = REASS_POOL_RADIO;
       bptr  = reass->rb_buf;
       break;
     }
@@ -440,7 +468,20 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
   if (hc1[SIXLOWPAN_HC1_DISPATCH] == SIXLOWPAN_DISPATCH_IPV6)
     {
       ninfo("IPv6 Dispatch\n");
+
+      /* Uncompress the IPv6 header */
+
       sixlowpan_uncompress_ipv6hdr(fptr, bptr);
+
+      /* A protocol header will follow the IPv6 header only on a non-
+       * fragmented packet or on the first fragment of a fragmented
+       * packet.
+       */
+
+      if (!isfrag || isfrag1)
+        {
+          protosize = sixlowpan_uncompress_ipv6proto(fptr, bptr);
+        }
     }
   else
     {
@@ -453,13 +494,13 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
 
   /* Is this the first fragment is a sequence? */
 
-  if (isfirstfrag)
+  if (isfrag1)
     {
       /* Yes.. Remember the offset from the beginning of d_buf where we
        * begin placing the data payload.
        */
 
-      reass->rb_boffset = g_uncomp_hdrlen;
+      reass->rb_boffset = g_uncomp_hdrlen - protosize;
     }
 
   /* No.. is this a subsequent fragment in the same sequence? */
@@ -480,10 +521,10 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
    */
 
   paysize = iob->io_len - g_frame_hdrlen;
-  if (paysize > CONFIG_NET_6LOWPAN_MTU)
+  if (paysize > CONFIG_NET_6LOWPAN_PKTSIZE)
     {
       nwarn("WARNING: Packet dropped due to payload (%u) > packet buffer (%u)\n",
-            paysize, CONFIG_NET_6LOWPAN_MTU);
+            paysize, CONFIG_NET_6LOWPAN_PKTSIZE);
       ret = -ENOSPC;
       goto errout_with_reass;
     }
@@ -491,11 +532,11 @@ static int sixlowpan_frame_process(FAR struct radio_driver_s *radio,
   /* Sanity-check size of incoming packet to avoid buffer overflow */
 
   reqsize = g_uncomp_hdrlen + (fragoffset << 3) + paysize;
-  if (reqsize > CONFIG_NET_6LOWPAN_MTU)
+  if (reqsize > CONFIG_NET_6LOWPAN_PKTSIZE)
     {
       nwarn("WARNING: Required buffer size: %u+%u+%u=%u Available=%u\n",
             g_uncomp_hdrlen, (fragoffset << 3), paysize,
-            reqsize, CONFIG_NET_6LOWPAN_MTU);
+            reqsize, CONFIG_NET_6LOWPAN_PKTSIZE);
       ret = -ENOMEM;
       goto errout_with_reass;
     }
@@ -556,7 +597,7 @@ errout_with_reass:
  * Description:
  *   Inject the packet in d_buf into the network for normal packet processing.
  *
- * Input Parmeters
+ * Input Parameters:
  *   radio - The IEEE802.15.4 MAC network driver interface.
  *
  * Returned Value:
@@ -626,7 +667,7 @@ static int sixlowpan_dispatch(FAR struct radio_driver_s *radio)
  *   - The io_flink field points to the next frame in the list (if enable)
  *   - The last frame in the list will have io_flink == NULL.
  *
- *   An non-NULL d_buf of size CONFIG_NET_6LOWPAN_MTU + CONFIG_NET_GUARDSIZE
+ *   An non-NULL d_buf of size CONFIG_NET_6LOWPAN_PKTSIZE + CONFIG_NET_GUARDSIZE
  *   must also be provided.  The frame will be decompressed and placed in
  *   the d_buf. Fragmented packets will also be reassembled in the d_buf as
  *   they are received (meaning for the driver, that two packet buffers are
@@ -667,7 +708,8 @@ static int sixlowpan_dispatch(FAR struct radio_driver_s *radio)
  *               must apply to all of the frames in the list.
  *
  * Returned Value:
- *   Ok is returned on success; Othewise a negated errno value is returned.
+ *   Zero (OK) is returned if the the frame was consumed; Othewise a negated
+ *   errno value is returned.
  *
  ****************************************************************************/
 
@@ -675,8 +717,15 @@ int sixlowpan_input(FAR struct radio_driver_s *radio,
                     FAR struct iob_s *framelist,  FAR const void *metadata)
 {
   int ret = -EINVAL;
+  uint8_t *d_buf_backup;
 
   DEBUGASSERT(radio != NULL && framelist != NULL);
+
+  /* Sixlowpan modifies the d_buf to process fragments using reassembly buffers.
+   * Save the value of d_buf on entry and set it back before returning
+   */
+
+  d_buf_backup = radio->r_dev.d_buf;
 
   /* Verify that an frame has been provided. */
 
@@ -695,9 +744,16 @@ int sixlowpan_input(FAR struct radio_driver_s *radio,
 
       ret = sixlowpan_frame_process(radio, metadata, iob);
 
-      /* Free the IOB the held the consumed frame */
+      /* If the frame was a valid 6LoWPAN frame, free the IOB the held the
+       * consumed frame. Otherwise, the frame must stay allocated since the
+       * MAC layer will try and pass it to another receiver to see if that
+       * receiver wants it.
+       */
 
-      iob_free(iob);
+      if (ret >= 0)
+        {
+          iob_free(iob);
+        }
 
       /* Was the frame successfully processed? Is the packet in d_buf fully
        * reassembled?
@@ -734,11 +790,11 @@ int sixlowpan_input(FAR struct radio_driver_s *radio,
                    * address.
                    */
 
-                  ret = sixlowpan_destaddrfromip(radio, ipv6hdr->destipaddr,
-                                                 &destmac);
+                  ret = sixlowpan_nexthopaddr(radio, ipv6hdr->destipaddr,
+                                              &destmac);
                   if (ret < 0)
                     {
-                      nerr("ERROR: Failed to dest MAC address: %d\n", ret);
+                      nerr("ERROR: Failed to get dest MAC address: %d\n", ret);
                       goto drop;
                     }
 
@@ -781,16 +837,14 @@ int sixlowpan_input(FAR struct radio_driver_s *radio,
                         {
                           nwarn("WARNING: Unsupported protoype: %u\n",
                                 ipv6hdr->proto);
-                          ret = -EPROTO;
                           goto drop;
                         }
                     }
 
-                  if (hdrlen < radio->r_dev.d_len)
+                  if (hdrlen > radio->r_dev.d_len)
                     {
-                      nwarn("WARNING: Packet to small: Have %u need >%u\n",
+                      nwarn("WARNING: Packet too small: Have %u need >%u\n",
                             radio->r_dev.d_len, hdrlen);
-                      ret = -ENOBUFS;
                       goto drop;
                     }
 
@@ -803,10 +857,18 @@ int sixlowpan_input(FAR struct radio_driver_s *radio,
                                                &destmac);
 drop:
                   radio->r_dev.d_len = 0;
+
+                  /* We consumed the frame, so we must return 0. */
+
+                  ret = 0;
                 }
             }
         }
     }
+
+  /* Restore the d_buf back to it's original state */
+
+  radio->r_dev.d_buf = d_buf_backup;
 
   return ret;
 }

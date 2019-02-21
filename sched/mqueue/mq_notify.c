@@ -71,14 +71,14 @@
  *   registration will be removed.  The message queue will then be
  *   available for registration.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor
  *   notification - Real-time signal structure containing:
  *      sigev_notify - Should be SIGEV_SIGNAL or SIGEV_THREAD
  *      sigev_signo - The signo to use for the notification
  *      sigev_value - Value associated with the signal
  *
- * Return Value:
+ * Returned Value:
  *   On success mq_notify() returns 0; on error, -1 is returned, with
  *   errno set to indicate the error.
  *
@@ -100,10 +100,10 @@
  *   task is waiting for the message queue to become non-empty.  This is
  *   inconsistent with the POSIX specification which says, "If a process
  *   has registered for notification of message a arrival at a message
- *   queue and some process is blocked in mq_receive() waiting to receive
+ *   queue and some process is blocked in [nx]mq_receive() waiting to receive
  *   a message when a message arrives at the queue, the arriving message
- *   message shall satisfy mq_receive()... The resulting behavior is as if
- *   the message queue remains empty, and no notification shall be sent."
+ *   message shall satisfy [nx]mq_receive()... The resulting behavior is as
+ *   if the message queue remains empty, and no notification shall be sent."
  *
  ****************************************************************************/
 
@@ -152,7 +152,7 @@ int mq_notify(mqd_t mqdes, FAR const struct sigevent *notification)
 
           /* Yes... Assign it to the current task. */
 
-          memcpy(&msgq->ntevent, &notification->sigev_value,
+          memcpy(&msgq->ntevent, notification,
                  sizeof(struct sigevent));
 
           msgq->ntpid   = rtcb->pid;

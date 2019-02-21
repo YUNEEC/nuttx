@@ -61,10 +61,10 @@
  * Description:
  *   Return the number of frames in the RX queue.
  *
- * Parameters:
+ * Input Parameters:
  *   conn   - The socket connection structure.
  *
- * Return:
+ * Returned Value:
  *   The number of frames in the queue.
  *
  ****************************************************************************/
@@ -91,12 +91,12 @@ static int ieee802154_count_frames(FAR struct ieee802154_conn_s *conn)
  * Description:
  *   Add one frame to the connection's RX queue.
  *
- * Parameters:
+ * Input Parameters:
  *   conn   - The socket connection structure.
  *   framel - A single frame to add to the RX queue.
- *   meta   - Meta data characterizing the received frane.
+ *   meta   - Meta data characterizing the received frame.
  *
- * Return:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned on
  *   any failure.
  *
@@ -150,9 +150,9 @@ static int ieee802154_queue_frame(FAR struct ieee802154_conn_s *conn,
     }
 
 #if CONFIG_NET_IEEE802154_BACKLOG > 0
-   /* If incrementing the count would exceed the maximum backlog value, then
-    * delete the oldest frame from the head of the RX queue.
-    */
+  /* If incrementing the count would exceed the maximum backlog value, then
+   * delete the oldest frame from the head of the RX queue.
+   */
 
    if (conn->backlog >= CONFIG_NET_IEEE802154_BACKLOG)
      {
@@ -217,17 +217,17 @@ static int ieee802154_queue_frame(FAR struct ieee802154_conn_s *conn,
  *   - The io_flink field points to the next frame in the list (if enable)
  *   - The last frame in the list will have io_flink == NULL.
  *
- * Parameters:
+ * Input Parameters:
  *   radio       The radio network driver interface.
  *   framelist - The head of an incoming list of frames.  Normally this
  *               would be a single frame.  A list may be provided if
  *               appropriate, however.
- *   meta      - Meta data characterizing the received frane.
+ *   meta      - Meta data characterizing the received frame.
  *
- *               If there are multilple frames in the list, this metadata
+ *               If there are multiple frames in the list, this metadata
  *               must apply to all of the frames in the list.
  *
- * Return:
+ * Returned Value:
  *   OK    The IEEE 802.15.4 has been processed  and can be deleted
  *   ERROR Hold the IEEE 802.15.4 and try again later. There is a listening
  *         socket but no recv in place to catch the IEEE 802.15.4 yet.

@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/wchar.h
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -82,25 +82,21 @@
 /****************************************************************************
  * Type Definitions
  ****************************************************************************/
-/* "The <wchar.h> header defines the following data types through
+
+/* "The <wchar.h> header defines the following data types:
  *
  * wchar_t
- *   As described in <stddef.h>.
+ *   Provided via <stddef.h>.
  *
  * wint_t
  *   An integral type capable of storing any valid value of wchar_t, or WEOF.
- */
-
-typedef int wint_t;
-
-/* wctype_t
+ *   Provided via <sys/type.h>
+ *
+ * wctype_t
  *   A scalar type of a data object that can hold values which represent
- *   locale-specific character classification.
- */
-
-typedef int wctype_t;
-
-/* mbstate_t
+ *   locale-specific character classification.  Provided via <sys/type.h>
+ *
+ * mbstate_t
  *   An object type other than an array type that can hold the conversion
  *   state information necessary to convert between sequences of (possibly
  *   multibyte) characters and wide-characters. If a codeset is being used
@@ -218,11 +214,15 @@ size_t            wcsrtombs(FAR char *, FAR const wchar_t **, size_t,
                       FAR mbstate_t *);
 size_t            wcsspn(FAR const wchar_t *, FAR const wchar_t *);
 FAR wchar_t      *wcsstr(FAR const wchar_t *, FAR const wchar_t *);
+#ifdef CONFIG_HAVE_DOUBLE
 double            wcstod(FAR const wchar_t *, FAR wchar_t **);
+#endif
 float             wcstof(FAR const wchar_t *, FAR wchar_t **);
 FAR wchar_t      *wcstok(FAR wchar_t *, FAR const wchar_t *, FAR wchar_t **);
 long int          wcstol(FAR const wchar_t *, FAR wchar_t **, int);
+#ifdef CONFIG_HAVE_LONG_DOUBLE
 long double       wcstold(FAR const wchar_t *, FAR wchar_t **);
+#endif
 long long int     wcstoll(FAR const wchar_t *, FAR wchar_t **, int);
 unsigned long int wcstoul(FAR const wchar_t *, FAR wchar_t **, int);
 unsigned long long int wcstoull(FAR const wchar_t *, FAR wchar_t **, int);

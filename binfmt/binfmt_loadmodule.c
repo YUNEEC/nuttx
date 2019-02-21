@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/binfmt_loadmodule.c
  *
- *   Copyright (C) 2009, 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2014, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,24 +43,14 @@
 #include <debug.h>
 #include <errno.h>
 
+#include <nuttx/envpath.h>
+#include <nuttx/sched.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/binfmt/binfmt.h>
 
 #include "binfmt.h"
 
 #ifndef CONFIG_BINFMT_DISABLE
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -76,8 +66,8 @@
  *   between calls to load_module() and exec_module().
  *
  * Returned Value:
- *   Zero (OK) is returned on success; Otherwise, -1 (ERROR) is returned and
- *   the errno variable is set appropriately.
+ *   Zero (OK) is returned on success; Otherwise a negated errno value is
+ *   returned.
  *
  ****************************************************************************/
 
@@ -88,16 +78,21 @@ static int load_default_priority(FAR struct binary_s *bin)
 
   /* Get the priority of this thread */
 
-  ret = sched_getparam(0, &param);
+  ret = nxsched_getparam(0, &param);
   if (ret < 0)
     {
-      berr("ERROR: sched_getparam failed: %d\n", get_errno());
-      return ERROR;
+      berr("ERROR: nxsched_getparam failed: %d\n", ret);
+      return ret;
     }
 
   /* Save that as the priority of child thread */
 
   bin->priority = param.sched_priority;
+  if (bin->priority <= 0)
+    {
+      bin->priority = SCHED_PRIORITY_DEFAULT;
+    }
+
   return ret;
 }
 
@@ -168,9 +163,9 @@ static int load_absmodule(FAR struct binary_s *bin)
  *   prep the module for execution.
  *
  * Returned Value:
- *   This is an end-user function, so it follows the normal convention:
- *   Returns 0 (OK) on success.  On failure, it returns -1 (ERROR) with
- *   errno set appropriately.
+ *   This is a NuttX internal function so it follows the convention that
+ *   0 (OK) is returned on success and a negated errno is returned on
+ *   failure.
  *
  ****************************************************************************/
 
@@ -189,21 +184,19 @@ int load_module(FAR struct binary_s *bin)
       ret = load_default_priority(bin);
       if (ret < 0)
         {
-          /* The errno is already set in this case */
-
-          return ERROR;
+          return ret;
         }
 
       /* Were we given a relative path?  Or an absolute path to the file to
        * be loaded?  Absolute paths start with '/'.
        */
 
-#ifdef CONFIG_BINFMT_EXEPATH
+#ifdef CONFIG_LIB_ENVPATH
       if (bin->filename[0] != '/')
         {
           FAR const char *relpath;
           FAR char *fullpath;
-          EXEPATH_HANDLE handle;
+          ENVPATH_HANDLE handle;
 
           /* Set aside the relative path */
 
@@ -212,12 +205,12 @@ int load_module(FAR struct binary_s *bin)
 
           /* Initialize to traverse the PATH variable */
 
-          handle = exepath_init();
+          handle = envpath_init("PATH");
           if (handle)
             {
               /* Get the next absolute file path */
 
-              while ((fullpath = exepath_next(handle, relpath)) != NULL)
+              while ((fullpath = envpath_next(handle, relpath)) != NULL)
                 {
                   /* Try to load the file at this path */
 
@@ -238,7 +231,7 @@ int load_module(FAR struct binary_s *bin)
 
               /* Release the traversal handle */
 
-              exepath_release(handle);
+              envpath_release(handle);
             }
 
           /* Restore the relative path.  This is not needed for anything
@@ -258,16 +251,7 @@ int load_module(FAR struct binary_s *bin)
         }
     }
 
-  /* This is an end-user function.  Return failures via errno */
-
-  if (ret < 0)
-    {
-      berr("ERROR: Returning errno %d\n", -ret);
-      set_errno(-ret);
-      return ERROR;
-    }
-
-  return OK;
+  return ret;
 }
 
 #endif /* CONFIG_BINFMT_DISABLE */

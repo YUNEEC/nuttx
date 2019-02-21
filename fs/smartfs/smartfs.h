@@ -200,8 +200,14 @@
 #define SMARTFS_ERASEDSTATE_16BIT (uint16_t) ((CONFIG_SMARTFS_ERASEDSTATE << 8) | \
                                     CONFIG_SMARTFS_ERASEDSTATE)
 
+/* Size of temporary buffer used when a file is zero extended by ftruncate()
+ * logic.
+ */
+
+#define SMARTFS_TRUNCBUFFER_SIZE 512
+
 #ifndef offsetof
-#define offsetof(type, member)   ( (size_t) &( ( (type *) 0)->member))
+#  define offsetof(type, member) ((size_t) & (((type *)0)->member))
 #endif
 
 #define SMARTFS_NEXTSECTOR(h)    ( h->nextsector )
@@ -318,7 +324,7 @@ struct smartfs_mountpt_s
  ****************************************************************************/
 
 /****************************************************************************
- * Internal function prototypes
+ * Public Functions
  ****************************************************************************/
 
 int smartfs_readsector(struct smartfs_mountpt_s *fs, uint16_t sector);
@@ -336,9 +342,9 @@ struct smartfs_mountpt_s;
 
 /* Utility functions */
 
-int smartfs_mount(struct smartfs_mountpt_s *fs, bool writeable);
+int smartfs_mount(FAR struct smartfs_mountpt_s *fs, bool writeable);
 
-int smartfs_unmount(struct smartfs_mountpt_s *fs);
+int smartfs_unmount(FAR struct smartfs_mountpt_s *fs);
 
 int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
         struct smartfs_entry_s *direntry, const char *relpath,
@@ -347,17 +353,18 @@ int smartfs_finddirentry(struct smartfs_mountpt_s *fs,
 int smartfs_createentry(struct smartfs_mountpt_s *fs,
         uint16_t poffset, uint16_t doffset, const char* filename,
         uint16_t type,
-        mode_t mode, struct smartfs_entry_s *direntry,
+        mode_t mode, FAR struct smartfs_entry_s *direntry,
         uint16_t sectorno, FAR struct smartfs_ofile_s *sf);
 
-int smartfs_deleteentry(struct smartfs_mountpt_s *fs,
-        struct smartfs_entry_s *entry);
+int smartfs_deleteentry(FAR struct smartfs_mountpt_s *fs,
+        FAR struct smartfs_entry_s *entry);
 
-int smartfs_countdirentries(struct smartfs_mountpt_s *fs,
-        struct smartfs_entry_s *entry);
+int smartfs_countdirentries(FAR struct smartfs_mountpt_s *fs,
+        FAR struct smartfs_entry_s *entry);
 
 int smartfs_truncatefile(struct smartfs_mountpt_s *fs,
-        struct smartfs_entry_s *entry, FAR struct smartfs_ofile_s *sf);
+        FAR struct smartfs_entry_s *entry, FAR struct smartfs_ofile_s *sf);
+
 
 uint16_t smartfs_rdle16(FAR const void *val);
 

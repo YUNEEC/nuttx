@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/syslog/ramlog.c
  *
- *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -127,9 +127,6 @@ static int     ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds,
 #ifdef CONFIG_RAMLOG_SYSLOG
 static const struct syslog_channel_s g_ramlog_syslog_channel =
 {
-#ifdef CONFIG_SYSLOG_WRITE
-  syslog_default_write,
-#endif
   ramlog_putc,
   ramlog_putc,
   ramlog_flush
@@ -222,7 +219,7 @@ static void ramlog_pollnotify(FAR struct ramlog_dev_s *priv,
           fds->revents |= (fds->events & eventset);
           if (fds->revents != 0)
             {
-              sem_post(fds->sem);
+              nxsem_post(fds->sem);
             }
         }
       leave_critical_section(flags);
@@ -296,7 +293,7 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Get exclusive access to the rl_tail index */
 
-  ret = sem_wait(&priv->rl_exclsem);
+  ret = nxsem_wait(&priv->rl_exclsem);
   if (ret < 0)
     {
       return ret;
@@ -345,14 +342,14 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
           sched_lock();
           priv->rl_nwaiters++;
-          sem_post(&priv->rl_exclsem);
+          nxsem_post(&priv->rl_exclsem);
 
           /* We may now be pre-empted!  But that should be okay because we
            * have already incremented nwaiters.  Pre-emptions is disabled
            * but will be re-enabled while we are waiting.
            */
 
-          ret = sem_wait(&priv->rl_waitsem);
+          ret = nxsem_wait(&priv->rl_waitsem);
 
           /* Interrupts will be disabled when we return.  So the decrementing
            * rl_nwaiters here is safe.
@@ -367,7 +364,7 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
             {
               /* Yes... then retake the mutual exclusion semaphore */
 
-              ret = sem_wait(&priv->rl_exclsem);
+              ret = nxsem_wait(&priv->rl_exclsem);
             }
 
           /* Was the semaphore wait successful? Did we successful re-take the
@@ -376,19 +373,16 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
           if (ret < 0)
             {
-              /* No.. One of the two sem_wait's failed. */
-
-              int errval = errno;
-
+              /* No.. One of the two nxsem_wait's failed. */
               /* Were we awakened by a signal?  Did we read anything before
                * we received the signal?
                */
 
-              if (errval != EINTR || nread >= 0)
+              if (ret != -EINTR || nread >= 0)
                 {
                   /* Yes.. return the error. */
 
-                  nread = -errval;
+                  nread = ret;
                 }
 
               /* Break out to return what we have.  Note, we can't exactly
@@ -424,7 +418,7 @@ static ssize_t ramlog_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Relinquish the mutual exclusion semaphore */
 
-  sem_post(&priv->rl_exclsem);
+  nxsem_post(&priv->rl_exclsem);
 
   /* Notify all poll/select waiters that they can write to the FIFO */
 
@@ -533,7 +527,7 @@ static ssize_t ramlog_write(FAR struct file *filep, FAR const char *buffer, size
         {
           /* Yes.. Notify all of the waiting readers that more data is available */
 
-          sem_post(&priv->rl_waitsem);
+          nxsem_post(&priv->rl_waitsem);
         }
 #endif
 
@@ -573,11 +567,10 @@ int ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
 
   /* Get exclusive access to the poll structures */
 
-  ret = sem_wait(&priv->rl_exclsem);
+  ret = nxsem_wait(&priv->rl_exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      return -errval;
+      return ret;
     }
 
   /* Are we setting up the poll?  Or tearing it down? */
@@ -660,7 +653,7 @@ int ramlog_poll(FAR struct file *filep, FAR struct pollfd *fds, bool setup)
     }
 
 errout:
-  sem_post(&priv->rl_exclsem);
+  nxsem_post(&priv->rl_exclsem);
   return ret;
 }
 #endif
@@ -694,15 +687,15 @@ int ramlog_register(FAR const char *devpath, FAR char *buffer, size_t buflen)
     {
       /* Initialize the non-zero values in the RAM logging device structure */
 
-      sem_init(&priv->rl_exclsem, 0, 1);
+      nxsem_init(&priv->rl_exclsem, 0, 1);
 #ifndef CONFIG_RAMLOG_NONBLOCKING
-      sem_init(&priv->rl_waitsem, 0, 0);
+      nxsem_init(&priv->rl_waitsem, 0, 0);
 
       /* The rl_waitsem semaphore is used for signaling and, hence, should
        * not have priority inheritance enabled.
        */
 
-      sem_setprotocol(&priv->rl_waitsem, SEM_PRIO_NONE);
+      nxsem_setprotocol(&priv->rl_waitsem, SEM_PRIO_NONE);
 #endif
 
       priv->rl_bufsize = buflen;
@@ -802,7 +795,7 @@ int ramlog_putc(int ch)
         {
           /* The buffer is full and nothing was saved. */
 
-          goto errout;
+          return ret;
         }
     }
 #endif
@@ -810,20 +803,16 @@ int ramlog_putc(int ch)
   /* Add the character to the RAMLOG */
 
   ret = ramlog_addchar(priv, ch);
-  if (ret >= 0)
+  if (ret < 0)
     {
-      /* Return the character added on success */
+      /* ramlog_addchar() failed */
 
-      return ch;
+      return ret;
     }
 
-  /* On a failure, we need to return EOF and set the errno so that
-   * work like all other putc-like functions.
-   */
+  /* Return the character added on success */
 
-errout:
-  set_errno(-ret);
-  return EOF;
+  return ch;
 }
 #endif
 

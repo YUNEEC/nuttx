@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/pthread/pthread_getspecific.c
  *
- *   Copyright (C) 2007, 2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2013, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,10 +62,10 @@
  *   not obtained from pthread_create() or after a key has been deleted
  *   with pthread_key_delete() is undefined.
  *
- * Parameters:
+ * Input Parameters:
  *   key = The data key to get or set
  *
- * Return Value:
+ * Returned Value:
  *   The function pthread_getspecific() returns the thread-specific data
  *   associated with the given key.  If no thread specific data is
  *   associated with the key, then the value NULL is returned.
@@ -84,16 +84,15 @@
 FAR void *pthread_getspecific(pthread_key_t key)
 {
 #if CONFIG_NPTHREAD_KEYS > 0
-  FAR struct pthread_tcb_s *rtcb = (FAR struct pthread_tcb_s *)this_task();
-  FAR struct task_group_s *group = rtcb->cmn.group;
+  FAR struct tcb_s *rtcb = this_task();
+  FAR struct task_group_s *group = rtcb->group;
   FAR void *ret = NULL;
 
-  DEBUGASSERT(group &&
-              (rtcb->cmn.flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_PTHREAD);
+  DEBUGASSERT(group != NULL && (unsigned)key < CONFIG_NPTHREAD_KEYS);
 
   /* Check if the key is valid. */
 
-  if (key < group->tg_nkeys)
+  if (key < CONFIG_NPTHREAD_KEYS && (group->tg_keyset & (1 << key)) != 0)
     {
       /* Return the stored value. */
 

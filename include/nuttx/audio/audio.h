@@ -122,6 +122,7 @@
 #define AUDIOIOC_REGISTERMQ         _AUDIOIOC(14)
 #define AUDIOIOC_UNREGISTERMQ       _AUDIOIOC(15)
 #define AUDIOIOC_HWRESET            _AUDIOIOC(16)
+#define AUDIOIOC_SETBUFFERINFO      _AUDIOIOC(17)
 
 /* Audio Device Types *******************************************************/
 /* The NuttX audio interface support different types of audio devices for
@@ -178,6 +179,31 @@
 #define AUDIO_SUBFMT_MIDI_0         0x0c
 #define AUDIO_SUBFMT_MIDI_1         0x0d
 #define AUDIO_SUBFMT_MIDI_2         0x0e
+
+/* Audio Hardware-Format Types **********************************************/
+
+#define AUDIO_HWFMT_I2S             (1 << 0)
+#define AUDIO_HWFMT_RIGHT_J         (2 << 0)
+#define AUDIO_HWFMT_LEFT_J          (3 << 0)
+#define AUDIO_HWFMT_DSP_A           (4 << 0)
+#define AUDIO_HWFMT_DSP_B           (5 << 0)
+#define AUDIO_HWFMT_AC97            (6 << 0)
+#define AUDIO_HWFMT_PDM             (7 << 0)
+
+#define AUDIO_HWFMT_NB_NF           (0 << 8)
+#define AUDIO_HWFMT_NB_IF           (2 << 8)
+#define AUDIO_HWFMT_IB_NF           (3 << 8)
+#define AUDIO_HWFMT_IB_IF           (4 << 8)
+
+#define AUDIO_HWFMT_CBM_CFM         (1 << 12)
+#define AUDIO_HWFMT_CBS_CFM         (2 << 12)
+#define AUDIO_HWFMT_CBM_CFS         (3 << 12)
+#define AUDIO_HWFMT_CBS_CFS         (4 << 12)
+
+#define AUDIO_HWFMT_FORMAT_MASK     0x000f
+#define AUDIO_HWFMT_CLOCK_MASK      0x00f0
+#define AUDIO_HWFMT_INV_MASK        0x0f00
+#define AUDIO_HWFMT_MASTER_MASK     0xf000
 
 /* Supported Sampling Rates *************************************************/
 
@@ -253,6 +279,10 @@
 #define AUDIO_STEXT_UNDERFLOW       0x03
 #define AUDIO_STEXT_OVERFLOW        0x04
 #define AUDIO_STEXT_LATENCY         0x05
+
+/* Extension Unit controls **************************************************/
+
+#define AUDIO_EU_HW_FORMAT          0x0001
 
 /* Audio Callback Reasons ***************************************************/
 
@@ -377,7 +407,7 @@ begin_packed_struct struct ap_buffer_s
   sem_t                 sem;        /* Reference locking semaphore */
   uint16_t              flags;      /* Buffer flags */
   uint16_t              crefs;      /* Number of reference counts */
-  uint8_t               samp[0];    /* Offset of the first sample */
+  FAR uint8_t           *samp;      /* Offset of the first sample */
 } end_packed_struct;
 
 /* Structure defining the messages passed to a listening audio thread
@@ -670,7 +700,7 @@ extern "C"
  *   When this function is called, the "lower half" driver should be in the
  *   reset state (as if the shutdown() method had already been called).
  *
- * Input parameters:
+ * Input Parameters:
  *   name - The name of the audio device.  This name will be used to generate
  *     a full path to the driver in the format "/dev/audio/[name]" in the NuttX
  *     filesystem (i.e. the path "/dev/audio" will be prepended to the supplied
@@ -695,7 +725,7 @@ int audio_register(FAR const char *name, FAR struct audio_lowerhalf_s *dev);
  *   Allocated an AP Buffer and prepares it for use.  This allocates a dynamically
  *   allocated buffer that has no special DMA capabilities.
  *
- * Input parameters:
+ * Input Parameters:
  *   bufdesc:   Pointer to a buffer descriptor
  *
  * Returned Value:

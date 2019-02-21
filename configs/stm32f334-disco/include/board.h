@@ -211,15 +211,15 @@
 #define GPIO_USART2_RX GPIO_USART2_RX_3 /* PB4 */
 #define GPIO_USART2_TX GPIO_USART2_TX_3 /* PB3 */
 
-/* Board configuration for powerled example */
-
-/* - Set HRTIM TIMC output 1 on PERIOD
- * - Reset HRTIM TIMC output 1 on HRTIM EEV2.
- * - HRTIM EEV2 is connected to COMP4 output which works as current limit.
- * - COMP4 inverting input is connected to DAC1CH1 output.
- * - COMP4 non-inverting input is connceted to current sense resitor (1 Ohm).
- * - DAC1CH1 DMA transfer is triggered by HRTIM TIMC events, which is used
- *   to provide slope compensation
+/* Board configuration for powerled example:
+ *   - Set HRTIM TIMC output 1 (PB12) on PERIOD.
+ *   - Reset HRTIM TIMC output 1 on HRTIM EEV2.
+ *   - HRTIM EEV2 is connected to COMP4 output which works as current limit.
+ *   - COMP4 inverting input is connected to DAC1CH1 output.
+ *   - COMP4 non-inverting input (PB1) is connceted to current sense
+ *     resitor (1 Ohm).
+ *   - DAC1CH1 DMA transfer is triggered by HRTIM TIMC events, which is used
+ *     to provide slope compensation.
  */
 
 #if defined(CONFIG_EXAMPLES_POWERLED)
@@ -257,37 +257,63 @@
 
 #endif  /* CONFIG_EXAMPLES_POWERLED */
 
-/****************************************************************************
- * Public Data
- ****************************************************************************/
+/* Board configuration for SMPS example:
+ *   PA8  - HRTIM_CHA1
+ *   PA9  - HRTIM_CHA2
+ *   PA10 - HRTIM_CHB1
+ *   PA11 - HRTIM_CHB2
+ *   VIN  - ADC Channel 2 (PA1)
+ *   VOUT - ADC Channel 4 (PA3)
+ */
 
-#ifndef __ASSEMBLY__
+#if defined(CONFIG_EXAMPLES_SMPS)
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+/* HRTIM configuration ******************************************************/
 
-/****************************************************************************
- * Public Function Prototypes
- ****************************************************************************/
+/* Timer A configuration - Buck operations */
 
-/****************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This
- *   entry point is called early in the initialization -- after all memory
- *   has been configured and mapped but before any devices have been
- *   initialized.
- *
- ****************************************************************************/
+#define HRTIM_TIMA_PRESCALER HRTIM_PRESCALER_1
+#define HRTIM_TIMA_MODE      HRTIM_MODE_CONT
+#define HRTIM_TIMA_UPDATE    0
+#define HRTIM_TIMA_RESET     0
 
-void stm32_boardinitialize(void);
+#define HRTIM_TIMA_CH1_SET   HRTIM_OUT_SET_NONE
+#define HRTIM_TIMA_CH1_RST   HRTIM_OUT_RST_NONE
+#define HRTIM_TIMA_CH2_SET   HRTIM_OUT_SET_NONE
+#define HRTIM_TIMA_CH2_RST   HRTIM_OUT_RST_NONE
 
-#ifdef __cplusplus
-}
-#endif
+#define HRTIM_TIMA_DT_FSLOCK HRTIM_DT_LOCK
+#define HRTIM_TIMA_DT_RSLOCK HRTIM_DT_LOCK
+#define HRTIM_TIMA_DT_FVLOCK HRTIM_DT_RW
+#define HRTIM_TIMA_DT_RVLOCK HRTIM_DT_RW
+#define HRTIM_TIMA_DT_FSIGN  HRTIM_DT_SIGN_POSITIVE
+#define HRTIM_TIMA_DT_RSIGN  HRTIM_DT_SIGN_POSITIVE
+#define HRTIM_TIMA_DT_PRESCALER HRTIM_DEADTIME_PRESCALER_1
 
-#endif /* __ASSEMBLY__ */
+/* Timer B configuration - Boost operations */
+
+#define HRTIM_TIMB_PRESCALER HRTIM_PRESCALER_1
+#define HRTIM_TIMB_MODE      HRTIM_MODE_CONT
+#define HRTIM_TIMB_UPDATE    0
+#define HRTIM_TIMB_RESET     0
+
+#define HRTIM_TIMB_CH1_SET   HRTIM_OUT_SET_NONE
+#define HRTIM_TIMB_CH1_RST   HRTIM_OUT_RST_NONE
+#define HRTIM_TIMB_CH2_SET   HRTIM_OUT_SET_NONE
+#define HRTIM_TIMB_CH2_RST   HRTIM_OUT_RST_NONE
+
+#define HRTIM_TIMB_DT_FSLOCK HRTIM_DT_LOCK
+#define HRTIM_TIMB_DT_RSLOCK HRTIM_DT_LOCK
+#define HRTIM_TIMB_DT_FVLOCK HRTIM_DT_RW
+#define HRTIM_TIMB_DT_RVLOCK HRTIM_DT_RW
+#define HRTIM_TIMB_DT_FSIGN  HRTIM_DT_SIGN_POSITIVE
+#define HRTIM_TIMB_DT_RSIGN  HRTIM_DT_SIGN_POSITIVE
+#define HRTIM_TIMB_DT_PRESCALER HRTIM_DEADTIME_PRESCALER_1
+
+#define HRTIM_ADC_TRG2       HRTIM_ADCTRG24_AC4
+
+/* DMA channels *************************************************************/
+
+#endif  /* CONFIG_EXAMPLES_SMPS */
+
 #endif /* __CONFIG_STM32F334_DISCO_INCLUDE_BOARD_H */

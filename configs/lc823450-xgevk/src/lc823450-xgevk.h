@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/lc823450-xgevk/src/lc823450-xgevk.h
  *
- *   Copyright (C) 2017 Sony Corporation. All rights reserved.
+ *   Copyright 2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -92,6 +92,10 @@ int lc823450_bringup(void);
 
 #ifdef CONFIG_BMA250
 int lc823450_bma250initialize(FAR const char *devpath);
+#endif
+
+#ifdef CONFIG_AUDIO_WM8776
+int lc823450_wm8776initialize(int minor);
 #endif
 
 #endif /* __ASSEMBLY__ */

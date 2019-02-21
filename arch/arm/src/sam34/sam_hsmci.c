@@ -107,10 +107,6 @@
 #  error "This driver requires CONFIG_SDIO_BLOCKSETUP"
 #endif
 
-/* Nested interrupts not supported */
-
-#define SAM34_HSMCI_PRIO NVIC_SYSH_PRIORITY_DEFAULT
-
 #ifndef CONFIG_DEBUG_MEMCARD_INFO
 #  undef CONFIG_SAM34_HSMCI_CMDDEBUG
 #  undef CONFIG_SAM34_HSMCI_XFRDEBUG
@@ -405,7 +401,7 @@ struct sam_xfrregs_s
 /* Low-level helpers ********************************************************/
 
 static void sam_takesem(struct sam_dev_s *priv);
-#define     sam_givesem(priv) (sem_post(&priv->waitsem))
+#define     sam_givesem(priv) (nxsem_post(&priv->waitsem))
 
 static void sam_configwaitints(struct sam_dev_s *priv, uint32_t waitmask,
               sdio_eventset_t waitevents);
@@ -591,16 +587,21 @@ static bool                     g_cmdinitialized;
 
 static void sam_takesem(struct sam_dev_s *priv)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&priv->waitsem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->waitsem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1654,12 +1655,6 @@ static int sam_attach(FAR struct sdio_dev_s *dev)
        */
 
       up_enable_irq(SAM_IRQ_HSMCI);
-
-#ifdef CONFIG_ARCH_IRQPRIO
-      /* Set the interrupt priority */
-
-      up_prioritize_irq(SAM_IRQ_HSMCI, SAM34_HSMCI_PRIO);
-#endif
     }
 
   return ret;
@@ -1796,7 +1791,7 @@ static int sam_sendcmd(FAR struct sdio_dev_s *dev,
  * Name: sam_blocksetup
  *
  * Description:
- *   Some hardward needs to be informed of the selected blocksize.
+ *   Some hardware needs to be informed of the selected blocksize.
  *
  * Input Parameters:
  *   dev      - An instance of the SDIO device interface
@@ -2312,7 +2307,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
       delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)sam_eventtimeout,
                        1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
           mcerr("ERROR: wd_start failed: %d\n", ret);
         }
@@ -2665,7 +2660,7 @@ static void sam_callback(void *arg)
  * Input Parameters:
  *   slotno - Not used.
  *
- * Returned Values:
+ * Returned Value:
  *   A reference to an SDIO interface structure.  NULL is returned on failures.
  *
  ****************************************************************************/
@@ -2681,13 +2676,13 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
   /* Initialize the HSMCI slot structure */
   /* Initialize semaphores */
 
-  sem_init(&priv->waitsem, 0, 0);
+  nxsem_init(&priv->waitsem, 0, 0);
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Create a watchdog timer */
 
@@ -2740,7 +2735,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
  *                card has been removed from the slot.  Only transitions
  *                (inserted->removed or removed->inserted should be reported)
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -2787,7 +2782,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
  *   dev       - An instance of the SDIO driver device state structure.
  *   wrprotect - true is a card is writeprotected.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

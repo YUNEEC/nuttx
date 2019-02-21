@@ -68,6 +68,13 @@
 #define TIVA_SYSDIV          5
 #define SYSCLK_FREQUENCY     80000000  /* 80MHz */
 
+/* Peripheral Clock (PCLK)
+ *
+ * Same frequency as the SYSCLK
+ */
+
+#define PCLK_FREQUENCY       SYSCLK_FREQUENCY
+
 /* Other RCC settings:
  *
  * - Main and internal oscillators enabled.
@@ -184,23 +191,4 @@
 #define GPIO_UART1_RX     GPIO_UART1_RX_1
 #define GPIO_UART1_TX     GPIO_UART1_TX_1
 
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-/************************************************************************************
- * Name: tiva_boardinitialize
- *
- * Description:
- *   All Stellaris architectures must provide the following entry point.  This entry
- *   point is called early in the intitialization -- after all memory has been
- *   configured and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void tiva_boardinitialize(void);
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __CONFIGS_LM4F120_LAUNCHPAD_INCLUDE_BOARD_H */

@@ -1,7 +1,8 @@
 /****************************************************************************
  * configs/stm32f4discovery/src/stm32f4discovery.h
  *
- *   Copyright (C) 2011-2012, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015-2016, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,7 +49,8 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-/* Configuration *************************************************************/
+
+/* Configuration ************************************************************/
 
 /* Define what timer and channel to use as XEN1210 CLK */
 
@@ -79,8 +81,8 @@
 #define HAVE_SDIO       1
 #define HAVE_CS43L22    1
 #define HAVE_RTC_DRIVER 1
-#define HAVE_ELF        1
 #define HAVE_NETMONITOR 1
+#define HAVE_HCIUART    1
 
 /* Can't support USB host or device features if USB OTG FS is not enabled */
 
@@ -175,12 +177,6 @@
 #  undef HAVE_RTC_DRIVER
 #endif
 
-/* ELF */
-
-#if defined(CONFIG_BINFMT_DISABLE) || !defined(CONFIG_ELF)
-#  undef HAVE_ELF
-#endif
-
 /* NSH Network monitor  */
 
 #if !defined(CONFIG_NET) || !defined(CONFIG_STM32_EMACMAC)
@@ -213,6 +209,26 @@
 #  endif
 #endif
 
+/* Check if we have the prequisites for an HCI UART */
+
+#if !defined(CONFIG_STM32_HCIUART) || !defined(CONFIG_BLUETOOTH_UART)
+#  undef HAVE_HCIUART
+#elif defined(CONFIG_STM32_USART1_HCIUART)
+#  define HCIUART_SERDEV HCIUART1
+#elif defined(CONFIG_STM32_USART2_HCIUART)
+#  define HCIUART_SERDEV HCIUART2
+#elif defined(CONFIG_STM32_USART3_HCIUART)
+#  define HCIUART_SERDEV HCIUART3
+#elif defined(CONFIG_STM32_USART6_HCIUART)
+#  define HCIUART_SERDEV HCIUART6
+#elif defined(CONFIG_STM32_UART7_HCIUART)
+#  define HCIUART_SERDEV HCIUART7
+#elif defined(CONFIG_STM32_UART8_HCIUART)
+#  define HCIUART_SERDEV HCIUART8
+#else
+#  error No HCI UART specifified
+#endif
+
 /* STM32F4 Discovery GPIOs **************************************************/
 /* LEDs */
 
@@ -233,7 +249,7 @@
 
 #define GPIO_BTN_USER   (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTA|GPIO_PIN0)
 
-/* ZERO CROSS pin definiton */
+/* ZERO CROSS pin definition */
 
 #define GPIO_ZEROCROSS  (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTD|GPIO_PIN0)
 
@@ -256,16 +272,19 @@
 #define GPIO_MAX31855_CS  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
                            GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN8)
 
-#define GPIO_MAX6675_CS  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+#define GPIO_MAX6675_CS   (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
                            GPIO_OUTPUT_SET|GPIO_PORTD|GPIO_PIN8)
+
+#define GPIO_MAX7219_CS   (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTC|GPIO_PIN3)
 
 /* XEN1210 magnetic sensor */
 
-#define GPIO_XEN1210_INT (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|\
-                          GPIO_OPENDRAIN|GPIO_PORTA|GPIO_PIN5)
+#define GPIO_XEN1210_INT  (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|\
+                           GPIO_OPENDRAIN|GPIO_PORTA|GPIO_PIN5)
 
-#define GPIO_CS_XEN1210  (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
-                          GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
+#define GPIO_CS_XEN1210   (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTA|GPIO_PIN4)
 
 /* USB OTG FS
  *
@@ -283,7 +302,6 @@
 #  define GPIO_OTGFS_OVER (GPIO_INPUT|GPIO_EXTI|GPIO_FLOAT|\
                            GPIO_SPEED_100MHz|GPIO_PUSHPULL|\
                            GPIO_PORTD|GPIO_PIN5)
-
 #else
 #  define GPIO_OTGFS_OVER (GPIO_INPUT|GPIO_FLOAT|GPIO_SPEED_100MHz|\
                            GPIO_PUSHPULL|GPIO_PORTD|GPIO_PIN5)
@@ -321,6 +339,17 @@
                            GPIO_OUTPUT_CLEAR|GPIO_PORTB|GPIO_PIN8)
 #  define GPIO_OLED_DC    GPIO_OLED_A0
 #endif
+
+/* Display JLX12864G */
+
+#define STM32_LCD_RST     (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN6)
+
+#define STM32_LCD_CS      (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN7)
+
+#define STM32_LCD_RS      (GPIO_OUTPUT|GPIO_PUSHPULL|GPIO_SPEED_50MHz|\
+                           GPIO_OUTPUT_SET|GPIO_PORTB|GPIO_PIN8)
 
 /* STM32F4DIS-BB MicroSD
  *
@@ -382,6 +411,22 @@
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: stm32_bringup
+ *
+ * Description:
+ *   Perform architecture-specific initialization
+ *
+ *   CONFIG_BOARD_INITIALIZE=y :
+ *     Called from board_initialize().
+ *
+ *   CONFIG_BOARD_INITIALIZE=y && CONFIG_LIB_BOARDCTL=y :
+ *     Called from the NSH library
+ *
+ ****************************************************************************/
+
+int stm32_bringup(void);
+
+/****************************************************************************
  * Name: stm32_spidev_initialize
  *
  * Description:
@@ -401,14 +446,14 @@ void weak_function stm32_spidev_initialize(void);
   *
   ****************************************************************************/
 
- FAR struct i2s_dev_s *stm32_i2sdev_initialize(int port);
+FAR struct i2s_dev_s *stm32_i2sdev_initialize(int port);
 
 /****************************************************************************
  * Name: stm32_bh1750initialize
  *
  * Description:
- *   Called to configure an I2C and to register BH1750FVI for the stm32f4discovery
- *   board.
+ *   Called to configure an I2C and to register BH1750FVI for the
+ *   stm32f4discovery board.
  *
  ****************************************************************************/
 
@@ -420,8 +465,8 @@ int stm32_bh1750initialize(FAR const char *devpath);
  * Name: stm32_bmp180initialize
  *
  * Description:
- *   Called to configure an I2C and to register BMP180 for the stm32f4discovery
- *   board.
+ *   Called to configure an I2C and to register BMP180 for the
+ *   stm32f4discovery board.
  *
  ****************************************************************************/
 
@@ -433,8 +478,8 @@ int stm32_bmp180initialize(FAR const char *devpath);
  * Name: stm32_lis3dshinitialize
  *
  * Description:
- *   Called to configure SPI 1, and to register LIS3DSH and its external interrupt
- *   for the stm32f4discovery board.
+ *   Called to configure SPI 1, and to register LIS3DSH and its external
+ *   interrupt for the stm32f4discovery board.
  *
  ****************************************************************************/
 
@@ -443,20 +488,38 @@ int stm32_lis3dshinitialize(FAR const char *devpath);
 #endif
 
 /****************************************************************************
- * Name: stm32_bringup
+ * Name: nunchuck_initialize
  *
  * Description:
- *   Perform architecture-specific initialization
- *
- *   CONFIG_BOARD_INITIALIZE=y :
- *     Called from board_initialize().
- *
- *   CONFIG_BOARD_INITIALIZE=y && CONFIG_LIB_BOARDCTL=y :
- *     Called from the NSH library
+ *   Initialize and register the button joystick driver
  *
  ****************************************************************************/
 
-int stm32_bringup(void);
+#ifdef CONFIG_INPUT_NUNCHUCK
+int nunchuck_initialize(FAR char *devname);
+#endif
+
+/****************************************************************************
+ * Name: stm32_max7219init
+ *
+ * Description:
+ *   Initialize and register the max7219 numeric display controller
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_LEDS_MAX7219
+int stm32_max7219init(FAR const char *devpath);
+#endif
+
+/****************************************************************************
+ * Name: stm32_st7032init
+ *
+ * Description:
+ *   Initialize and register the Sitronix ST7032i
+ *
+ ****************************************************************************/
+
+int stm32_st7032init(FAR const char *devpath);
 
 /****************************************************************************
  * Name: stm32_usbinitialize
@@ -525,7 +588,7 @@ void stm32_extmemgpios(const uint32_t *gpios, int ngpios);
  * Name: stm32_extmemaddr
  *
  * Description:
- *   Initialize adress line GPIOs for external memory access
+ *   Initialize address line GPIOs for external memory access
  *
  ****************************************************************************/
 
@@ -591,7 +654,8 @@ void stm32_led_pminitialize(void);
  *
  ****************************************************************************/
 
-#if defined(CONFIG_PM) && defined(CONFIG_ARCH_IDLE_CUSTOM) && defined(CONFIG_PM_BUTTONS)
+#if defined(CONFIG_PM) && defined(CONFIG_ARCH_IDLE_CUSTOM) && \
+    defined(CONFIG_PM_BUTTONS)
 void stm32_pm_buttons(void);
 #endif
 
@@ -644,6 +708,40 @@ int stm32_zerocross_initialize(void);
 #endif
 
 /****************************************************************************
+ * Name: stm32_max31855initialize
+ *
+ * Description:
+ *   Initialize and register the MAX31855 Temperature Sensor driver.
+ *
+ * Input Parameters:
+ *   devpath - The full path to the driver to register. E.g., "/dev/temp0"
+ *   bus     - Bus number (for hardware that has mutiple SPI interfaces)
+ *   devid   - ID associated to the device. E.g., 0, 1, 2, etc.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SENSORS_MAX31855
+int stm32_max31855initialize(FAR const char *devpath, int bus,
+                             uint16_t devid);
+#endif
+
+/***********************************************************************************
+ * Name: stm32_mlx90614init
+ *
+ * Description:
+ *   Called to configure an I2C and to register MLX90614 for the stm32f103-minimum
+ *   board.
+ *
+ ***********************************************************************************/
+
+#ifdef CONFIG_SENSORS_MLX90614
+int stm32_mlx90614init(FAR const char *devpath);
+#endif
+
+/****************************************************************************
  * Name: stm32_max6675initialize
  *
  * Description:
@@ -660,8 +758,9 @@ int stm32_max6675initialize(FAR const char *devpath);
  *
  * Description:
  *   This function is called by platform-specific, setup logic to configure
- *   and register the CS43L22 device.  This function will register the driver
- *   as /dev/cs43l22[x] where x is determined by the minor device number.
+ *   and register the CS43L22 device.  This function will register the
+ *   driver as /dev/cs43l22[x] where x is determined by the minor device
+ *   number.
  *
  * Input Parameters:
  *   minor - The input device minor number
@@ -697,7 +796,7 @@ int stm32_pca9635_initialize(void);
 #endif
 
 /****************************************************************************
- * Name stm32_rgbled_setup
+ * Name: stm32_rgbled_setup
  *
  * Description:
  *   This function is called by board initialization logic to configure the
@@ -727,7 +826,7 @@ int stm32_rgbled_setup(void);
  *             form /dev/timer0
  *   timer   - The timer's number.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned
  *   to indicate the nature of any failure.
  *
@@ -738,11 +837,33 @@ int stm32_timer_driver_setup(FAR const char *devpath, int timer);
 #endif
 
 /****************************************************************************
- * Name xen1210_archinitialize
+ * Name: xen1210_archinitialize
+ *
+ * Description:
+ *   Each board that supports an xen1210 device must provide this function.
+ *   This function is called by application-specific, setup logic to
+ *   configure the accelerometer device.  This function will register the
+ *   driver as /dev/accelN where N is the minor device number.
+ *
+ * Input Parameters:
+ *   minor   - The input device minor number
+ *
+ * Returned Value:
+ *   Zero is returned on success.  Otherwise, a negated errno value is
+ *   returned to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SENSORS_XEN1210
+int xen1210_archinitialize(int minor);
+#endif
+
+/****************************************************************************
+ * Name: hciuart_dev_initialize
  *
  * Description:
  *   This function is called by board initialization logic to configure the
- *   XEN1210 driver.  This function will register the driver as /dev/mag0
+ *   Bluetooth HCI UART driver
  *
  * Input Parameters:
  *   None
@@ -753,8 +874,8 @@ int stm32_timer_driver_setup(FAR const char *devpath, int timer);
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SENSORS_XEN1210
-int xen1210_archinitialize(int minor);
+#ifdef HAVE_HCIUART
+int hciuart_dev_initialize(void);
 #endif
 
 #endif /* __ASSEMBLY__ */

@@ -261,7 +261,7 @@ static struct stm32_lowerhalf_s g_tim14_lowerhalf =
  *
  * Input Parameters:
  *
- * Returned Values:
+ * Returned Value:
  *
  ****************************************************************************/
 
@@ -270,7 +270,7 @@ static int stm32_timer_handler(int irq, void * context, void * arg)
   FAR struct stm32_lowerhalf_s *lower = (struct stm32_lowerhalf_s *) arg;
   uint32_t next_interval_us = 0;
 
-  STM32_TIM_ACKINT(lower->tim, 0);
+  STM32_TIM_ACKINT(lower->tim, ATIM_DIER_UIE);
 
   if (lower->callback(&next_interval_us, lower->arg))
     {
@@ -297,7 +297,7 @@ static int stm32_timer_handler(int irq, void * context, void * arg)
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -313,7 +313,7 @@ static int stm32_start(FAR struct timer_lowerhalf_s *lower)
       if (priv->callback != NULL)
         {
           STM32_TIM_SETISR(priv->tim, stm32_timer_handler, priv, 0);
-          STM32_TIM_ENABLEINT(priv->tim, 0);
+          STM32_TIM_ENABLEINT(priv->tim, ATIM_DIER_UIE);
         }
 
       priv->started = true;
@@ -335,7 +335,7 @@ static int stm32_start(FAR struct timer_lowerhalf_s *lower)
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -347,7 +347,7 @@ static int stm32_stop(struct timer_lowerhalf_s *lower)
   if (priv->started)
     {
       STM32_TIM_SETMODE(priv->tim, STM32_TIM_MODE_DISABLED);
-      STM32_TIM_DISABLEINT(priv->tim, 0);
+      STM32_TIM_DISABLEINT(priv->tim, ATIM_DIER_UIE);
       STM32_TIM_SETISR(priv->tim, NULL, NULL, 0);
       priv->started = false;
       return OK;
@@ -369,7 +369,7 @@ static int stm32_stop(struct timer_lowerhalf_s *lower)
  *             driver state structure.
  *   timeout - The new timeout value in microseconds.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -414,7 +414,7 @@ static int stm32_settimeout(FAR struct timer_lowerhalf_s *lower, uint32_t timeou
  *                behavior is restored,
  *  arg          - Argument that will be provided in the callback
  *
- * Returned Values:
+ * Returned Value:
  *   The previous timer expiration function pointer or NULL is there was
  *   no previous function pointer.
  *
@@ -435,11 +435,11 @@ static void stm32_setcallback(FAR struct timer_lowerhalf_s *lower,
   if (callback != NULL && priv->started)
     {
       STM32_TIM_SETISR(priv->tim, stm32_timer_handler, priv, 0);
-      STM32_TIM_ENABLEINT(priv->tim, 0);
+      STM32_TIM_ENABLEINT(priv->tim, ATIM_DIER_UIE);
     }
   else
     {
-      STM32_TIM_DISABLEINT(priv->tim, 0);
+      STM32_TIM_DISABLEINT(priv->tim, ATIM_DIER_UIE);
       STM32_TIM_SETISR(priv->tim, NULL, NULL, 0);
     }
 
@@ -462,7 +462,7 @@ static void stm32_setcallback(FAR struct timer_lowerhalf_s *lower,
  *     form /dev/timer0
  *   timer - the timer's number.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned
  *   to indicate the nature of any failure.
  *

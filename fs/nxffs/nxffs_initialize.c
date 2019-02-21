@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/nxffs/nxffs_initialize.c
  *
- *   Copyright (C) 2011, 2013, 2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2015, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -74,6 +75,11 @@ const struct mountpt_operations nxffs_operations =
   NULL,              /* sync -- No buffered data */
   nxffs_dup,         /* dup */
   nxffs_fstat,       /* fstat */
+#ifdef __NO_TRUNCATE_SUPPORT__
+  nxffs_truncate,    /* truncate */
+#else
+  NULL,              /* truncate */
+#endif
 
   nxffs_opendir,     /* opendir */
   NULL,              /* closedir */
@@ -180,8 +186,8 @@ int nxffs_initialize(FAR struct mtd_dev_s *mtd)
 
   volume->mtd    = mtd;
   volume->cblock = (off_t)-1;
-  sem_init(&volume->exclsem, 0, 1);
-  sem_init(&volume->wrsem, 0, 1);
+  nxsem_init(&volume->exclsem, 0, 1);
+  nxsem_init(&volume->wrsem, 0, 1);
 
   /* Get the volume geometry. (casting to uintptr_t first eliminates
    * complaints on some architectures where the sizeof long is different

@@ -33,8 +33,8 @@
  *
  ****************************************************************************/
 
-/* The STM32F334R8 has 64Kb of FLASH beginning at address 0x0800:0000 and
- * 12Kb of SRAM.
+/* The STM32F334C8 has 64Kb of FLASH beginning at address 0x0800:0000,
+ * 12Kb of SRAM and 4Kb of CCM SRAM.
  *
  * When booting from FLASH, FLASH memory is aliased to address 0x0000:0000
  * where the code expects to begin execution by jumping to the entry point in
@@ -48,6 +48,7 @@ MEMORY
 }
 
 OUTPUT_ARCH(arm)
+EXTERN(_vectors)
 ENTRY(_stext)
 SECTIONS
 {
@@ -84,6 +85,12 @@ SECTIONS
 	__exidx_end = ABSOLUTE(.);
 
 	_eronly = ABSOLUTE(.);
+
+	/* The RAM vector table (if present) should lie at the beginning of SRAM */
+
+	.ram_vectors : {
+		*(.ram_vectors)
+	} > sram
 
 	.data : {
 		_sdata = ABSOLUTE(.);

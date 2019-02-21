@@ -84,7 +84,7 @@ struct lp_wqueue_s g_lpwork;
  *   bring up.  This entry point is referenced by OS internally and should
  *   not be accessed by application logic.
  *
- * Input parameters:
+ * Input Parameters:
  *   argc, argv (not used)
  *
  * Returned Value:
@@ -94,7 +94,7 @@ struct lp_wqueue_s g_lpwork;
 
 static int work_lpthread(int argc, char *argv[])
 {
-#if CONFIG_SCHED_LPNTHREADS > 0
+#if CONFIG_SCHED_LPNTHREADS > 1
   int wndx;
   pid_t me = getpid();
   int i;
@@ -117,19 +117,16 @@ static int work_lpthread(int argc, char *argv[])
 
   for (; ; )
     {
-#if CONFIG_SCHED_LPNTHREADS > 0
+#if CONFIG_SCHED_LPNTHREADS > 1
       /* Thread 0 is special.  Only thread 0 performs period garbage collection */
 
       if (wndx > 0)
         {
           /* The other threads will perform work, waiting indefinitely until
            * signalled for the next work availability.
-           *
-           * The special value of zero for the poll period instructs work_process
-           * to wait indefinitely until a signal is received.
            */
 
-          work_process((FAR struct kwork_wqueue_s *)&g_lpwork, 0, wndx);
+          work_process((FAR struct kwork_wqueue_s *)&g_lpwork, wndx);
         }
       else
 #endif
@@ -147,11 +144,11 @@ static int work_lpthread(int argc, char *argv[])
           sched_garbage_collection();
 
           /* Then process queued work.  work_process will not return until:
-           * (1) there is no further work in the work queue, and (2) the polling
-           * period provided by g_lpwork.delay expires.
+           * (1) there is no further work in the work queue, and (2) signal is
+           * triggered, or delayed work expires.
            */
 
-          work_process((FAR struct kwork_wqueue_s *)&g_lpwork, g_lpwork.delay, 0);
+          work_process((FAR struct kwork_wqueue_s *)&g_lpwork, 0);
         }
     }
 
@@ -168,7 +165,7 @@ static int work_lpthread(int argc, char *argv[])
  * Description:
  *   Start the low-priority, kernel-mode worker thread(s)
  *
- * Input parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -182,13 +179,6 @@ int work_lpstart(void)
   pid_t pid;
   int wndx;
 
-  /* Initialize work queue data structures */
-
-  memset(&g_lpwork, 0, sizeof(struct kwork_wqueue_s));
-
-  g_lpwork.delay = CONFIG_SCHED_LPWORKPERIOD / USEC_PER_TICK;
-  dq_init(&g_lpwork.q);
-
   /* Don't permit any of the threads to run until we have fully initialized
    * g_lpwork.
    */
@@ -201,20 +191,17 @@ int work_lpstart(void)
 
   for (wndx = 0; wndx < CONFIG_SCHED_LPNTHREADS; wndx++)
     {
-      pid = kernel_thread(LPWORKNAME, CONFIG_SCHED_LPWORKPRIORITY,
-                          CONFIG_SCHED_LPWORKSTACKSIZE,
-                          (main_t)work_lpthread,
-                          (FAR char * const *)NULL);
+      pid = kthread_create(LPWORKNAME, CONFIG_SCHED_LPWORKPRIORITY,
+                           CONFIG_SCHED_LPWORKSTACKSIZE,
+                           (main_t)work_lpthread,
+                           (FAR char * const *)NULL);
 
       DEBUGASSERT(pid > 0);
       if (pid < 0)
         {
-          int errcode = errno;
-          DEBUGASSERT(errcode > 0);
-
-          serr("ERROR: kernel_thread %d failed: %d\n", wndx, errcode);
+          serr("ERROR: kthread_create %d failed: %d\n", wndx, (int)pid);
           sched_unlock();
-          return -errcode;
+          return (int)pid;
         }
 
       g_lpwork.worker[wndx].pid  = pid;

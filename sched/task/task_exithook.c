@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/task/task_exithook.c
  *
- *   Copyright (C) 2011-2013, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015. 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -98,25 +98,31 @@ static inline void task_atexit(FAR struct tcb_s *tcb)
         {
           if (group->tg_atexitfunc[index])
             {
-              /* Call the atexit function */
-
-              (*group->tg_atexitfunc[index])();
+              atexitfunc_t func;
 
               /* Nullify the atexit function to prevent its reuse. */
 
+              func = group->tg_atexitfunc[index];
               group->tg_atexitfunc[index] = NULL;
+
+              /* Call the atexit function */
+
+              (*func)();
             }
         }
 #else
       if (group->tg_atexitfunc)
         {
-          /* Call the atexit function */
-
-          (*group->tg_atexitfunc)();
+          atexitfunc_t func;
 
           /* Nullify the atexit function to prevent its reuse. */
 
+          func = group->tg_atexitfunc;
           group->tg_atexitfunc = NULL;
+
+          /* Call the atexit function */
+
+          (*func)();
         }
 #endif
     }
@@ -166,25 +172,31 @@ static inline void task_onexit(FAR struct tcb_s *tcb, int status)
         {
           if (group->tg_onexitfunc[index])
             {
-              /* Call the on_exit function */
-
-              (*group->tg_onexitfunc[index])(status, group->tg_onexitarg[index]);
+              onexitfunc_t func;
 
               /* Nullify the on_exit function to prevent its reuse. */
 
+              func = group->tg_onexitfunc[index];
               group->tg_onexitfunc[index] = NULL;
+
+              /* Call the on_exit function */
+
+              (*func)(status, group->tg_onexitarg[index]);
             }
         }
 #else
       if (group->tg_onexitfunc)
         {
-          /* Call the on_exit function */
-
-          (*group->tg_onexitfunc)(status, group->tg_onexitarg);
+          onexitfunc_t func;
 
           /* Nullify the on_exit function to prevent its reuse. */
 
+          func = group->tg_onexitfunc;
           group->tg_onexitfunc = NULL;
+
+          /* Call the on_exit function */
+
+          (*func)(status, group->tg_onexitarg);
         }
 #endif
     }
@@ -215,7 +227,6 @@ static inline void task_exitstatus(FAR struct task_group_s *group, int status)
       /* No.. Find the exit status entry for this task in the parent TCB */
 
       child = group_findchild(group, getpid());
-      DEBUGASSERT(child);
       if (child)
         {
 #ifndef HAVE_GROUP_MEMBERS
@@ -260,7 +271,6 @@ static inline void task_groupexit(FAR struct task_group_s *group)
       /* No.. Find the exit status entry for this task in the parent TCB */
 
       child = group_findchild(group, getpid());
-      DEBUGASSERT(child);
       if (child)
         {
           /* Mark that all members of the child task group has exited */
@@ -284,7 +294,7 @@ static inline void task_groupexit(FAR struct task_group_s *group)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SCHED_HAVE_PARENT
+#if defined(CONFIG_SCHED_HAVE_PARENT) && !defined(CONFIG_DISABLE_SIGNALS)
 #ifdef HAVE_GROUP_MEMBERS
 static inline void task_sigchild(gid_t pgid, FAR struct tcb_s *ctcb, int status)
 {
@@ -405,16 +415,16 @@ static inline void task_sigchild(FAR struct tcb_s *ptcb,
        * can provide the correct si_code value with the signal.
        */
 
-      (void)sig_tcbdispatch(ptcb, &info);
+      (void)nxsig_tcbdispatch(ptcb, &info);
     }
 }
 
 #endif /* HAVE_GROUP_MEMBERS */
-#else /* CONFIG_SCHED_HAVE_PARENT */
+#else /* CONFIG_SCHED_HAVE_PARENT && !CONFIG_DISABLE_SIGNALS */
 
 #  define task_sigchild(x,ctcb,status)
 
-#endif /* CONFIG_SCHED_HAVE_PARENT */
+#endif /* CONFIG_SCHED_HAVE_PARENT && !CONFIG_DISABLE_SIGNALS */
 
 /****************************************************************************
  * Name: task_signalparent
@@ -526,12 +536,14 @@ static inline void task_exitwakeup(FAR struct tcb_s *tcb, int status)
         {
           /* Yes.. Wakeup any tasks waiting for this task to exit */
 
-          group->tg_statloc = NULL;
+          group->tg_statloc   = NULL;
+          group->tg_waitflags = 0;
+
           while (group->tg_exitsem.semcount < 0)
             {
               /* Wake up the thread */
 
-              sem_post(&group->tg_exitsem);
+              nxsem_post(&group->tg_exitsem);
             }
         }
     }
@@ -690,7 +702,7 @@ void task_exithook(FAR struct tcb_s *tcb, int status, bool nonblocking)
 #ifndef CONFIG_DISABLE_SIGNALS
   /* Deallocate anything left in the TCB's queues */
 
-  sig_cleanup(tcb); /* Deallocate Signal lists */
+  nxsig_cleanup(tcb); /* Deallocate Signal lists */
 #endif
 
   /* This function can be re-entered in certain cases.  Set a flag

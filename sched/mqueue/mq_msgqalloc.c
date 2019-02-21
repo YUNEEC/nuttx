@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/mqueue/mq_msgqalloc.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,26 +54,26 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_msgqalloc
+ * Name: nxmq_alloc_msgq
  *
  * Description:
  *   This function implements a part of the POSIX message queue open logic.
  *   It allocates and initializes a struct mqueue_inode_s structure.
  *
- * Parameters:
+ * Input Parameters:
  *   mode   - mode_t value is ignored
  *   attr   - The mq_maxmsg attribute is used at the time that the message
  *            queue is created to determine the maximum number of
  *            messages that may be placed in the message queue.
  *
- * Return Value:
+ * Returned Value:
  *   The allocated and initialized message queue structure or NULL in the
  *   event of a failure.
  *
  ****************************************************************************/
 
-FAR struct mqueue_inode_s *mq_msgqalloc(mode_t mode,
-                                        FAR struct mq_attr *attr)
+FAR struct mqueue_inode_s *nxmq_alloc_msgq(mode_t mode,
+                                           FAR struct mq_attr *attr)
 {
   FAR struct mqueue_inode_s *msgq;
 

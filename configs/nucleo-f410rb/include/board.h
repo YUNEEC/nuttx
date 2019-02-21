@@ -146,7 +146,7 @@
 #define STM32_APB2_TIM11_CLKIN  (STM32_PCLK2_FREQUENCY)
 
 /* Timer Frequencies, if APBx is set to 1, frequency is same to APBx
- * otherwise frequency is 2xAPBx. 
+ * otherwise frequency is 2xAPBx.
  * Note: TIM1,9,11 are on APB2, others on APB1
  */
 /* REVISIT */
@@ -308,40 +308,4 @@
 
 #define BUTTON_USER_BIT    (1 << BUTTON_USER)
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-/************************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void stm32_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __CONFIGS_NUCLEO_F410RB_INCLUDE_BOARD_H */

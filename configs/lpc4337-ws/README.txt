@@ -10,9 +10,6 @@ Contents
 
   - LPC4337-ws development board
   - Status
-  - Development Environment
-  - GNU Toolchain Options
-  - IDEs
   - Code Red IDE/Tools
     Booting the LPCLink
     Using GDB
@@ -20,9 +17,6 @@ Contents
     Command Line Flash Programming
     Executing from SPIFI
     USB DFU Booting
-  - NuttX EABI "buildroot" Toolchain
-  - NuttX OABI "buildroot" Toolchain
-  - NXFLAT Toolchain
   - LED and Pushbuttons
   - Serial Console
   - FPU
@@ -118,140 +112,6 @@ Status
     - The Ethernet block looks to be based on the same IP as the
       STM32 Ethernet and, as a result, it should be possible to leverage
       the STM32 Ethernet driver with a little more effort.
-
-Development Environment
-=======================
-
-  Either Linux or Cygwin on Windows can be used for the development environment.
-  The source has been built only using the GNU toolchain (see below).  Other
-  toolchains will likely cause problems. Testing was performed using the Cygwin
-  environment.
-
-GNU Toolchain Options
-=====================
-
-  The NuttX make system has been modified to support the following different
-  toolchain options.
-
-  1. The Code Red GNU toolchain,
-  2. The CodeSourcery GNU toolchain,
-  3. The Atollic Toolchain,
-  4. The devkitARM GNU toolchain,
-  5. The NuttX buildroot Toolchain (see below).
-
-  All testing has been conducted using the NuttX buildroot toolchain.  However,
-  the make system is setup to default to use the devkitARM toolchain.  To use
-  the CodeSourcery or devkitARM toolchain, you simply need add one of the
-  following configuration options to your .config (or defconfig) file:
-
-    CONFIG_ARMV7M_TOOLCHAIN_CODEREDW=y       : Code Red "RedSuite" under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y  : CodeSourcery under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y  : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y        : The Atollic toolchain under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=y      : devkitARM under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y      : NuttX buildroot under Linux or Cygwin (default)
-
-  You may also have to modify the PATH environment variable if your make cannot
-  find the tools.
-
-  NOTE: the Code Red, CodeSourcery (for Windows), Atollic and devkitARM toolchains
-  are Windows native toolchains.  The CodeSourcery (for Linux) and NuttX buildroot
-  toolchains are Cygwin and/or Linux native toolchains. There are several limitations
-  to using a Windows based toolchain in a Cygwin environment.  The three biggest are:
-
-  1. The Windows toolchain cannot follow Cygwin paths.  Path conversions are
-     performed automatically in the Cygwin makefiles using the 'cygpath' utility
-     but you might easily find some new path problems.  If so, check out 'cygpath -w'
-
-  2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
-     problems for the Windows tools by copying directories instead of linking them.
-     But this can also cause some confusion for you:  For example, you may edit
-     a file in a "linked" directory and find that your changes had no effect.
-     That is because you are building the copy of the file in the "fake" symbolic
-     directory.  If you use a Windows toolchain, you should get in the habit of
-     making like this:
-
-       make clean_context all
-
-     An alias in your .bashrc file might make that less painful.
-
-  The CodeSourcery Toolchain (2009q1)
-  -----------------------------------
-  The CodeSourcery toolchain (2009q1) does not work with default optimization
-  level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
-  -Os.
-
-  The Atollic "Pro" and "Lite" Toolchain
-  --------------------------------------
-  One problem that I had with the Atollic toolchains is that the provide a gcc.exe
-  and g++.exe in the same bin/ file as their ARM binaries.  If the Atollic bin/ path
-  appears in your PATH variable before /usr/bin, then you will get the wrong gcc
-  when you try to build host executables.  This will cause to strange, uninterpretable
-  errors build some host binaries in tools/ when you first make.
-
-  Also, the Atollic toolchains are the only toolchains that have built-in support for
-  the FPU in these configurations.  If you plan to use the Cortex-M4 FPU, you will
-  need to use the Atollic toolchain for now.  See the FPU section below for more
-  information.
-
-  The Atollic "Lite" Toolchain
-  ----------------------------
-  The free, "Lite" version of the Atollic toolchain does not support C++ nor
-  does it support ar, nm, objdump, or objdcopy. If you use the Atollic "Lite"
-  toolchain, you will have to set:
-
-    CONFIG_HAVE_CXX=n
-
-  In order to compile successfully.  Otherwise, you will get errors like:
-
-    "C++ Compiler only available in TrueSTUDIO Professional"
-
-  The make may then fail in some of the post link processing because of some of
-  the other missing tools.  The Make.defs file replaces the ar and nm with
-  the default system x86 tool versions and these seem to work okay.  Disable all
-  of the following to avoid using objcopy:
-
-    CONFIG_RRLOAD_BINARY=n
-    CONFIG_INTELHEX_BINARY=n
-    CONFIG_MOTOROLA_SREC=n
-    CONFIG_RAW_BINARY=n
-
-  devkitARM
-  ---------
-  The devkitARM toolchain includes a version of MSYS make.  Make sure that the
-  the paths to Cygwin's /bin and /usr/bin directories appear BEFORE the devkitARM
-  path or will get the wrong version of make.
-
-IDEs
-====
-
-  NuttX is built using command-line make.  It can be used with an IDE, but some
-  effort will be required to create the project .
-
-  Makefile Build
-  --------------
-  Under Eclipse, it is pretty easy to set up an "empty makefile project" and
-  simply use the NuttX makefile to build the system.  That is almost for free
-  under Linux.  Under Windows, you will need to set up the "Cygwin GCC" empty
-  makefile project in order to work with Windows (Google for "Eclipse Cygwin" -
-  there is a lot of help on the internet).
-
-  Native Build
-  ------------
-  Here are a few tips before you start that effort:
-
-  1) Select the toolchain that you will be using in your .config file
-  2) Start the NuttX build at least one time from the Cygwin command line
-     before trying to create your project.  This is necessary to create
-     certain auto-generated files and directories that will be needed.
-  3) Set up include pathes:  You will need include/, arch/arm/src/lpc43xx,
-     arch/arm/src/common, arch/arm/src/armv7-m, and sched/.
-  4) All assembly files need to have the definition option -D __ASSEMBLY__
-     on the command line.
-
-  Startup files will probably cause you some headaches.  The NuttX startup file
-  is arch/arm/src/common/up_vectors.S.
 
 Code Red IDE/Tools
 ^^^^^^^^^^^^^^^^^^
@@ -446,101 +306,6 @@ Code Red IDE/Tools
 
   To be provided.
 
-NuttX EABI "buildroot" Toolchain
-================================
-
-  A GNU GCC-based toolchain is assumed.  The PATH environment variable should
-  be modified to point to the correct path to the Cortex-M3 GCC toolchain (if
-  different from the default in your PATH variable).
-
-  If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh LPC4337-ws/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-eabi-defconfig-4.6.3 .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     binaries.
-
-  See the file configs/README.txt in the buildroot source tree.  That has more
-  details PLUS some special instructions that you will need to follow if you
-  are building a Cortex-M3 toolchain for Cygwin under Windows.
-
-  NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
-  the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
-  more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
-  See instructions below.
-
-NuttX OABI "buildroot" Toolchain
-================================
-
-  The older, OABI buildroot toolchain is also available.  To use the OABI
-  toolchain:
-
-  1. When building the buildroot toolchain, either (1) modify the cortexm3-eabi-defconfig-4.6.3
-     configuration to use EABI (using 'make menuconfig'), or (2) use an exising OABI
-     configuration such as cortexm3-defconfig-4.3.3
-
-  2. Modify the Make.defs file to use the OABI conventions:
-
-    +CROSSDEV = arm-nuttx-elf-
-    +ARCHCPUFLAGS = -mtune=cortex-m3 -march=armv7-m -mfloat-abi=soft
-    +NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-gotoff.ld -no-check-sections
-    -CROSSDEV = arm-nuttx-eabi-
-    -ARCHCPUFLAGS = -mcpu=cortex-m3 -mthumb -mfloat-abi=soft
-    -NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
-
-NXFLAT Toolchain
-================
-
-  If you are *not* using the NuttX buildroot toolchain and you want to use
-  the NXFLAT tools, then you will still have to build a portion of the buildroot
-  tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX Bitbucket download site
-  (https://bitbucket.org/nuttx/nuttx/downloads/).
-
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh lpcxpresso-lpc1768/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-defconfig-nxflat .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     NXFLAT binaries.
-
 LED and Pushbuttons
 ===================
 
@@ -611,39 +376,31 @@ FPU Configuration Options
 -------------------------
 
 There are two version of the FPU support built into the most NuttX Cortex-M4
-ports.  The current LPC43xx port support only one of these options, the "Non-
-Lazy Floating Point Register Save".  As a consequence, CONFIG_ARMV7M_CMNVECTOR
-must be defined in *all* LPC43xx configuration files.
+ports.
 
-1. Lazy Floating Point Register Save.
+1. Non-Lazy Floating Point Register Save
 
-   This is an untested implementation that saves and restores FPU registers
-   only on context switches.  This means: (1) floating point registers are
-   not stored on each context switch and, hence, possibly better interrupt
+   In this configuration floating point register save and restore is
+   implemented on interrupt entry and return, respectively.  In this
+   case, you may use floating point operations for interrupt handling
+   logic if necessary.  This FPU behavior logic is enabled by default
+   with:
+
+     CONFIG_ARCH_FPU=y
+
+2. Lazy Floating Point Register Save.
+
+   An alternative mplementation only saves and restores FPU registers only
+   on context switches.  This means: (1) floating point registers are not
+   stored on each context switch and, hence, possibly better interrupt
    performance.  But, (2) since floating point registers are not saved,
    you cannot use floating point operations within interrupt handlers.
 
    This logic can be enabled by simply adding the following to your .config
    file:
 
-   CONFIG_ARCH_FPU=y
-
-2. Non-Lazy Floating Point Register Save
-
-   Mike Smith has contributed an extensive re-write of the ARMv7-M exception
-   handling logic. This includes verified support for the FPU.  These changes
-   have not yet been incorporated into the mainline and are still considered
-   experimental.  These FPU logic can be enabled with:
-
-   CONFIG_ARCH_FPU=y
-   CONFIG_ARMV7M_CMNVECTOR=y
-
-   You will probably also changes to the ld.script in if this option is selected.
-   This should work:
-
-   -ENTRY(_stext)
-   +ENTRY(__start)         /* Treat __start as the anchor for dead code stripping */
-   +EXTERN(_vectors)       /* Force the vectors to be included in the output */
+     CONFIG_ARCH_FPU=y
+     CONFIG_ARMV7M_LAZYFPU=y
 
 CFLAGS
 ------
@@ -763,20 +520,13 @@ LPC4337-ws Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
     Individual subsystems can be enabled:
 
       CONFIG_LPC43_ADC0=y
       CONFIG_LPC43_ADC1=y
       CONFIG_LPC43_ATIMER=y
+      CONFIG_LPC43_CAN0=y
       CONFIG_LPC43_CAN1=y
-      CONFIG_LPC43_CAN2=y
       CONFIG_LPC43_DAC=y
       CONFIG_LPC43_EMC=y
       CONFIG_LPC43_ETHERNET=y
@@ -832,34 +582,28 @@ LPC4337-ws Configuration Options
 
     CONFIG_CAN_EXTID - Enables support for the 29-bit extended ID.  Default
       Standard 11-bit IDs.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC43_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC43_CAN2 is defined.
-    CONFIG_CAN1_DIVISOR - CAN1 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN2_DIVISOR - CAN2 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 = the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_LPC43_CAN0_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC43_CAN0
+      is defined.
+    CONFIG_LPC43_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC43_CAN1
+      is defined.
+    CONFIG_LPC43_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 12
+    CONFIG_LPC43_CAN_TSEG2 = the number of CAN time quanta in segment 2.
+      Default: 4
 
   LPC43xx specific PHY/Ethernet device driver settings.  These setting
   also require CONFIG_NET and CONFIG_LPC43_ETHERNET.
 
     CONFIG_ETH0_PHY_KS8721 - Selects Micrel KS8721 PHY
-    CONFIG_PHY_AUTONEG - Enable auto-negotion
-    CONFIG_PHY_SPEED100 - Select 100Mbit vs. 10Mbit speed.
-    CONFIG_PHY_FDUPLEX - Select full (vs. half) duplex
+    CONFIG_LPC43__AUTONEG - Enable auto-negotion
 
-    CONFIG_NET_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
-    CONFIG_NET_NTXDESC - Configured number of Tx descriptors. Default: 18
-    CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
-    CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
+    CONFIG_LPC17_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
+    CONFIG_LPC43_ETH_NTXDESC - Configured number of Tx descriptors. Default: 18
+    CONFIG_LPC43_ETH_NRXDESC - Configured number of Rx descriptors. Default: 18
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
       CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
       Also needs CONFIG_DEBUG_FEATURES.
-    CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
 
   LPC43xx USB Device Configuration
 
@@ -880,32 +624,13 @@ LPC4337-ws Configuration Options
     CONFIG_LPC43_USBDEV_NOLED
       Define if the hardware  implementation does not support the LED output
 
-  LPC43xx USB Host Configuration
-
-    CONFIG_USBHOST_OHCIRAM_SIZE
-      Total size of OHCI RAM (in AHB SRAM Bank 1)
-    CONFIG_USBHOST_NEDS
-      Number of endpoint descriptors
-    CONFIG_USBHOST_NTDS
-      Number of transfer descriptors
-    CONFIG_USBHOST_TDBUFFERS
-      Number of transfer descriptor buffers
-    CONFIG_USBHOST_TDBUFSIZE
-      Size of one transfer descriptor buffer
-    CONFIG_USBHOST_IOBUFSIZE
-      Size of one end-user I/O buffer.  This can be zero if the
-      application can guarantee that all end-user I/O buffers
-      reside in AHB SRAM.
-
 Configurations
 ==============
 
 Each LPC4337-ws configuration is maintained in a sub-directory and can be selected
 as follow:
 
-    cd tools
-    ./configure.sh LPC4337-ws/<subdir>
-    cd -
+    tools/configure.sh LPC4337-ws/<subdir>
 
 Where <subdir> is one of the following:
 

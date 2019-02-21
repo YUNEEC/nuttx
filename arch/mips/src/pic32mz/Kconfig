@@ -8,23 +8,47 @@ comment "PIC32MZ Configuration Options"
 
 choice
 	prompt "PIC32MZ chip selection"
-	default ARCH_CHIP_PIC32MZ460F512L
+	default ARCH_CHIP_PIC32MZ2048ECH
 
 config ARCH_CHIP_PIC32MZ2048ECH
 	bool "PIC32MZ2048ECH"
 	select ARCH_CHIP_PIC32MZEC
 	---help---
-		Microchip PIC32MZ2048ECH (MIPS32 M14K)
+		Microchip PIC32MZ2048ECH (MIPS32 M14K) such as the
+		PIC32MZ2048ECH144-I/PH used with the PIC32MZ EC STARTER KIT
+		DM320006 (no longer available)
 
 config ARCH_CHIP_PIC32MZ2048ECM
 	bool "PIC32MZ2048ECM"
 	select ARCH_CHIP_PIC32MZEC
 	---help---
-		Microchip PIC32MZ2048ECM with Crypto Engine (MIPS32 M14K)
+		Microchip PIC32MZ2048ECM with Crypto Engine (MIPS32 M14K) such as
+		the ARCH_CHIP_PIC32MZ2048ECM144-I/PH used with the PIC32MZ EC
+		STARTER KIT DM320006-C (no longer available)
+
+config ARCH_CHIP_PIC32MZ2048EFH
+	bool "PIC32MZ2048EFH"
+	select ARCH_CHIP_PIC32MZEF
+	---help---
+		Microchip PIC32MZ2048EFH (MIPS32 M14K) such as the
+		PIC32MZ2048EFH144-I/PH used in the PIC32MZ EF STARTER KIT or as the
+		PIC32MZ2048EFH100 used with the Mikroe Flip&Click for PIC32MZ.
+
+config ARCH_CHIP_PIC32MZ2048EFM
+	bool "PIC32MZ2048EFM"
+	select ARCH_CHIP_PIC32MZEF
+	---help---
+		Microchip PIC32MZ2048EFH with Crypto Engine (MIPS32 M14K) such as
+		the PIC32MZ2048EFM144-I/PH used in the PIC32MZ EF STARTER KIT
 
 endchoice
 
 config ARCH_CHIP_PIC32MZEC
+	bool
+	default n
+	select ARCH_MIPS_M14K
+
+config ARCH_CHIP_PIC32MZEF
 	bool
 	default n
 	select ARCH_MIPS_M14K
@@ -34,6 +58,10 @@ config PIC32MZ_MVEC
 	default n
 
 config PIC32MZ_SPI
+	bool
+	default n
+
+config PIC32MZ_I2C
 	bool
 	default n
 
@@ -122,22 +150,27 @@ config PIC32MZ_OC5
 config PIC32MZ_I2C1
 	bool "I2C1"
 	default n
+	select PIC32MZ_I2C
 
 config PIC32MZ_I2C2
 	bool "I2C2"
 	default n
+	select PIC32MZ_I2C
 
 config PIC32MZ_I2C3
 	bool "I2C3"
 	default n
+	select PIC32MZ_I2C
 
 config PIC32MZ_I2C4
 	bool "I2C4"
 	default n
+	select PIC32MZ_I2C
 
 config PIC32MZ_I2C5
 	bool "I2C5"
 	default n
+	select PIC32MZ_I2C
 
 config PIC32MZ_SPI1
 	bool "SPI1"
@@ -340,6 +373,41 @@ config PIC32MZ_SPI_REGDEBUG
 
 endmenu # SPI Driver Configuration
 
+menu "I2C Driver Configuration"
+	depends on PIC32MZ_I2C
+
+config PIC32MZ_I2C_DYNTIMEO
+	bool "Use dynamic timeouts"
+	default n
+	depends on PIC32MZ_I2C
+
+config PIC32MZ_I2C_DYNTIMEO_USECPERBYTE
+	int "Timeout Microseconds per Byte"
+	default 500
+	depends on PIC32MZ_I2C_DYNTIMEO
+
+config PIC32MZ_I2C_DYNTIMEO_STARTSTOP
+	int "Timeout for Idle state (Milliseconds)"
+	default 1000
+	depends on PIC32MZ_I2C_DYNTIMEO
+
+config PIC32MZ_I2CTIMEOSEC
+	int "Timeout seconds"
+	default 0
+	depends on PIC32MZ_I2C
+
+config PIC32MZ_I2CTIMEOMS
+	int "Timeout Milliseconds"
+	default 500
+	depends on PIC32MZ_I2C && !PIC32MZ_I2C_DYNTIMEO
+
+config PIC32MZ_I2CTIMEOTICKS
+	int "Timeout for Idle state (ticks)"
+	default 500
+	depends on PIC32MZ_I2C && !PIC32MZ_I2C_DYNTIMEO
+
+endmenu # I2C Configuration
+
 config PIC32MZ_T1_SOSC
 	bool
 	default n
@@ -348,89 +416,55 @@ config PIC32MZ_T1_SOSC
 menu "PIC32MZ PHY/Ethernet device driver settings"
 	depends on PIC32MZ_ETHERNET
 
-config PHY_AUTONEG
+config PIC32MZ_PHY_AUTONEG
 	bool "Auto-negotiation"
 	default y
 	depends on PIC32MZ_ETHERNET
 	---help---
 		Enable auto-negotiation
 
-config PHY_SPEED100
+config PIC32MZ_PHY_SPEED100
 	bool "100Mbps speed"
 	default n
-	depends on PIC32MZ_ETHERNET && !PHY_AUTONEG
+	depends on PIC32MZ_ETHERNET && !PIC32MZ_PHY_AUTONEG
 	---help---
 		Select 100Mbit vs. 10Mbit speed.
 
-config PHY_FDUPLEX
+config PIC32MZ_PHY_FDUPLEX
 	bool "Full duplex"
 	default n
-	depends on PIC32MZ_ETHERNET && !PHY_AUTONEG
+	depends on PIC32MZ_ETHERNET && !PIC32MZ_PHY_AUTONEG
 	---help---
 		Select full (vs. half) duplex
 
-config NET_NTXDESC
+config PIC32MZ_ETH_NTXDESC
 	int "Number Tx descriptors"
 	default 2
 	depends on PIC32MZ_ETHERNET
 	---help---
 		Configured number of Tx descriptors. Default: 2
 
-config NET_NRXDESC
+config PIC32MZ_ETH_NRXDESC
 	int "Number Rx descriptors"
 	default 4
 	depends on PIC32MZ_ETHERNET
 	---help---
 		Configured number of Rx descriptors. Default: 4
 
-config NET_PRIORITY
+config PIC32MZ_ETH_PRIORITY
 	int ""
 	default 28
 	depends on PIC32MZ_ETHERNET
 	---help---
-		Ethernet interrupt priority.  The is default is the higest priority.
-
-config NET_WOL
-	bool "Wake-up on LAN"
-	default n
-	depends on PIC32MZ_ETHERNET
-	---help---
-		Enable Wake-up on LAN (not fully implemented).
-
-config NET_HASH
-	bool "Hash"
-	default n
-	depends on PIC32MZ_ETHERNET
-	---help---
-		Enable receipt of near-perfect match frames.
+		Ethernet interrupt priority.  The is default is the highest priority.
 
 config PIC32MZ_MULTICAST
 	bool "Multicast"
-	default y if NET_IGMP
+	default y if NET_MCASTGROUP
 	depends on PIC32MZ_ETHERNET
 	---help---
 		Enable receipt of multicast (and unicast) frames. Automatically set if
-		NET_IGMP is selected.
-
-choice
-	prompt "Work queue"
-	default PIC32MZ_ETHERNET_LPWORK if SCHED_LPWORK
-	default PIC32MZ_ETHERNET_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config PIC32MZ_ETHERNET_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config PIC32MZ_ETHERNET_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
+		NET_MCASTGROUP is selected.
 
 config NET_REGDEBUG
 	bool "Register level debug"

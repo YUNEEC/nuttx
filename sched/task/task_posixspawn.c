@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/task/task_posixspawn.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <spawn.h>
 #include <debug.h>
 
+#include <nuttx/sched.h>
 #include <nuttx/kthread.h>
 #include <nuttx/binfmt/binfmt.h>
 #include <nuttx/binfmt/symtab.h>
@@ -68,7 +69,7 @@
  *     child task in the variable pointed to by a non-NULL 'pid' argument.|
  *
  *   path - The 'path' argument identifies the file to execute.  If
- *     CONFIG_BINFMT_EXEPATH is defined, this may be either a relative or
+ *     CONFIG_LIB_ENVPATH is defined, this may be either a relative or
  *     or an absolute path.  Otherwise, it must be an absolute path.
  *
  *   attr - If the value of the 'attr' parameter is NULL, the all default
@@ -256,7 +257,7 @@ static int posix_spawn_proxy(int argc, FAR char *argv[])
  *     directories passed as the environment variable PATH.
  *
  *     NOTE: NuttX provides only one implementation:  If
- *     CONFIG_BINFMT_EXEPATH is defined, then only posix_spawnp() behavior
+ *     CONFIG_LIB_ENVPATH is defined, then only posix_spawnp() behavior
  *     is supported; otherwise, only posix_spawn behavior is supported.
  *
  *   file_actions - If 'file_actions' is a null pointer, then file
@@ -308,8 +309,8 @@ static int posix_spawn_proxy(int argc, FAR char *argv[])
  *
  * Assumptions/Limitations:
  *   - NuttX provides only posix_spawn() or posix_spawnp() behavior
- *     depending upon the setting of CONFIG_BINFMT_EXEPATH: If
- *     CONFIG_BINFMT_EXEPATH is defined, then only posix_spawnp() behavior
+ *     depending upon the setting of CONFIG_LIB_ENVPATH: If
+ *     CONFIG_LIB_ENVPATH is defined, then only posix_spawnp() behavior
  *     is supported; otherwise, only posix_spawn behavior is supported.
  *   - The 'envp' argument is not used and the 'environ' variable is not
  *     altered (NuttX does not support the 'environ' variable).
@@ -326,7 +327,7 @@ static int posix_spawn_proxy(int argc, FAR char *argv[])
  *
  ****************************************************************************/
 
-#ifdef CONFIG_BINFMT_EXEPATH
+#ifdef CONFIG_LIB_ENVPATH
 int posix_spawnp(FAR pid_t *pid, FAR const char *path,
                  FAR const posix_spawn_file_actions_t *file_actions,
                  FAR const posix_spawnattr_t *attr,
@@ -351,7 +352,8 @@ int posix_spawn(FAR pid_t *pid, FAR const char *path,
         pid, path, file_actions, attr, argv);
 
   /* If there are no file actions to be performed and there is no change to
-   * the signal mask, then start the new child task directly from the parent task.
+   * the signal mask, then start the new child task directly from the parent
+   * task.
    */
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -390,14 +392,12 @@ int posix_spawn(FAR pid_t *pid, FAR const char *path,
 
   /* Get the priority of this (parent) task */
 
-  ret = sched_getparam(0, &param);
+  ret = nxsched_getparam(0, &param);
   if (ret < 0)
     {
-      int errcode = get_errno();
-
-      serr("ERROR: sched_getparam failed: %d\n", errcode);
+      serr("ERROR: nxsched_getparam failed: %d\n", ret);
       spawn_semgive(&g_spawn_parmsem);
-      return errcode;
+      return -ret;
     }
 
   /* Disable pre-emption so that the proxy does not run until waitpid
@@ -414,15 +414,14 @@ int posix_spawn(FAR pid_t *pid, FAR const char *path,
    * task.
    */
 
-  proxy = kernel_thread("posix_spawn_proxy", param.sched_priority,
-                        CONFIG_POSIX_SPAWN_PROXY_STACKSIZE,
-                        (main_t)posix_spawn_proxy,
-                        (FAR char * const *)NULL);
+  proxy = kthread_create("posix_spawn_proxy", param.sched_priority,
+                         CONFIG_POSIX_SPAWN_PROXY_STACKSIZE,
+                         (main_t)posix_spawn_proxy,
+                         (FAR char * const *)NULL);
   if (proxy < 0)
     {
-      ret = get_errno();
+      ret = -proxy;
       serr("ERROR: Failed to start posix_spawn_proxy: %d\n", ret);
-
       goto errout_with_lock;
     }
 

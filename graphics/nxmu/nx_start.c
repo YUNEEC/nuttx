@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/nxmu/nx_start.c
  *
- *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <debug.h>
 
 #include <nuttx/board.h>
+#include <nuttx/signal.h>
 #include <nuttx/kthread.h>
 #include <nuttx/nx/nx.h>
 
@@ -78,7 +79,7 @@ static bool g_nxserver_started;
  *
  ****************************************************************************/
 
-int nx_server(int argc, char *argv[])
+static int nx_server(int argc, char *argv[])
 {
   FAR NX_DRIVERTYPE *dev;
   int ret;
@@ -108,7 +109,8 @@ int nx_server(int argc, char *argv[])
   dev = board_lcd_getdev(CONFIG_NXSTART_DEVNO);
   if (!dev)
     {
-      gerr("ERROR: board_lcd_getdev failed, devno=%d\n", CONFIG_NXSTART_DEVNO);
+      gerr("ERROR: board_lcd_getdev failed, devno=%d\n",
+           CONFIG_NXSTART_DEVNO);
       return EXIT_FAILURE;
     }
 
@@ -141,6 +143,8 @@ int nx_server(int argc, char *argv[])
 
   ret = nx_run(dev);
   ginfo("nx_run returned: %d\n", ret);
+  UNUSED(ret);
+
   return EXIT_FAILURE;
 }
 
@@ -154,11 +158,6 @@ int nx_server(int argc, char *argv[])
  * Description:
  *   nx_start() provides a wrapper function to simplify and standardize the
  *   starting of the NX server.
- *
- *   NOTE:  Currently, many applications include logic to start the NX
- *   server from application initialization logic.  That, of course, cannot
- *   work in the NuttX kernel build because the resources required by the
- *   NX server are private to the kernel mode logic.
  *
  *   nx_start() can be called (indirectly) from applications via the
  *   boardctl() interface with the BOARDIOC_NX_START command.
@@ -187,15 +186,13 @@ int nx_start(void)
       /* Start the server kernel thread */
 
       ginfo("Starting server task\n");
-      server = kernel_thread("NX Server", CONFIG_NXSTART_SERVERPRIO,
-                             CONFIG_NXSTART_SERVERSTACK, nx_server, NULL);
+      server = kthread_create("NX Server", CONFIG_NXSTART_SERVERPRIO,
+                              CONFIG_NXSTART_SERVERSTACK, nx_server, NULL);
       if (server < 0)
         {
-          int errcode = errno;
-          DEBUGASSERT(errcode > 0);
-
-          gerr("ERROR: Failed to create nx_server kernel thread: %d\n", errcode);
-          return -errcode;
+          gerr("ERROR: Failed to create nx_server kernel thread: %d\n",
+               (int)server);
+          return (int)server;
         }
 
       g_nxserver_started = true;
@@ -204,7 +201,7 @@ int nx_start(void)
        * this operation cannot be done from the IDLE thread!
        */
 
-      usleep(50*1000);
+      nxsig_usleep(50*1000);
     }
 
   return OK;

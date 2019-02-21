@@ -65,10 +65,10 @@
  *    pthread is (or was) a member of.  The thread may or may not still
  *    be running.
  *
- * Parameters:
+ * Input Parameters:
  *   thread
  *
- * Return Value:
+ * Returned Value:
  *   0 if successful.  Otherwise, an error code.
  *
  * Assumptions:

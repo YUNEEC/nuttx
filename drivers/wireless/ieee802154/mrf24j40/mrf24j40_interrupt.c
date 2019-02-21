@@ -117,7 +117,6 @@ static void mrf24j40_irqwork_txnorm(FAR struct mrf24j40_radio_s *dev)
                   MRF24J40_TXNCON_FPSTAT);
 
   if (dev->txdelayed_busy)
-
     {
       /* Inform the next layer of the transmission success/failure */
 
@@ -148,9 +147,11 @@ static void mrf24j40_irqwork_txnorm(FAR struct mrf24j40_radio_s *dev)
 
       /* Must unlock the radio before calling poll */
 
-      sem_post(&dev->exclsem);
+      nxsem_post(&dev->exclsem);
       mrf24j40_dopoll_csma(dev);
-      while (sem_wait(&dev->exclsem) != 0) { }
+      while (nxsem_wait(&dev->exclsem) < 0)
+        {
+        }
     }
 }
 
@@ -211,6 +212,7 @@ static void mrf24j40_irqwork_txgts(FAR struct mrf24j40_radio_s *dev,
 static void mrf24j40_irqwork_rx(FAR struct mrf24j40_radio_s *dev)
 
 {
+  FAR struct ieee802154_primitive_s *primitive;
   FAR struct ieee802154_data_ind_s *ind;
   uint32_t addr;
   uint32_t index;
@@ -230,12 +232,23 @@ static void mrf24j40_irqwork_rx(FAR struct mrf24j40_radio_s *dev)
 
   /* Allocate a data_ind to put the frame in */
 
-  ind = ieee802154_ind_allocate();
+  primitive = ieee802154_primitive_allocate();
+  ind = (FAR struct ieee802154_data_ind_s *)primitive;
   if (ind == NULL)
     {
       wlerr("ERROR: Unable to allocate data_ind. Discarding frame\n");
       goto done;
     }
+
+  primitive->type = IEEE802154_PRIMITIVE_IND_DATA;
+
+  /* Allocate an IOB to put the frame into */
+
+  ind->frame = iob_alloc(false);
+  ind->frame->io_flink = NULL;
+  ind->frame->io_len = 0;
+  ind->frame->io_pktlen = 0;
+  ind->frame->io_offset = 0;
 
   /* Read packet */
 
@@ -289,7 +302,7 @@ done:
  *   Perform interrupt handling logic outside of the interrupt handler (on
  *   the work queue thread).
  *
- * Parameters:
+ * Input Parameters:
  *   arg     - The reference to the driver structure (cast to void*)
  *
  * Returned Value:
@@ -310,7 +323,9 @@ void mrf24j40_irqworker(FAR void *arg)
 
   /* Get exclusive access to the driver */
 
-  while (sem_wait(&dev->exclsem) != 0) { }
+  while (nxsem_wait(&dev->exclsem) < 0)
+    {
+    }
 
   /* Read and store INTSTAT - this clears the register. */
 
@@ -394,7 +409,7 @@ void mrf24j40_irqworker(FAR void *arg)
 
   /* Unlock the radio device */
 
-  sem_post(&dev->exclsem);
+  nxsem_post(&dev->exclsem);
 
   /* Re-enable GPIO interrupts */
 
@@ -407,7 +422,7 @@ void mrf24j40_irqworker(FAR void *arg)
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *

@@ -59,10 +59,10 @@
  *   Return the current value of the system timer counter as a struct
  *   timespec.  The returned time is the elapsed time since power up.
  *
- * Parameters:
+ * Input Parameters:
  *   ts - Location to return the time
  *
- * Return Value:
+ * Returned Value:
  *   Current version always returns OK
  *
  * Assumptions:
@@ -173,9 +173,9 @@ int clock_systimespec(FAR struct timespec *ts)
       uint64_t secs;
       uint64_t nsecs;
 #else
-      systime_t msecs;
-      systime_t secs;
-      systime_t nsecs;
+      clock_t msecs;
+      clock_t secs;
+      clock_t nsecs;
 #endif
 
       /* Get the time since power-on in seconds and milliseconds */

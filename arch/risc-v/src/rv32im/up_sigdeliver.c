@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/risc-v/src/rv32im/up_sigdeliver.c
  *
- *   Copyright (C) 2011, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  *   Modified for RISC-V:
@@ -61,18 +61,6 @@
 #ifndef CONFIG_DISABLE_SIGNALS
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -103,7 +91,7 @@ void up_sigdeliver(void)
 
   sinfo("rtcb=%p sigdeliver=%p sigpendactionq.head=%p\n",
         rtcb, rtcb->xcp.sigdeliver, rtcb->sigpendactionq.head);
-  ASSERT(rtcb->xcp.sigdeliver != NULL);
+  DEBUGASSERT(rtcb->xcp.sigdeliver != NULL);
 
   /* Save the real return state on the stack. */
 
@@ -119,9 +107,13 @@ void up_sigdeliver(void)
   sigdeliver           = rtcb->xcp.sigdeliver;
   rtcb->xcp.sigdeliver = NULL;
 
-  /* Then restore the task interrupt state */
+#ifndef CONFIG_SUPPRESS_INTERRUPTS
+  /* Then make sure that interrupts are enabled.  Signal handlers must always
+   * run with interrupts enabled.
+   */
 
-  up_irq_restore((irqstate_t)regs[REG_INT_CTX]);
+  up_irq_enable();
+#endif
 
   /* Deliver the signals */
 
@@ -148,7 +140,7 @@ void up_sigdeliver(void)
    * interrupts are disabled.
    */
 
-  PANIC();
+  DEBUGPANIC();
 }
 
 #endif /* !CONFIG_DISABLE_SIGNALS */

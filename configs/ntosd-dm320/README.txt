@@ -166,8 +166,7 @@ NuttX buildroot Toolchain
 
   1. You must have already configured Nuttx in <some-dir>nuttx.
 
-     cd tools
-     ./configure.sh ntosd-dm320/<sub-dir>
+     tools/configure.sh ntosd-dm320/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -240,13 +239,6 @@ ARM/DM320-specific Configuration Options
 
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   DM320 specific device driver settings
 
     CONFIG_UARTn_SERIAL_CONSOLE - selects the UARTn for the
@@ -279,9 +271,7 @@ Common Configuration Notes
   1. Each Neuros OSD configuration is maintained in a sub-directory and
      can be selected as follow:
 
-       cd tools
-       ./configure.sh ntosd-dm320/<subdir>
-       cd -
+       tools/configure.sh ntosd-dm320/<subdir>
 
      Where <subdir> is one of the configuration sub-directories described in
      the following paragraph.
@@ -319,11 +309,6 @@ Configuration Sub-Directories
 
     This configuration exercises the poll()/select() text at
     examples/poll
-
-  thttpd
-
-    This builds the THTTPD web server example using the THTTPD and
-    the examples/thttpd application.
 
   udp
 

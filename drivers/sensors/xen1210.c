@@ -173,14 +173,14 @@ static ssize_t xen1210_read(FAR struct file *filep, FAR char *buffer,
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
       snerr("Failed: Cannot get exclusive access to driver structure!\n");
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   sninfo("X = 0x%06X\n", priv->sample.data_x);
@@ -191,7 +191,7 @@ static ssize_t xen1210_read(FAR struct file *filep, FAR char *buffer,
 
   buffer = (FAR char *) &priv->sample;
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return sizeof(struct xen1210_sample_s);
 }
 
@@ -301,7 +301,7 @@ XEN1210_HANDLE xen1210_instantiate(FAR struct spi_dev_s *dev,
 
   /* Initialize the device state structure */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   priv->config = config;
 
   priv->spi = dev;
@@ -374,12 +374,11 @@ int xen1210_register(XEN1210_HANDLE handle, int minor)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      snerr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      snerr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Register the character driver */
@@ -389,14 +388,14 @@ int xen1210_register(XEN1210_HANDLE handle, int minor)
   if (ret < 0)
     {
       snerr("ERROR: Failed to register driver %s: %d\n", devname, ret);
-      sem_post(&priv->exclsem);
+      nxsem_post(&priv->exclsem);
       return ret;
     }
 
   /* Indicate that the accelerometer was successfully initialized */
 
   priv->status |= XEN1210_STAT_INITIALIZED;  /* Accelerometer is initialized */
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return ret;
 }
 

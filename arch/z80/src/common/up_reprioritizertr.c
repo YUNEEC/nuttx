@@ -47,7 +47,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/sched.h>
 
-#include "chip/chip.h"
+#include "chip.h"
 #include "chip/switch.h"
 #include "sched/sched.h"
 #include "group/group.h"
@@ -71,7 +71,7 @@
  *      the priority of the current, running task and it now has the
  *      priority.
  *
- * Inputs:
+ * Input Parameters:
  *   tcb: The TCB of the task that has been reprioritized
  *   priority: The new task priority
  *
@@ -91,7 +91,7 @@ void up_reprioritize_rtr(FAR struct tcb_s *tcb, uint8_t priority)
 #endif
     )
     {
-       PANIC();
+       DEBUGPANIC();
     }
   else
     {

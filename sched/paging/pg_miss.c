@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/paging/pg_miss.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/sched.h>
 #include <nuttx/page.h>
+#include <nuttx/signal.h>
 
 #ifdef CONFIG_PAGING
 
@@ -141,8 +142,12 @@ void pg_miss(void)
    *   to the next highest priority task.
    * - The blocked task will be marked with state TSTATE_WAIT_PAGEFILL
    *   and will be retained in the g_waitingforfill prioritized task list.
+   *
+   * Need to firstly check that this is not the idle task,descheduling
+   * that isn't going to end well.
    */
 
+  DEBUGASSERT(NULL != ftcb->flink);
   up_block_task(ftcb, TSTATE_WAIT_PAGEFILL);
 
   /* Boost the page fill worker thread priority.
@@ -161,7 +166,7 @@ void pg_miss(void)
 
       pginfo("New worker priority. %d->%d\n",
              wtcb->sched_priority, ftcb->sched_priority);
-      sched_setpriority(wtcb, ftcb->sched_priority);
+      (void)nxsched_setpriority(wtcb, ftcb->sched_priority);
     }
 
   /* Signal the page fill worker thread.
@@ -172,7 +177,7 @@ void pg_miss(void)
   if (!g_pftcb)
     {
       pginfo("Signaling worker. PID: %d\n", g_pgworker);
-      kill(g_pgworker, SIGWORK);
+      (void)nxsig_kill(g_pgworker, SIGWORK);
     }
 }
 

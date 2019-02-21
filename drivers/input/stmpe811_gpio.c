@@ -140,12 +140,11 @@ int stmpe811_gpioconfig(STMPE811_HANDLE handle, uint8_t pinconfig)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Make sure that the pin is not already in use */
@@ -153,7 +152,7 @@ int stmpe811_gpioconfig(STMPE811_HANDLE handle, uint8_t pinconfig)
   if ((priv->inuse & pinmask) != 0)
     {
       ierr("ERROR: PIN%d is already in-use\n", pin);
-      sem_post(&priv->exclsem);
+      nxsem_post(&priv->exclsem);
       return -EBUSY;
     }
 
@@ -173,22 +172,29 @@ int stmpe811_gpioconfig(STMPE811_HANDLE handle, uint8_t pinconfig)
     {
       /* The pin is an output */
 
-      regval  = stmpe811_getreg8(priv, STMPE811_GPIO_DIR);
-      regval &= ~pinmask;
-      stmpe811_putreg8(priv, STMPE811_GPIO_DIR, regval);
+      regval  = stmpe811_getreg8(priv, STMPE811_GPIO_DIR_REG);
+      regval |= pinmask;
+      stmpe811_putreg8(priv, STMPE811_GPIO_DIR_REG, regval);
 
       /* Set its initial output value */
-
-      stmpe811_gpiowrite(handle, pinconfig,
-                        (pinconfig & STMPE811_GPIO_VALUE) != STMPE811_GPIO_ZERO);
+      if ((pinconfig & STMPE811_GPIO_VALUE) != STMPE811_GPIO_ZERO)
+        {
+          /* Set the output valu(s)e by writing to the SET register */
+          stmpe811_putreg8(priv, STMPE811_GPIO_SETPIN, (1 << pin));
+        }
+      else
+        {
+          /* Clear the output value(s) by writing to the CLR register */
+          stmpe811_putreg8(priv, STMPE811_GPIO_CLRPIN, (1 << pin));
+        }
     }
   else
     {
       /* It is an input */
 
-      regval  = stmpe811_getreg8(priv, STMPE811_GPIO_DIR);
-      regval |= pinmask;
-      stmpe811_putreg8(priv, STMPE811_GPIO_DIR, regval);
+      regval  = stmpe811_getreg8(priv, STMPE811_GPIO_DIR_REG);
+      regval &= ~pinmask;
+      stmpe811_putreg8(priv, STMPE811_GPIO_DIR_REG, regval);
 
       /* Set up the falling edge detection */
 
@@ -226,7 +232,7 @@ int stmpe811_gpioconfig(STMPE811_HANDLE handle, uint8_t pinconfig)
   /* Mark the pin as 'in use' */
 
   priv->inuse |= pinmask;
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 
@@ -256,10 +262,10 @@ void stmpe811_gpiowrite(STMPE811_HANDLE handle, uint8_t pinconfig, bool value)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      ierr("ERROR: sem_wait failed: %d\n", errno);
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
       return;
     }
 
@@ -278,7 +284,7 @@ void stmpe811_gpiowrite(STMPE811_HANDLE handle, uint8_t pinconfig, bool value)
       stmpe811_putreg8(priv, STMPE811_GPIO_CLRPIN, (1 << pin));
     }
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
 }
 
 /****************************************************************************
@@ -309,17 +315,16 @@ int stmpe811_gpioread(STMPE811_HANDLE handle, uint8_t pinconfig, bool *value)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   regval  = stmpe811_getreg8(priv, STMPE811_GPIO_MPSTA);
   *value = ((regval & GPIO_PIN(pin)) != 0);
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 
@@ -358,12 +363,11 @@ int stmpe811_gpioattach(STMPE811_HANDLE handle, uint8_t pinconfig,
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Make sure that the GPIO interrupt system has been gpioinitialized */
@@ -392,7 +396,7 @@ int stmpe811_gpioattach(STMPE811_HANDLE handle, uint8_t pinconfig,
 
   stmpe811_putreg8(priv, STMPE811_GPIO_EN, regval);
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 #endif

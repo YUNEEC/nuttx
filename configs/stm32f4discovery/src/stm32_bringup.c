@@ -1,7 +1,7 @@
 /****************************************************************************
  * config/stm32f4discovery/src/stm32_bringup.c
  *
- *   Copyright (C) 2012, 2014-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2014-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,9 +49,8 @@
 #  include <nuttx/usb/usbmonitor.h>
 #endif
 
-#include <nuttx/binfmt/elf.h>
-
 #include "stm32.h"
+#include "stm32_romfs.h"
 
 #ifdef CONFIG_STM32_OTGFS
 #  include "stm32_usbhost.h"
@@ -65,9 +64,13 @@
 #  include <nuttx/leds/userled.h>
 #endif
 
+#ifdef CONFIG_RNDIS
+#  include <nuttx/usb/rndis.h>
+#endif
+
 #include "stm32f4discovery.h"
 
-/* Conditional logic in stm32f4discover.h will determine if certain features
+/* Conditional logic in stm32f4discovery.h will determine if certain features
  * are supported.  Tests for these features need to be made after including
  * stm32f4discovery.h.
  */
@@ -80,6 +83,59 @@
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: stm32_i2c_register
+ *
+ * Description:
+ *   Register one I2C drivers for the I2C tool.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_I2C) && defined(CONFIG_SYSTEM_I2CTOOL)
+static void stm32_i2c_register(int bus)
+{
+  FAR struct i2c_master_s *i2c;
+  int ret;
+
+  i2c = stm32_i2cbus_initialize(bus);
+  if (i2c == NULL)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to get I2C%d interface\n", bus);
+    }
+  else
+    {
+      ret = i2c_register(i2c, bus);
+      if (ret < 0)
+        {
+          syslog(LOG_ERR, "ERROR: Failed to register I2C%d driver: %d\n",
+                 bus, ret);
+          stm32_i2cbus_uninitialize(i2c);
+        }
+    }
+}
+#endif
+
+/****************************************************************************
+ * Name: stm32_i2ctool
+ *
+ * Description:
+ *   Register I2C drivers for the I2C tool.
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_I2C) && defined(CONFIG_SYSTEM_I2CTOOL)
+static void stm32_i2ctool(void)
+{
+  stm32_i2c_register(1);
+#if 0
+  stm32_i2c_register(1);
+  stm32_i2c_register(2);
+#endif
+}
+#else
+#  define stm32_i2ctool()
+#endif
 
 /****************************************************************************
  * Name: stm32_bringup
@@ -102,14 +158,42 @@ int stm32_bringup(void)
 #endif
   int ret = OK;
 
+#if defined(CONFIG_I2C) && defined(CONFIG_SYSTEM_I2CTOOL)
+  stm32_i2ctool();
+#endif
+
+#ifdef CONFIG_SENSORS_BMP180
+  stm32_bmp180initialize("/dev/press0");
+#endif
+
 #ifdef CONFIG_SENSORS_BH1750FVI
-  stm32_bh1750initialize("/dev/light0");
+  ret = stm32_bh1750initialize("/dev/light0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_bh1750initialize() failed: %d\n", ret);
+    }
 #endif
 
 #ifdef CONFIG_SENSORS_ZEROCROSS
   /* Configure the zero-crossing driver */
 
   stm32_zerocross_initialize();
+#endif
+
+#ifdef CONFIG_LEDS_MAX7219
+  ret = stm32_max7219init("/dev/numdisp0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: max7219_leds_register failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_LCD_ST7032
+  ret = stm32_st7032init("/dev/slcd0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: st7032_register failed: %d\n", ret);
+    }
 #endif
 
 #ifdef CONFIG_RGBLED
@@ -128,6 +212,16 @@ int stm32_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_VIDEO_FB
+  /* Initialize and register the framebuffer driver */
+
+  ret = fb_register(0, 0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: fb_register() failed: %d\n", ret);
+    }
+#endif
+
 #ifdef HAVE_SDIO
   /* Initialize the SDIO block driver */
 
@@ -140,8 +234,8 @@ int stm32_bringup(void)
 #endif
 
 #ifdef HAVE_USBHOST
-  /* Initialize USB host operation.  stm32_usbhost_initialize() starts a thread
-   * will monitor for USB connection and disconnection events.
+  /* Initialize USB host operation.  stm32_usbhost_initialize() starts a
+   * thread will monitor for USB connection and disconnection events.
    */
 
   ret = stm32_usbhost_initialize();
@@ -190,6 +284,25 @@ int stm32_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: btn_lower_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_INPUT_NUNCHUCK
+  /* Register the Nunchuck driver */
+
+  ret = nunchuck_initialize("/dev/nunchuck0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: nunchuck_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_SENSORS_MLX90614
+  ret = stm32_mlx90614init("/dev/therm0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize MLX90614, error %d\n", ret);
+      return ret;
     }
 #endif
 
@@ -250,18 +363,10 @@ int stm32_bringup(void)
     }
 #endif
 
-#ifdef HAVE_ELF
-  /* Initialize the ELF binary loader */
-
-  ret = elf_initialize();
-  if (ret < 0)
-    {
-      serr("ERROR: Initialization of the ELF loader failed: %d\n", ret);
-    }
-#endif
-
 #ifdef CONFIG_SENSORS_MAX31855
-  ret = stm32_max31855initialize("/dev/temp0");
+  /* Register device 0 on spi channel 2 */
+
+  ret = stm32_max31855initialize("/dev/temp0", 2, 0);
   if (ret < 0)
     {
       serr("ERROR:  stm32_max31855initialize failed: %d\n", ret);
@@ -287,6 +392,15 @@ int stm32_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_STM32_ROMFS
+  ret = stm32_romfs_initialize();
+  if (ret < 0)
+    {
+      serr("ERROR: Failed to mount romfs at %s: %d\n",
+           STM32_ROMFS_MOUNTPOINT, ret);
+    }
+#endif
+
 #ifdef CONFIG_SENSORS_XEN1210
   ret = xen1210_archinitialize(0);
   if (ret < 0)
@@ -303,6 +417,25 @@ int stm32_bringup(void)
     {
       serr("ERROR: Failed to initialize LIS3DSH driver: %d\n", ret);
     }
+#endif
+
+#ifdef HAVE_HCIUART
+  ret = hciuart_dev_initialize();
+  if (ret < 0)
+    {
+      serr("ERROR: Failed to initialize HCI UART driver: %d\n", ret);
+    }
+#endif
+
+#if defined(CONFIG_RNDIS) && defined(CONFIG_NSH_MACADDR)
+  uint8_t mac[6];
+  mac[0] = 0xa0; /* TODO */
+  mac[1] = (CONFIG_NSH_MACADDR >> (8 * 4)) & 0xff;
+  mac[2] = (CONFIG_NSH_MACADDR >> (8 * 3)) & 0xff;
+  mac[3] = (CONFIG_NSH_MACADDR >> (8 * 2)) & 0xff;
+  mac[4] = (CONFIG_NSH_MACADDR >> (8 * 1)) & 0xff;
+  mac[5] = (CONFIG_NSH_MACADDR >> (8 * 0)) & 0xff;
+  usbdev_rndis_initialize(mac);
 #endif
 
   return ret;

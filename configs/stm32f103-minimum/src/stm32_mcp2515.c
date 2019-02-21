@@ -118,7 +118,7 @@ static struct stm32_mcp2515config_s g_mcp2515config =
  * Private Functions
  ****************************************************************************/
 
-/* This is the MCP2515 Interupt handler */
+/* This is the MCP2515 Interrupt handler */
 
 int mcp2515_interrupt(int irq, FAR void *context, FAR void *arg)
 {
@@ -173,7 +173,7 @@ static int mcp2515_attach(FAR struct mcp2515_config_s *state,
  * Description:
  *   Initialize and register the MCP2515 RFID driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   devpath - The full path to the driver to register. E.g., "/dev/rfid0"
  *
  * Returned Value:

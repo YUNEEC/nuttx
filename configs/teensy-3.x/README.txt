@@ -205,13 +205,6 @@ Teensy-3.1 Configuration settings
 
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibrate
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     To be provided
@@ -224,9 +217,7 @@ Configurations
   Each Teensy-3.x configurations are maintained in sub-directories and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh teensy-3.x/<subdir>
-    cd -
+    tools/configure.sh teensy-3.x/<subdir>
     make oldconfig
 
   Before building, make sure that your PATH environment variable includes

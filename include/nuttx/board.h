@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/board.h
  *
- *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -164,6 +164,28 @@ void board_initialize(void);
 int board_app_initialize(uintptr_t arg);
 
 /****************************************************************************
+ * Name: board_app_finalinitialize
+ *
+ * Description:
+ *   Perform application specific initialization.  This function is never
+ *   called directly from application code, but only indirectly via the
+ *   (non-standard) boardctl() interface using the command
+ *   BOARDIOC_FINALINIT.
+ *
+ * Input Parameters:
+ *   arg - The argument has no meaning.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_BOARDCTL_FINALINIT
+int board_app_finalinitialize(uintptr_t arg);
+#endif
+
+/****************************************************************************
  * Name: board_power_off
  *
  * Description:
@@ -286,73 +308,19 @@ FAR void *board_composite_connect(int port, int configid);
 #endif
 
 /****************************************************************************
- * Name: board_tsc_setup
- *
- * Description:
- *   Each board that supports a touchscreen device must provide this function.
- *   This function is called by application-specific, setup logic to
- *   configure the touchscreen device.  This function will register the driver
- *   as /dev/inputN where N is the minor device number.
- *
- *   This is an internal OS interface but may be invoked indirectly from
- *   application-level touchscreen testing logic (perhaps by
- *   apps/examples/touchscreen).  If CONFIG_LIB_BOARDCTL=y and
- *   CONFIG_BOARDCTL_TSCTEST=y, then this functions will be invoked via the
- *   (non-standard) boardctl() interface using the BOARDIOC_TSCTEST_SETUP
- *   command.
- *
- * Input Parameters:
- *   minor   - The input device minor number
- *
- * Returned Value:
- *   Zero is returned on success.  Otherwise, a negated errno value is
- *   returned to indicate the nature of the failure.
- *
- ****************************************************************************/
-
-int board_tsc_setup(int minor);
-
-/****************************************************************************
- * Name: board_tsc_teardown
- *
- * Description:
- *   Each board that supports a touchscreen device must provide this function.
- *   This function is called by application-specific, setup logic to
- *   uninitialize the touchscreen device.
- *
- *   This is an internal OS interface but may be invoked indirectly from
- *   application-level touchscreen testing logic (perhaps by
- *   apps/examples/touchscreen).  If CONFIG_LIB_BOARDCTL=y and
- *   CONFIG_BOARDCTL_TSCTEST=y, then this functions will be invoked via the
- *   (non-standard) boardctl() interface using the BOARDIOC_TSCTEST_TEARDOWN
- *   command.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-void board_tsc_teardown(void);
-
-/****************************************************************************
  * Name: board_graphics_setup
  *
  * Description:
  *   If the driver for the graphics device on the platform some unusual
  *   initialization, then this board interface should be provided.
  *
- *   This is an internal OS interface but may be invoked indirectly from
- *   application-level graphics logic.  If CONFIG_LIB_BOARDCTL=y and
- *   CONFIG_BOARDCTL_GRAPHICS=y, then this functions will be invoked via the
- *   (non-standard) boardctl() interface using the BOARDIOC_GRAPHICS_SETUP
- *   command.
+ *   This is an internal OS interface. It is invoked by graphics sub-system
+ *   initialization logic (nx_start()) or from the LCD framebuffer driver
+ *   (when the NX server is not used).
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NX_LCDDRIVER
+#if defined(CONFIG_NX_LCDDRIVER) || defined(CONFIG_LCD_FRAMEBUFFER)
 struct lcd_dev_s;
 FAR struct lcd_dev_s *board_graphics_setup(unsigned int devno);
 #else
@@ -390,6 +358,9 @@ int board_ioctl(unsigned int cmd, uintptr_t arg);
  *                            the specified LCD.  This allows support for
  *                            multiple LCD devices.
  *   board_lcd_uninitialize - Uninitialize the LCD support
+ *
+ *  Alternatively, board_graphics_setup() may be used if external graphics
+ *  initialization is configured.
  *
  ****************************************************************************/
 

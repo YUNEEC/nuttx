@@ -53,10 +53,10 @@
  * Description:
  *   Try to take the kernel heap semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   OK on success; a negated errno on failure
  *
  ****************************************************************************/
@@ -72,10 +72,10 @@ int kmm_trysemaphore(void)
  * Description:
  *   Give the kernel heap semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   OK on success; a negated errno on failure
  *
  ****************************************************************************/

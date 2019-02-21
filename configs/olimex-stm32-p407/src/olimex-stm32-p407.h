@@ -61,6 +61,8 @@
 #define HAVE_USBDEV     1
 #define HAVE_USBHOST    1
 #define HAVE_USBMONITOR 1
+#define HAVE_ELF        1
+#define HAVE_MODSYMS    1
 
 /* Can't support MMC/SD features if mountpoints are disabled or if SDIO support
  * is not enabled.
@@ -124,6 +126,22 @@
 #  undef HAVE_USBMONITOR
 #endif
 
+/* ELF */
+
+#if defined(CONFIG_BINFMT_DISABLE) || !defined(CONFIG_ELF)
+#  undef HAVE_ELF
+#endif
+
+/* Module symbol table */
+
+#if !defined(CONFIG_EXAMPLES_MODULE) || defined(CONFIG_BUILD_FLAT)
+#  undef HAVE_MODSYMS
+#endif
+
+#ifdef HAVE_MODSYMS
+#  define MODSYMS_NSYMBOLS_VAR g_mod_nexports
+#  define MODSYMS_SYMTAB_ARRAY g_mod_exports
+#endif
 
 /* Olimex-STM32-P407 GPIOs **************************************************/
 /* LEDs */
@@ -150,6 +168,12 @@
 #define GPIO_BTN_LEFT     (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTG|GPIO_PIN11)
 #define GPIO_BTN_DOWN     (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTG|GPIO_PIN8)
 #define GPIO_BTN_CENTER   (GPIO_INPUT|GPIO_FLOAT|GPIO_EXTI|GPIO_PORTG|GPIO_PIN15)
+
+/* DHTxx pin configuration */
+
+#define GPIO_DHTXX_PIN          (GPIO_PORTG|GPIO_PIN9)
+#define GPIO_DHTXX_PIN_OUTPUT   (GPIO_OUTPUT|GPIO_FLOAT|GPIO_SPEED_100MHz|GPIO_DHTXX_PIN)
+#define GPIO_DHTXX_PIN_INPUT    (GPIO_INPUT|GPIO_FLOAT|GPIO_DHTXX_PIN)
 
 /* USB OTG FS
  *
@@ -269,6 +293,18 @@ int stm32_adc_setup(void);
 
 #ifdef CONFIG_CAN
 int stm32_can_setup(void);
+#endif
+
+/************************************************************************************
+ * Name: stm32_dhtxx_initialize
+ *
+ * Description:
+ *   Called to initialize the DHTxx sensor
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_SENSORS_DHTXX
+int stm32_dhtxx_initialize(FAR const char *devpath);
 #endif
 
 #endif  /* __ASSEMBLY__ */

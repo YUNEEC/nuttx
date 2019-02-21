@@ -74,18 +74,18 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Work queue support is required in this configuration (CONFIG_SCHED_WORKQUEUE)
-#else
-
-  /* Use the low priority work queue if possible */
-
-#  if defined(CONFIG_FTMAC100_HPWORK)
-#    define FTMAWORK HPWORK
-#  elif defined(CONFIG_FTMAC100_LPWORK)
-#    define FTMAWORK LPWORK
-#  else
-#    error Neither CONFIG_FTMAC100_HPWORK nor CONFIG_FTMAC100_LPWORK defined
-#  endif
 #endif
+
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
+
+#define FTMAWORK LPWORK
 
 /* CONFIG_FTMAC100_NINTERFACES determines the number of physical interfaces
  * that will be supported.
@@ -114,7 +114,7 @@
 
 #define ETH_ZLEN 60
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 # define MACCR_ENABLE_ALL (FTMAC100_MACCR_XMT_EN  | \
                            FTMAC100_MACCR_RCV_EN  | \
                            FTMAC100_MACCR_XDMA_EN | \
@@ -188,7 +188,7 @@ struct ftmac100_driver_s
 
 /* A single packet buffer is used */
 
-static uint8_t g_pktbuf[MAX_NET_DEV_MTU + CONFIG_NET_GUARDSIZE];
+static uint8_t g_pktbuf[MAX_NETDEV_PKTSIZE + CONFIG_NET_GUARDSIZE];
 
 /* Driver state structure. */
 
@@ -229,9 +229,9 @@ static int ftmac100_ifdown(FAR struct net_driver_s *dev);
 static void ftmac100_txavail_work(FAR void *arg);
 static int ftmac100_txavail(FAR struct net_driver_s *dev);
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int ftmac100_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int ftmac100_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
 #ifdef CONFIG_NET_ICMPv6
@@ -250,7 +250,7 @@ static void ftmac100_ipv6multicast(FAR struct ftmac100_driver_s *priv);
  *   Start hardware transmission.  Called either from the txdone interrupt
  *   handling or from watchdog based polling.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -343,7 +343,7 @@ static int ftmac100_transmit(FAR struct ftmac100_driver_s *priv)
  *      reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -388,13 +388,16 @@ static int ftmac100_txpoll(struct net_driver_s *dev)
         }
 #endif /* CONFIG_NET_IPv6 */
 
-      /* Send the packet */
+      if (!devif_loopback(&priv->ft_dev))
+        {
+          /* Send the packet */
 
-      ftmac100_transmit(priv);
+          ftmac100_transmit(priv);
 
-      /* Check if there is room in the device to hold another packet. If not,
-       * return a non-zero value to terminate the poll.
-       */
+          /* Check if there is room in the device to hold another packet. If not,
+           * return a non-zero value to terminate the poll.
+           */
+        }
     }
 
   /* If zero is returned, the polling will continue until all connections have
@@ -410,7 +413,7 @@ static int ftmac100_txpoll(struct net_driver_s *dev)
  * Description:
  *   Do the HW reset
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -439,7 +442,7 @@ static void ftmac100_reset(FAR struct ftmac100_driver_s *priv)
  * Description:
  *   Perform HW initialization
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -547,7 +550,7 @@ static void ftmac100_init(FAR struct ftmac100_driver_s *priv)
  * Description:
  *   Read MII registers
  *
- * Parameters:
+ * Input Parameters:
  *   iobase - Pointer to the driver's registers base
  *      reg - MII register number
  *
@@ -588,7 +591,7 @@ static uint32_t ftmac100_mdio_read(FAR struct ftmac100_register_s *iobase, int r
  * Description:
  *   Set the MAC address
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the NuttX driver state structure
  *    mac - Six bytes MAC address
  *
@@ -618,7 +621,7 @@ static void ftmac100_set_mac(FAR struct ftmac100_driver_s *priv,
  * Description:
  *   An interrupt was received indicating the availability of a new RX packet
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -792,7 +795,7 @@ static void ftmac100_receive(FAR struct ftmac100_driver_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -855,7 +858,7 @@ static void ftmac100_txdone(FAR struct ftmac100_driver_s *priv)
  * Description:
  *   Perform interrupt related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() was called.
  *
  * Returned Value:
@@ -959,7 +962,7 @@ out:
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -1014,7 +1017,7 @@ static int ftmac100_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1048,7 +1051,7 @@ static void ftmac100_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1082,7 +1085,7 @@ static void ftmac100_txtimeout_expiry(int argc, uint32_t arg, ...)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1125,7 +1128,7 @@ static void ftmac100_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1153,7 +1156,7 @@ static void ftmac100_poll_expiry(int argc, uint32_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1213,7 +1216,7 @@ static int ftmac100_ifup(struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1259,7 +1262,7 @@ static int ftmac100_ifdown(struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -1300,7 +1303,7 @@ static void ftmac100_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1337,7 +1340,7 @@ static int ftmac100_txavail(struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -1348,7 +1351,7 @@ static int ftmac100_txavail(struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int ftmac100_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct ftmac100_driver_s *priv = (FAR struct ftmac100_driver_s *)dev->d_private;
@@ -1391,7 +1394,7 @@ static int ftmac100_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -1402,7 +1405,7 @@ static int ftmac100_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int ftmac100_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct ftmac100_driver_s *priv = (FAR struct ftmac100_driver_s *)dev->d_private;
@@ -1435,7 +1438,7 @@ static int ftmac100_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Configure the IPv6 multicast MAC address.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -1512,7 +1515,7 @@ static void ftmac100_ipv6multicast(FAR struct ftmac100_driver_s *priv)
  * Description:
  *   Initialize the Ethernet controller and driver
  *
- * Parameters:
+ * Input Parameters:
  *   intf - In the case where there are multiple EMACs, this value
  *          identifies which EMAC is to be initialized.
  *
@@ -1548,13 +1551,13 @@ int ftmac100_initialize(int intf)
   priv->ft_dev.d_ifup    = ftmac100_ifup;     /* I/F up (new IP address) callback */
   priv->ft_dev.d_ifdown  = ftmac100_ifdown;   /* I/F down callback */
   priv->ft_dev.d_txavail = ftmac100_txavail;  /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   priv->ft_dev.d_addmac  = ftmac100_addmac;   /* Add multicast MAC address */
   priv->ft_dev.d_rmmac   = ftmac100_rmmac;    /* Remove multicast MAC address */
 #endif
   priv->ft_dev.d_private = (FAR void *)g_ftmac100; /* Used to recover private state from dev */
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmissions */
 
   priv->ft_txpoll       = wd_create();        /* Create periodic poll timer */
   priv->ft_txtimeout    = wd_create();        /* Create TX timeout timer */

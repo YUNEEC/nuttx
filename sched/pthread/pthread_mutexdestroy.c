@@ -60,10 +60,10 @@
  * Description:
  *   Destroy a mutex.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -112,7 +112,7 @@ int pthread_mutex_destroy(FAR pthread_mutex_t *mutex)
                * destruction of the semaphore impossible here.
                */
 
-              status = sem_reset((FAR sem_t *)&mutex->sem, 1);
+              status = nxsem_reset((FAR sem_t *)&mutex->sem, 1);
               if (status < 0)
                 {
                   ret = -status;
@@ -133,8 +133,8 @@ int pthread_mutex_destroy(FAR pthread_mutex_t *mutex)
 
               else
                 {
-                  status = sem_destroy((FAR sem_t *)&mutex->sem);
-                  ret = (status != OK) ? get_errno() : OK;
+                  status = nxsem_destroy((FAR sem_t *)&mutex->sem);
+                  ret = (status < 0) ? -status : OK;
                 }
             }
           else
@@ -147,11 +147,11 @@ int pthread_mutex_destroy(FAR pthread_mutex_t *mutex)
           /* Destroy the semaphore
            *
            * REVISIT:  What if there are threads waiting on the semaphore?
-           * Perhaps this logic should all sem_reset() first?
+           * Perhaps this logic should all nxsem_reset() first?
            */
 
-          status = sem_destroy((FAR sem_t *)&mutex->sem);
-          ret = ((status != OK) ? get_errno() : OK);
+          status = nxsem_destroy((FAR sem_t *)&mutex->sem);
+          ret = ((status < 0) ? -status : OK);
         }
 
       sched_unlock();

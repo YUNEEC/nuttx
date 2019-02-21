@@ -150,8 +150,7 @@ NuttX buildroot Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh ea3131/<sub-dir>
+     tools/configure.sh ea3131/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -206,8 +205,7 @@ Image Format
   Then, to build the NuttX binary ready to load with the bootloader, just
   following these steps:
 
-  - cd tools/                     # Configure Nuttx
-  - ./configure.sh ea3131/nsh     # (using the nsh configuration for this example)
+  - tools/configure.sh ea3131/nsh # (using the nsh configuration for this example)
   - cd ..                         # Set up environment
   - make                          # Make NuttX.  This will produce nuttx.bin
   - mklpc.sh                      # Make the bootloader binary (nuttx.lpc)
@@ -536,15 +534,11 @@ ARM/EA3131-specific Configuration Options
 
     CONFIG_ARCH_BUTTONS -  Enable support for buttons. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
     CONFIG_ARCH_DMA - Support DMA initialization
+
     CONFIG_ARCH_LOWVECTORS - define if vectors reside at address 0x0000:00000
       Undefine if vectors reside at address 0xffff:0000
+
     CONFIG_ARCH_ROMPGTABLE - A pre-initialized, read-only page table is available.
       If defined, then board-specific logic must also define PGTABLE_BASE_PADDR,
       PGTABLE_BASE_VADDR, and all memory section mapping in a file named
@@ -597,9 +591,7 @@ Common Configuration Notes
   1. Each EA3131 configuration is maintained in a sub-directory and
      can be selected as follow:
 
-       cd tools
-       ./configure.sh ea3131/<subdir>
-       cd -
+       tools/configure.sh ea3131/<subdir>
 
      Where <subdir> is one of the configuration sub-directories described in
      the following paragraph.

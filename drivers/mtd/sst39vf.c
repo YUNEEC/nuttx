@@ -50,6 +50,7 @@
 
 #include <nuttx/clock.h>
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/mtd/mtd.h>
 
@@ -204,7 +205,8 @@ static struct sst39vf_dev_s g_sst39vf =
 #ifdef CONFIG_MTD_BYTE_WRITE
     NULL,                   /* write method */
 #endif
-    sst39vf_ioctl           /* ioctl method */
+    sst39vf_ioctl,          /* ioctl method */
+    "sst39vf",
   },
   NULL                      /* Chip */
 };
@@ -417,8 +419,8 @@ static int sst39vf_chiperase(FAR struct sst39vf_dev_s *priv)
 {
 #if 0
   struct sst39vf_wrinfo_s wrinfo;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
 #endif
 
   /* Send the sequence to erase the chip */
@@ -454,12 +456,12 @@ static int sst39vf_chiperase(FAR struct sst39vf_dev_s *priv)
 
       /* No, wait one system clock tick */
 
-      usleep(USEC_PER_TICK);
+      nxsig_usleep(USEC_PER_TICK);
     }
 #else
   /* Delay the maximum amount of time for the chip erase to complete. */
 
-  usleep(SST39VF_TSCE_MSEC * USEC_PER_MSEC);
+  nxsig_usleep(SST39VF_TSCE_MSEC * USEC_PER_MSEC);
 #endif
 
   return OK;
@@ -488,8 +490,8 @@ static int sst39vf_sectorerase(FAR struct sst39vf_dev_s *priv,
 {
   struct sst39vf_wrinfo_s wrinfo;
 #if 0
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
 #endif
 
   /* Set up the sector address */
@@ -530,12 +532,12 @@ static int sst39vf_sectorerase(FAR struct sst39vf_dev_s *priv,
 
       /* No, wait one system clock tick */
 
-      usleep(USEC_PER_TICK);
+      nxsig_usleep(USEC_PER_TICK);
     }
 #else
   /* Delay the maximum amount of time for the sector erase to complete. */
 
-  usleep(SST39VF_TSE_MSEC * USEC_PER_MSEC);
+  nxsig_usleep(SST39VF_TSE_MSEC * USEC_PER_MSEC);
 #endif
 
   return OK;
@@ -843,12 +845,6 @@ FAR struct mtd_dev_s *sst39vf_initialize(void)
       ferr("ERROR: Unrecognized chip ID: %04x\n", chipid);
       return NULL;
     }
-
-  /* Register the MTD with the procfs system if enabled */
-
-#ifdef CONFIG_MTD_REGISTRATION
-  mtd_register(&priv->mtd, "sst39vf");
-#endif
 
   /* Return the state structure as the MTD device */
 

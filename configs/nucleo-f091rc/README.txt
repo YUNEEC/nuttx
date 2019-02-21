@@ -195,9 +195,7 @@ Configurations
   Each configuration is maintained in a sub-directory and can be
   selected as follow:
 
-    cd tools
-    ./configure.sh nucleo-f091rc/<subdir>
-    cd -
+    tools/configure.sh nucleo-f091rc/<subdir>
 
   Before building, make sure the PATH environment variable includes the
   correct path to the directory than holds your toolchain binaries.
@@ -313,6 +311,6 @@ Configurations
 
          CONFIG_HAVE_CXX=y
          CONFIG_HAVE_CXXINITIALIZE=y
-         CONFIG_EXAMPLES_NSH_CXXINITIALIZE=y
+         CONFIG_SYSTEM_NSH_CXXINITIALIZE=y
 
        And also support for C++ constructors under apps/platform.

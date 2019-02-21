@@ -53,6 +53,10 @@
  ****************************************************************************/
 /* Configuration ************************************************************/
 
+#ifndef CONFIG_MODLIB_MAXDEPEND
+#  define CONFIG_MODLIB_MAXDEPEND  0
+#endif
+
 #ifndef CONFIG_MODLIB_ALIGN_LOG2
 #  define CONFIG_MODLIB_ALIGN_LOG2 2
 #endif
@@ -218,8 +222,6 @@ struct mod_loadinfo_s
  ****************************************************************************/
 
 struct symtab_s;
-FAR const struct symtab_s *g_modlib_symtab;
-FAR int g_modlib_nsymbols;
 
 /****************************************************************************
  * Public Function Prototypes

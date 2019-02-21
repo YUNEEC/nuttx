@@ -38,7 +38,6 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && defined(CONFIG_NET_LOCAL)
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -48,7 +47,11 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/fs/fs.h>
+
 #include "local/local.h"
+
+#if defined(CONFIG_NET) && defined(CONFIG_NET_LOCAL)
 
 /****************************************************************************
  * Public Functions
@@ -60,13 +63,13 @@
  * Description:
  *   Read a data from the read-only FIFO.
  *
- * Parameters:
- *   fd  - File descriptor of read-only FIFO.
- *   buf - Local to store the received data
- *   len - Length of data to receive [in]
- *         Length of data actually received [out]
+ * Input Parameters:
+ *   filep - File structure of write-only FIFO.
+ *   buf   - Local to store the received data
+ *   len   - Length of data to receive [in]
+ *           Length of data actually received [out]
  *
- * Return:
+ * Returned Value:
  *   Zero is returned on success; a negated errno value is returned on any
  *   failure.  If -ECONNRESET is received, then the sending side has closed
  *   the FIFO. In this case, the returned data may still be valid (if the
@@ -74,7 +77,7 @@
  *
  ****************************************************************************/
 
-int local_fifo_read(int fd, FAR uint8_t *buf, size_t *len)
+int local_fifo_read(FAR struct file *filep, FAR uint8_t *buf, size_t *len)
 {
   ssize_t remaining;
   ssize_t nread;
@@ -85,16 +88,13 @@ int local_fifo_read(int fd, FAR uint8_t *buf, size_t *len)
   remaining = *len;
   while (remaining > 0)
     {
-      nread = read(fd, buf, remaining);
+      nread = file_read(filep, buf, remaining);
       if (nread < 0)
         {
-          int errcode = get_errno();
-          DEBUGASSERT(errcode > 0);
-
-          if (errcode != EINTR)
+          if (nread != -EINTR)
             {
-              nerr("ERROR: Read failed: %d\n", errcode);
-              ret = -errcode;
+              ret = (int)nread;
+              nerr("ERROR: nx_read() failed: %d\n", ret);
               goto errout;
             }
 
@@ -130,16 +130,16 @@ errout:
  * Description:
  *   Read a sync bytes until the start of the packet is found.
  *
- * Parameters:
- *   fd - File descriptor of read-only FIFO.
+ * Input Parameters:
+ *   filep - File structure of write-only FIFO.
  *
- * Return:
+ * Returned Value:
  *   The non-zero size of the following packet is returned on success; a
  *   negated errno value is returned on any failure.
  *
  ****************************************************************************/
 
-int local_sync(int fd)
+int local_sync(FAR struct file *filep)
 {
   size_t readlen;
   uint16_t pktlen;
@@ -157,7 +157,7 @@ int local_sync(int fd)
       do
         {
           readlen = sizeof(uint8_t);
-          ret     = local_fifo_read(fd, &sync, &readlen);
+          ret     = local_fifo_read(filep, &sync, &readlen);
           if (ret < 0)
             {
               nerr("ERROR: Failed to read sync bytes: %d\n", ret);
@@ -171,7 +171,7 @@ int local_sync(int fd)
       do
         {
           readlen = sizeof(uint8_t);
-          ret     = local_fifo_read(fd, &sync, &readlen);
+          ret     = local_fifo_read(filep, &sync, &readlen);
           if (ret < 0)
             {
               nerr("ERROR: Failed to read sync bytes: %d\n", ret);
@@ -185,7 +185,7 @@ int local_sync(int fd)
   /* Then read the packet length */
 
   readlen = sizeof(uint16_t);
-  ret     = local_fifo_read(fd, (FAR uint8_t *)&pktlen, &readlen);
+  ret     = local_fifo_read(filep, (FAR uint8_t *)&pktlen, &readlen);
   return ret < 0 ? ret : pktlen;
 }
 
@@ -195,13 +195,13 @@ int local_sync(int fd)
  * Description:
  *   Return the Unix domain address of a connection.
  *
- * Parameters:
+ * Input Parameters:
  *   conn - The connection
  *   addr - The location to return the address
  *   addrlen - The size of the memory allocated by the caller to receive the
  *             address.
  *
- * Return:
+ * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure.
  *
  ****************************************************************************/

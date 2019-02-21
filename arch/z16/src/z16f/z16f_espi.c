@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z16/src/z16f/z16f_espi.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -368,27 +368,32 @@ static void spi_flush(FAR struct z16f_spi_s *priv)
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct z16f_spi_s *priv = (FAR struct z16f_spi_s *)dev;
+  int ret;
 
   spiinfo("lock=%d\n", lock);
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+          ret = nxsem_wait(&priv->exclsem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -783,7 +788,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer,
  * Description:
  *   Initialize the selected SPI port
  *
- * Input Parameter:
+ * Input Parameters:
  *   port - Identifies the "logical" SPI port.  Must be zero in this case.
  *
  * Returned Value:
@@ -809,7 +814,7 @@ FAR struct spi_dev_s *z16_spibus_initialize(int port)
 
       flags = enter_critical_section();
       priv->spi.ops = &g_epsiops;
-      sem_init(&priv->exclsem, 0, 1);
+      nxsem_init(&priv->exclsem, 0, 1);
 
       /* Set up the SPI pin configuration (board-specific logic is required to
        * configure and manage all chip selects).

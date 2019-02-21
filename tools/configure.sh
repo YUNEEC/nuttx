@@ -1,7 +1,8 @@
 #!/bin/bash
-# configure.sh
+# tools/configure.sh
 #
-#   Copyright (C) 2007, 2008, 2011, 2015, 2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007, 2008, 2011, 2015, 2017-2018 Gregory Nutt. All rights
+#     reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,14 +37,17 @@ WD=`test -d ${0%/*} && cd ${0%/*}; pwd`
 TOPDIR="${WD}/.."
 USAGE="
 
-USAGE: ${0} [-d] [-l|c|u|n] [-a <app-dir>] <board-name>/<config-name>
+USAGE: ${0} [-d] [-l|m|c|u|g|n] [-a <app-dir>] <board-name>/<config-name>
 
 Where:
-  -l selects the Linux (l) host environment.  The [-c|u|n] options
-     select one of the Windows environments.  Default:  Use host setup
-     in the defconfig file
-  [-c|u|n] selects the Windows host and a Windows environment:  Cygwin (c),
-     Ubuntu under Windows 10 (u), or Windows native (n).  Default Cygwin
+  -l selects the Linux (l) host environment.
+  -m selects the macOS (m) host environment.
+  -c selects the Windows host and Cygwin (c) environment.
+  -u selects the Windows host and Ubuntu under Windows 10 (u) environment.
+  -g selects the Windows host and MinGW/MSYS environment.
+  -n selects the Windows host and Windows native (n) environment.
+  Default: Use host setup in the defconfig file
+  Default Windows: Cygwin
   <board-name> is the name of the board in the configs directory
   <config-name> is the name of the board configuration sub-directory
   <app-dir> is the path to the apps/ directory, relative to the nuttx
@@ -79,12 +83,19 @@ while [ ! -z "$1" ]; do
     -d )
       set -x
       ;;
+    -g )
+      host=windows
+      wenv=msys
+      ;;
     -h )
       echo "$USAGE"
       exit 0
       ;;
     -l )
       host=linux
+      ;;
+    -m )
+      host=macos
       ;;
     -n )
       host=windows
@@ -169,10 +180,27 @@ fi
 # (2) The CONFIG_APPS_DIR setting to see if there is a configured location for the
 #     application directory.  This can be overridden from the command line.
 
-winnative=`grep CONFIG_WINDOWS_NATIVE= "${src_config}" | cut -d'=' -f2`
+# If we are going to some host other then windows native or to a windows
+# native host, then don't even check what is in the defconfig file.
+
+oldnative=`grep CONFIG_WINDOWS_NATIVE= "${src_config}" | cut -d'=' -f2`
+if [ "X$host" != "Xwindows" -o "X$wenv" != "Xnative" ]; then
+  unset winnative
+else
+  if [ "X$host" == "Xwindows" -a "X$wenv" == "Xnative" ]; then
+    winnative=y
+  else
+    winnative=$oldnative
+  fi
+fi
+
+# If no application directory was provided on the command line and we are
+# switching between a windows native host and some other host then ignore the
+# path to the apps/ directory in the defconfig file.  It will most certainly
+# not be in a usable form.
 
 defappdir=y
-if [ -z "${appdir}" ]; then
+if [ -z "${appdir}" -a "X$oldnative" = "$winnative" ]; then
   quoted=`grep "^CONFIG_APPS_DIR=" "${src_config}" | cut -d'=' -f2`
   if [ ! -z "${quoted}" ]; then
     appdir=`echo ${quoted} | sed -e "s/\"//g"`
@@ -207,7 +235,7 @@ fi
 # For checking the apps dir path, we need a POSIX version of the relative path.
 
 posappdir=`echo "${appdir}" | sed -e 's/\\\\/\\//g'`
-winappdir=`echo "${appdir}" | sed -e 's/\\//\\\\/g'`
+winappdir=`echo "${appdir}" | sed -e 's/\\//\\\\\\\/g'`
 
 # If appsdir was provided (or discovered) then make sure that the apps/
 # directory exists
@@ -249,49 +277,58 @@ if [ "X${defappdir}" = "Xy" ]; then
 fi
 
 if [ ! -z "$host" ]; then
-  sed -i -e "/CONFIG_HOST_OSX/d" ${dest_config}
+  sed -i -e "/CONFIG_HOST_LINUX/d" ${dest_config}
+  sed -i -e "/CONFIG_HOST_WINDOWS/d" ${dest_config}
+  sed -i -e "/CONFIG_HOST_MACOS/d" ${dest_config}
   sed -i -e "/CONFIG_HOST_OTHER/d" ${dest_config}
+  sed -i -e "/CONFIG_WINDOWS_NATIVE/d" ${dest_config}
+  sed -i -e "/CONFIG_WINDOWS_CYGWIN/d" ${dest_config}
+  sed -i -e "/CONFIG_WINDOWS_MSYS/d" ${dest_config}
+  sed -i -e "/CONFIG_WINDOWS_UBUNTU/d" ${dest_config}
+  sed -i -e "/CONFIG_WINDOWS_OTHER/d" ${dest_config}
+  sed -i -e "/CONFIG_SIM_X8664_MICROSOFT/d" ${dest_config}
+  sed -i -e "/CONFIG_SIM_X8664_SYSTEMV/d" ${dest_config}
+  sed -i -e "/CONFIG_SIM_M32/d" ${dest_config}
 
-  if [ "$host" == "linux" ]; then
-    echo "  Select CONFIG_HOST_LINUX=y"
+  case "$host" in
+    "linux")
+      echo "  Select CONFIG_HOST_LINUX=y"
+      echo "CONFIG_HOST_LINUX=y" >> "${dest_config}"
+      echo "CONFIG_SIM_X8664_SYSTEMV=y" >> "${dest_config}"
+      ;;
 
-    sed -i -e "/CONFIG_HOST_WINDOWS/d" ${dest_config}
-    sed -i -e "/CONFIG_SIM_X8664_MICROSOFT/d" ${dest_config}
-    sed -i -e "/CONFIG_SIM_M32/d" ${dest_config}
-    echo "CONFIG_HOST_LINUX=y" >> "${dest_config}"
-    echo "CONFIG_SIM_X8664_SYSTEMV=y" >> "${dest_config}"
+    "macos")
+      echo "  Select CONFIG_HOST_MACOS=y"
+      echo "CONFIG_HOST_MACOS=y" >> "${dest_config}"
+      ;;
 
-else
-    echo "  Select CONFIG_HOST_WINDOWS=y"
+    "windows")
+      echo "  Select CONFIG_HOST_WINDOWS=y"
+      echo "CONFIG_HOST_WINDOWS=y" >> "${dest_config}"
+      echo "CONFIG_SIM_X8664_MICROSOFT=y" >> "${dest_config}"
 
-    sed -i -e "/CONFIG_HOST_LINUX/d" ${dest_config}
-    sed -i -e "/CONFIG_WINDOWS_MSYS/d" ${dest_config}
-    sed -i -e "/CONFIG_WINDOWS_OTHER/d" ${dest_config}
-    sed -i -e "/CONFIG_SIM_X8664_SYSTEMV/d" ${dest_config}
-    echo "CONFIG_HOST_WINDOWS=y" >> "${dest_config}"
-    echo "CONFIG_SIM_X8664_MICROSOFT=y" >> "${dest_config}"
+      case "$wenv" in
+          "cygwin")
+            echo "  Select CONFIG_WINDOWS_CYGWIN=y"
+            echo "CONFIG_WINDOWS_CYGWIN=y" >> "${dest_config}"
+            ;;
 
-    if [ "X$wenv" == "Xcygwin" ]; then
-      echo "  Select CONFIG_WINDOWS_CYGWIN=y"
+          "msys")
+            echo "  Select CONFIG_WINDOWS_MSYS=y"
+            echo "CONFIG_WINDOWS_MSYS=y" >> "${dest_config}"
+            ;;
 
-      sed -i -e "/CONFIG_WINDOWS_UBUNTU/d" ${dest_config}
-      sed -i -e "/CONFIG_WINDOWS_NATIVE/d" ${dest_config}
-      echo "CONFIG_WINDOWS_CYGWIN=y" >> "${dest_config}"
-    else
-      sed -i -e "/CONFIG_WINDOWS_CYGWIN/d" ${dest_config}
-      if [ "X$wenv" == "Xubuntu" ]; then
-        echo "  Select CONFIG_WINDOWS_UBUNTU=y"
+          "ubuntu")
+            echo "  Select CONFIG_WINDOWS_UBUNTU=y"
+            echo "CONFIG_WINDOWS_UBUNTU=y" >> "${dest_config}"
+            ;;
 
-        sed -i -e "/CONFIG_WINDOWS_UBUNTU/d" ${dest_config}
-        echo "CONFIG_WINDOWS_UBUNTU=y" >> "${dest_config}"
-      else
-        echo "  Select CONFIG_WINDOWS_NATIVE=y"
-
-        sed -i -e "/CONFIG_WINDOWS_NATIVE/d" ${dest_config}
-        echo "CONFIG_WINDOWS_NATIVE=y" >> "${dest_config}"
-      fi
-    fi
-  fi
+          *)
+            echo "  Select CONFIG_WINDOWS_NATIVE=y"
+            echo "CONFIG_WINDOWS_NATIVE=y" >> "${dest_config}"
+            ;;
+      esac
+  esac
 fi
 
 # The saved defconfig files are all in compressed format and must be
@@ -299,4 +336,11 @@ fi
 
 echo "  Refreshing..."
 cd ${TOPDIR} || { echo "Failed to cd to ${TOPDIR}"; exit 1; }
-make olddefconfig 1>/dev/null 2>&1
+
+MAKE_BIN=make
+if [ ! -z `which gmake 2>/dev/null` ]; then
+  MAKE_BIN=gmake
+fi
+
+${MAKE_BIN} olddefconfig 1>/dev/null
+

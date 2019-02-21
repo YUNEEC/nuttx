@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/lc823450-xgevk/src/lc823450_appinit.c
  *
- *   Copyright (C) 2017 Sony Corporation. All rights reserved.
+ *   Copyright 2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -177,6 +177,8 @@ int board_app_initialize(uintptr_t arg)
 #endif /* CONFIG_LC823450_SDIF_SDC */
 
 #endif /* CONFIG_LC823450_MTD */
+
+  UNUSED(ret); /* May not be used */
 
 #ifndef CONFIG_BOARD_INITIALIZE
   /* Perform board initialization */

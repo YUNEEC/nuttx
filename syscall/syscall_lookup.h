@@ -1,7 +1,7 @@
 /****************************************************************************
  * syscall/syscall_lookup.h
  *
- *   Copyright (C) 2011, 2013-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -130,13 +130,18 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
  * programs from a file system.
  */
 
-#if !defined(CONFIG_BINFMT_DISABLE) && defined(CONFIG_LIBC_EXECFUNCS)
-#  ifdef CONFIG_BINFMT_EXEPATH
+#ifndef CONFIG_BINFMT_DISABLE
+#ifndef CONFIG_BUILD_KERNEL
+  SYSCALL_LOOKUP(exec,                     4, STUB_exec)
+#endif
+#ifdef CONFIG_LIBC_EXECFUNCS
+#ifdef CONFIG_LIB_ENVPATH
   SYSCALL_LOOKUP(posix_spawnp,             6, STUB_posix_spawnp)
-#  else
+#else
   SYSCALL_LOOKUP(posix_spawn,              6, STUB_posix_spawn)
-#  endif
+#endif
   SYSCALL_LOOKUP(execv,                    2, STUB_execv)
+#endif
 #endif
 
 /* The following are only defined is signals are supported in the NuttX
@@ -152,14 +157,14 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
   SYSCALL_LOOKUP(sigsuspend,               1, STUB_sigsuspend)
   SYSCALL_LOOKUP(sigtimedwait,             3, STUB_sigtimedwait)
   SYSCALL_LOOKUP(sigwaitinfo,              2, STUB_sigwaitinfo)
-  SYSCALL_LOOKUP(nanosleep,                2, STUB_nanosleep)
+  SYSCALL_LOOKUP(clock_nanosleep,          4, STUB_clock_nanosleep)
 #endif
 
 /* The following are only defined if the system clock is enabled in the
  * NuttX configuration.
  */
 
-  SYSCALL_LOOKUP(syscall_clock_systimer,   0, STUB_clock_systimer)
+  SYSCALL_LOOKUP(syscall_clock,            0, STUB_clock)
   SYSCALL_LOOKUP(clock_getres,             2, STUB_clock_getres)
   SYSCALL_LOOKUP(clock_gettime,            2, STUB_clock_gettime)
   SYSCALL_LOOKUP(clock_settime,            2, STUB_clock_settime)
@@ -179,7 +184,7 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
 
 /* System logging */
 
-  SYSCALL_LOOKUP(_vsyslog,                 3, STUB__vsyslog)
+  SYSCALL_LOOKUP(nx_vsyslog,               3, STUB_nx_vsyslog)
 
 /* The following are defined if either file or socket descriptor are
  * enabled.
@@ -205,6 +210,15 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
 #  ifndef CONFIG_DISABLE_POLL
   SYSCALL_LOOKUP(poll,                     3, STUB_poll)
   SYSCALL_LOOKUP(select,                   5, STUB_select)
+  SYSCALL_LOOKUP(ppoll,                    4, STUB_ppoll)
+  SYSCALL_LOOKUP(pselect,                  6, STUB_pselect)
+#  endif
+#  ifdef CONFIG_NETDEV_IFINDEX
+  SYSCALL_LOOKUP(if_indextoname,           2, STUB_if_indextoname)
+  SYSCALL_LOOKUP(if_nametoindex,           1, STUB_if_nametoindex)
+#  endif
+#  ifdef CONFIG_SERIAL_TERMIOS
+  SYSCALL_LOOKUP(tcdrain,                  1, STUB_tcdrain)
 #  endif
 #endif
 
@@ -261,6 +275,7 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
   SYSCALL_LOOKUP(mount,                    5, STUB_mount)
 #    endif
   SYSCALL_LOOKUP(fsync,                    1, STUB_fsync)
+  SYSCALL_LOOKUP(ftruncate,                2, STUB_ftruncate)
   SYSCALL_LOOKUP(mkdir,                    2, STUB_mkdir)
   SYSCALL_LOOKUP(rename,                   2, STUB_rename)
   SYSCALL_LOOKUP(rmdir,                    1, STUB_rmdir)
@@ -356,6 +371,8 @@ SYSCALL_LOOKUP(up_assert,                  2, STUB_up_assert)
   SYSCALL_LOOKUP(accept,                   3, STUB_accept)
   SYSCALL_LOOKUP(bind,                     3, STUB_bind)
   SYSCALL_LOOKUP(connect,                  3, STUB_connect)
+  SYSCALL_LOOKUP(getpeername,              3, STUB_getpeername)
+  SYSCALL_LOOKUP(getsockname,              3, STUB_getsockname)
   SYSCALL_LOOKUP(getsockopt,               5, STUB_getsockopt)
   SYSCALL_LOOKUP(listen,                   2, STUB_listen)
   SYSCALL_LOOKUP(recv,                     4, STUB_recv)

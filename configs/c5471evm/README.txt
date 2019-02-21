@@ -13,8 +13,7 @@ Toolchain
 
   1. You must have already configured Nuttx in <some-dir>nuttx.
 
-     cd tools
-     ./configure.sh c5471evm/<sub-dir>
+     tools/configure.sh c5471evm/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -92,13 +91,6 @@ ARM/C5471-specific Configuration Options
 
 	CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-	CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-	   cause a 100 second delay during boot-up.  This 100 second delay
-	   serves no purpose other than it allows you to calibratre
-	   CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-	   the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-	   the delay actually is 100 seconds.
-
   C5471 specific device driver settings
 
 	CONFIG_SERIAL_IRDA_CONSOLE - selects the IRDA UART for the
@@ -130,9 +122,7 @@ Common Configuration Notes
   1. Each C5471 configuration is maintained in a sub-directory and
      can be selected as follow:
 
-       cd tools
-       ./configure.sh c5471evm/<subdir>
-       cd -
+       tools/configure.sh c5471evm/<subdir>
 
      Where <subdir> is one of the configuration sub-directories described in
      the following paragraph.

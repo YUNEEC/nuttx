@@ -47,12 +47,15 @@
 
 #include <nuttx/random.h>
 #include <nuttx/board.h>
+#include <nuttx/fs/fs.h>
 #include <nuttx/analog/adc.h>
 #include <nuttx/analog/ioctl.h>
-#include <arch/board/board.h>
+
 #include "stm32l4_gpio.h"
 #include "stm32l4_adc.h"
 #include "nucleo-l452re.h"
+
+#include <arch/board/board.h>
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -163,34 +166,33 @@ static const uint32_t g_pinlist[ADC1_NCHANNELS] =
 
 int stm32l4_adc_measure_voltages(uint32_t *vrefint, uint32_t *vbat, uint32_t *vext)
 {
+  FAR struct file filestruct;
   ssize_t nbytes;
   struct adc_msg_s sample[ADC1_NCHANNELS] = { 0 };
   int nsamples;
-  int fd, ret, errval;
+  int ret;
 
-  fd = open("/dev/adc0", O_RDONLY);
-  if (fd < 0)
+  ret = file_open(&filestruct, "/dev/adc0", O_RDONLY);
+  if (ret < 0)
     {
       aerr("ERROR: Cannot open ADC converter\n");
-      ret = fd;
       goto out;
     }
 
-  ret = ioctl(fd, ANIOC_TRIGGER, 0);
+  ret = file_ioctl(&filestruct, ANIOC_TRIGGER, 0);
   if (ret < 0)
     {
       aerr("ERROR: Cannot trigger ADC conversion\n");
       goto out_close;
     }
 
-  nbytes = read(fd, sample, sizeof(sample));
+  nbytes = file_read(&filestruct, sample, sizeof(sample));
   if (nbytes < 0)
     {
-      errval = errno;
-      ret = -errval;
-      if (errval != EINTR)
+      if (nbytes != -EINTR)
         {
-          aerr("ERROR: read failed: %d\n", errval);
+          aerr("ERROR: nx_read() failed: %d\n", nbytes);
+          ret = (int)nbytes;
           goto out_close;
         }
 
@@ -244,6 +246,7 @@ int stm32l4_adc_measure_voltages(uint32_t *vrefint, uint32_t *vbat, uint32_t *ve
                 tsense = (110 - 30) * (sample[i].am_data - STM32_TSENSE_TSCAL1)
                                     / (STM32_TSENSE_TSCAL2 - STM32_TSENSE_TSCAL1) + 30;
                 ainfo("TSENSE: %d -> %d °C\n", sample[i].am_data, tsense);
+                UNUSED(tsense);
                 break;
 
               case ADC1_INTERNAL_VBATDIV3_CHANNEL:
@@ -264,7 +267,8 @@ int stm32l4_adc_measure_voltages(uint32_t *vrefint, uint32_t *vbat, uint32_t *ve
     }
 
 out_close:
-  close(fd);
+  file_close(&filestruct);
+
 out:
   return ret;
 }

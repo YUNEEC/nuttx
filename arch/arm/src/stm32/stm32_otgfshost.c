@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32/stm32_otgfshost.c
  *
- *   Copyright (C) 2012-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
@@ -307,7 +308,7 @@ static inline void stm32_modifyreg(uint32_t addr, uint32_t clrbits,
 /* Semaphores ******************************************************************/
 
 static void stm32_takesem(sem_t *sem);
-#define stm32_givesem(s) sem_post(s);
+#define stm32_givesem(s) nxsem_post(s);
 
 /* Byte stream access helper functions *****************************************/
 
@@ -643,16 +644,21 @@ static inline void stm32_modifyreg(uint32_t addr, uint32_t clrbits, uint32_t set
 
 static void stm32_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1104,13 +1110,13 @@ static int stm32_chan_wait(FAR struct stm32_usbhost_s *priv,
        * wait here.
        */
 
-      ret = sem_wait(&chan->waitsem);
+      ret = nxsem_wait(&chan->waitsem);
 
-      /* sem_wait should succeed.  But it is possible that we could be
+      /* nxsem_wait should succeed.  But it is possible that we could be
        * awakened by a signal too.
        */
 
-      DEBUGASSERT(ret == OK || get_errno() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
   while (chan->waiter);
 
@@ -1259,7 +1265,7 @@ static int stm32_ctrlchan_alloc(FAR struct stm32_usbhost_s *priv,
  *   ep - A memory location provided by the caller in which to receive the
  *      allocated endpoint descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1321,7 +1327,7 @@ static int stm32_ctrlep_alloc(FAR struct stm32_usbhost_s *priv,
  *   ep - A memory location provided by the caller in which to receive the
  *      allocated endpoint descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1601,8 +1607,8 @@ static int stm32_ctrl_sendsetup(FAR struct stm32_usbhost_s *priv,
                                 FAR const struct usb_ctrlreq_s *req)
 {
   FAR struct stm32_chan_s *chan;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   int ret;
 
   /* Loop while the device reports NAK (and a timeout is not exceeded */
@@ -1831,7 +1837,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
                                  FAR uint8_t *buffer, size_t buflen)
 {
   FAR struct stm32_chan_s *chan;
-  systime_t start;
+  clock_t start;
   ssize_t xfrd;
   int ret;
 
@@ -1903,7 +1909,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
                    * if not then try again.
                    */
 
-                  systime_t elapsed = clock_systimer() - start;
+                  clock_t elapsed = clock_systimer() - start;
                   if (elapsed >= STM32_DATANAK_DELAY)
                     {
                       /* Timeout out... break out returning the NAK as
@@ -1959,7 +1965,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
                    *
                    * Small delays could require more resolution than is provided
                    * by the system timer.  For example, if the system timer
-                   * resolution is 10MS, then usleep(1000) will actually request
+                   * resolution is 10MS, then nxsig_usleep(1000) will actually request
                    * a delay 20MS (due to both quantization and rounding).
                    *
                    * REVISIT: So which is better?  To ignore tiny delays and
@@ -1969,7 +1975,7 @@ static ssize_t stm32_in_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
 
                   if (delay > CONFIG_USEC_PER_TICK)
                     {
-                      usleep(delay - CONFIG_USEC_PER_TICK);
+                      nxsig_usleep(delay - CONFIG_USEC_PER_TICK);
                     }
                 }
             }
@@ -2189,8 +2195,8 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
                                   FAR uint8_t *buffer, size_t buflen)
 {
   FAR struct stm32_chan_s *chan;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   size_t xfrlen;
   ssize_t xfrd;
   int ret;
@@ -2271,7 +2277,7 @@ static ssize_t stm32_out_transfer(FAR struct stm32_usbhost_s *priv, int chidx,
            * using the same buffer pointer and length.
            */
 
-          usleep(20*1000);
+          nxsig_usleep(20*1000);
         }
       else
         {
@@ -3814,8 +3820,8 @@ static void stm32_txfe_enable(FAR struct stm32_usbhost_s *priv, int chidx)
  *   hport - The location to return the hub port descriptor that detected the
  *      connection related event.
  *
- * Returned Values:
- *   Zero (OK) is returned on success when a device in connected or
+ * Returned Value:
+ *   Zero (OK) is returned on success when a device is connected or
  *   disconnected. This function will not return until either (1) a device is
  *   connected or disconnect to/from any hub port or until (2) some failure
  *   occurs.  On a failure, a negated errno value is returned indicating the
@@ -3905,7 +3911,7 @@ static int stm32_wait(FAR struct usbhost_connection_s *conn,
  *   hport - The descriptor of the hub port that has the newly connected
  *      device.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -3937,9 +3943,11 @@ static int stm32_rh_enumerate(FAR struct stm32_usbhost_s *priv,
 
   DEBUGASSERT(priv->smstate == SMSTATE_ATTACHED);
 
-  /* USB 2.0 spec says at least 50ms delay before port reset.  We wait 100ms. */
+  /* USB 2.0 spec says at least 50ms delay before port reset.  We wait
+   * 100ms.
+   */
 
-  usleep(100*1000);
+  nxsig_usleep(100*1000);
 
   /* Reset the host port */
 
@@ -4033,7 +4041,7 @@ static int stm32_enumerate(FAR struct usbhost_connection_s *conn,
  *   maxpacketsize - The maximum number of bytes that can be sent to or
  *    received from the endpoint in a single data packet
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4092,7 +4100,7 @@ static int stm32_ep0configure(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep
  *   ep - A memory location provided by the caller in which to receive the
  *      allocated endpoint descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4148,7 +4156,7 @@ static int stm32_epalloc(FAR struct usbhost_driver_s *drvr,
  *      the class create() method.
  *   ep - The endpoint to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4216,7 +4224,7 @@ static int stm32_epfree(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep)
  *   maxlen - The address of a memory location provided by the caller in which to
  *     return the maximum size of the allocated buffer memory.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4262,7 +4270,7 @@ static int stm32_alloc(FAR struct usbhost_driver_s *drvr,
  *      the class create() method.
  *   buffer - The address of the allocated buffer memory to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4298,7 +4306,7 @@ static int stm32_free(FAR struct usbhost_driver_s *drvr, FAR uint8_t *buffer)
  *     return the allocated buffer memory address.
  *   buflen - The size of the buffer required.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4342,7 +4350,7 @@ static int stm32_ioalloc(FAR struct usbhost_driver_s *drvr,
  *      the class create() method.
  *   buffer - The address of the allocated buffer memory to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4385,7 +4393,7 @@ static int stm32_iofree(FAR struct usbhost_driver_s *drvr, FAR uint8_t *buffer)
  *   NOTE: On an IN transaction, req and buffer may refer to the same allocated
  *   memory.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4402,8 +4410,8 @@ static int stm32_ctrlin(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
   FAR struct stm32_usbhost_s *priv = (FAR struct stm32_usbhost_s *)drvr;
   FAR struct stm32_ctrlinfo_s *ep0info = (FAR struct stm32_ctrlinfo_s *)ep0;
   uint16_t buflen;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   int retries;
   int ret;
 
@@ -4487,8 +4495,8 @@ static int stm32_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
   FAR struct stm32_usbhost_s *priv = (FAR struct stm32_usbhost_s *)drvr;
   FAR struct stm32_ctrlinfo_s *ep0info = (FAR struct stm32_ctrlinfo_s *)ep0;
   uint16_t buflen;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   int retries;
   int ret;
 
@@ -4588,7 +4596,7 @@ static int stm32_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
  *     (IN endpoint).  buffer must have been allocated using DRVR_ALLOC
  *   buflen - The length of the data to be sent or received.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, a non-negative value is returned that indicates the number
  *   of bytes successfully transferred.  On a failure, a negated errno value is
  *   returned that indicates the nature of the failure:
@@ -4660,7 +4668,7 @@ static ssize_t stm32_transfer(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep
  *   arg - The arbitrary parameter that will be passed to the callback function
  *     when the transfer completes.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4716,7 +4724,7 @@ static int stm32_asynch(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep,
  *   ep - The IN or OUT endpoint descriptor for the device endpoint on which an
  *      asynchronous transfer should be transferred.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure.
  *
@@ -4805,7 +4813,7 @@ static int stm32_cancel(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep)
  *      related event
  *   connected - True: device connected; false: device disconnected
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure.
  *
@@ -4857,7 +4865,7 @@ static int stm32_connect(FAR struct usbhost_driver_s *drvr,
  *   hport - The port from which the device is being disconnected.  Might be a port
  *      on a hub.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -5117,7 +5125,7 @@ static void stm32_host_initialize(FAR struct stm32_usbhost_s *priv)
       stm32_putreg(STM32_OTGFS_HCINTMSK(i), 0);
     }
 
-  /* Driver Vbus +5V (the smoke test).  Should be done elsewhere in OTG
+  /* Drive Vbus +5V (the smoke test).  Should be done elsewhere in OTG
    * mode.
    */
 
@@ -5186,14 +5194,14 @@ static inline void stm32_sw_initialize(FAR struct stm32_usbhost_s *priv)
 
   /* Initialize semaphores */
 
-  sem_init(&priv->pscsem,  0, 0);
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->pscsem,  0, 0);
+  nxsem_init(&priv->exclsem, 0, 1);
 
   /* The pscsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->pscsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->pscsem, SEM_PRIO_NONE);
 
   /* Initialize the driver state data */
 
@@ -5217,8 +5225,8 @@ static inline void stm32_sw_initialize(FAR struct stm32_usbhost_s *priv)
        * have priority inheritance enabled.
        */
 
-      sem_init(&chan->waitsem,  0, 0);
-      sem_setprotocol(&chan->waitsem, SEM_PRIO_NONE);
+      nxsem_init(&chan->waitsem,  0, 0);
+      nxsem_setprotocol(&chan->waitsem, SEM_PRIO_NONE);
     }
 }
 

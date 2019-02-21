@@ -45,7 +45,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/sched.h>
 
-#include "chip/chip.h"
+#include "chip.h"
 #include "chip/switch.h"
 #include "sched/sched.h"
 #include "group/group.h"
@@ -64,7 +64,7 @@
  *   but has been prepped to execute.  Move the TCB to the
  *   ready-to-run list, restore its context, and start execution.
  *
- * Inputs:
+ * Input Parameters:
  *   tcb: Refers to the tcb to be unblocked.  This tcb is
  *     in one of the waiting tasks lists.  It must be moved to
  *     the ready-to-run list and, if it is the highest priority
@@ -78,7 +78,7 @@ void up_unblock_task(FAR struct tcb_s *tcb)
 
   /* Verify that the context switch can be performed */
 
-  ASSERT((tcb->task_state >= FIRST_BLOCKED_STATE) &&
+  DEBUGASSERT((tcb->task_state >= FIRST_BLOCKED_STATE) &&
          (tcb->task_state <= LAST_BLOCKED_STATE));
 
   /* _info("Unblocking TCB=%p\n", tcb); */

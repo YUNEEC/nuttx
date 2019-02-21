@@ -69,8 +69,8 @@ static struct comp_callback_s g_comp_handlers[STM32L4_COMP_NUM];
 
 static const uint32_t g_comp_lines[STM32L4_COMP_NUM] =
 {
-#if defined(CONFIG_STM32L4_STM32L4X3) || defined (CONFIG_STM32L4_STM32L4X5) || \
-    defined(CONFIG_STM32L4_STM32L4X6)
+#if defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4X5) || \
+    defined(CONFIG_STM32L4_STM32L4X6) || defined(CONFIG_STM32L4_STM32L4XR)
   EXTI1_COMP1,
   EXTI1_COMP2
 #else
@@ -122,14 +122,14 @@ static int stm32l4_exti_comp_isr(int irq, void *context, FAR void *arg)
  * Description:
  *   Sets/clears comparator based events and interrupt triggers.
  *
- * Parameters:
+ * Input Parameters:
  *  - cmp: comparator
  *  - rising/falling edge: enables interrupt on rising/falling edget
  *  - event:  generate event when set
  *  - func:   when non-NULL, generate interrupt
  *  - arg:    Argument passed to the interrupt callback
  *
- * Returns:
+ * Returned Value:
  *   Zero (OK) returned on success; a negated errno value is returned on
  *   failure.
  *

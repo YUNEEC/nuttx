@@ -85,6 +85,10 @@
 #include "up_internal.h"
 #include "up_arch.h"
 
+#include "stm32_dma.h"
+#include "stm32_spi.h"
+#include "stm32_rcc.h"
+
 #if defined(CONFIG_STM32_I2S2) || defined(CONFIG_STM32_I2S3)
 
 /****************************************************************************
@@ -280,26 +284,27 @@ struct stm32_transport_s
 
 struct stm32_i2s_s
 {
-  struct i2s_dev_s  dev;        /* Externally visible I2S interface */
-  uintptr_t         base;       /* I2S controller register base address */
-  sem_t             exclsem;    /* Assures mutually exclusive acess to I2S */
-  uint8_t           datalen;    /* Data width (8 or 16) */
+  struct i2s_dev_s  dev;          /* Externally visible I2S interface */
+  uintptr_t         base;         /* I2S controller register base address */
+  sem_t             exclsem;      /* Assures mutually exclusive acess to I2S */
+  bool              initialized;  /* Has I2S interface been initialized */
+  uint8_t           datalen;      /* Data width (8 or 16) */
 #ifdef CONFIG_DEBUG_FEATURES
-  uint8_t           align;      /* Log2 of data width (0 or 1) */
+  uint8_t           align;        /* Log2 of data width (0 or 1) */
 #endif
-  uint8_t           rxenab:1;   /* True: RX transfers enabled */
-  uint8_t           txenab:1;   /* True: TX transfers enabled */
-  uint8_t           i2sno:6;    /* I2S controller number (0 or 1) */
+  uint8_t           rxenab:1;     /* True: RX transfers enabled */
+  uint8_t           txenab:1;     /* True: TX transfers enabled */
+  uint8_t           i2sno:6;      /* I2S controller number (0 or 1) */
 #ifdef I2S_HAVE_MCK
-  uint32_t          samplerate; /* Data sample rate (determines only MCK divider) */
+  uint32_t          samplerate;   /* Data sample rate (determines only MCK divider) */
 #endif
-  uint32_t          rxccr;      /* DMA control register for RX transfers */
-  uint32_t          txccr;      /* DMA control register for TX transfers */
+  uint32_t          rxccr;        /* DMA control register for RX transfers */
+  uint32_t          txccr;        /* DMA control register for TX transfers */
 #ifdef I2S_HAVE_RX
-  struct stm32_transport_s rx;  /* RX transport state */
+  struct stm32_transport_s rx;    /* RX transport state */
 #endif
 #ifdef I2S_HAVE_TX
-  struct stm32_transport_s tx;  /* TX transport state */
+  struct stm32_transport_s tx;    /* TX transport state */
 #endif
 
   /* Pre-allocated pool of buffer containers */
@@ -352,10 +357,10 @@ static void     i2s_dump_regs(struct stm32_i2s_s *priv, const char *msg);
 /* Semaphore helpers */
 
 static void     i2s_exclsem_take(struct stm32_i2s_s *priv);
-#define         i2s_exclsem_give(priv) sem_post(&priv->exclsem)
+#define         i2s_exclsem_give(priv) nxsem_post(&priv->exclsem)
 
 static void     i2s_bufsem_take(struct stm32_i2s_s *priv);
-#define         i2s_bufsem_give(priv) sem_post(&priv->bufsem)
+#define         i2s_bufsem_give(priv) nxsem_post(&priv->bufsem)
 
 /* Buffer container helpers */
 
@@ -634,10 +639,10 @@ static void i2s_exclsem_take(struct stm32_i2s_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->exclsem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(&priv->exclsem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -665,10 +670,10 @@ static void i2s_bufsem_take(struct stm32_i2s_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->bufsem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(&priv->bufsem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -706,7 +711,7 @@ static struct stm32_buffer_s *i2s_buf_allocate(struct stm32_i2s_s *priv)
 
   flags = enter_critical_section();
   bfcontainer = priv->freelist;
-  ASSERT(bfcontainer);
+  DEBUGASSERT(bfcontainer);
 
   /* Unlink the buffer from the freelist */
 
@@ -773,7 +778,7 @@ static void i2s_buf_initialize(struct stm32_i2s_s *priv)
   int i;
 
   priv->freelist = NULL;
-  sem_init(&priv->bufsem, 0, CONFIG_STM32_I2S_MAXINFLIGHT);
+  nxsem_init(&priv->bufsem, 0, CONFIG_STM32_I2S_MAXINFLIGHT);
 
   for (i = 0; i < CONFIG_STM32_I2S_MAXINFLIGHT; i++)
     {
@@ -1764,7 +1769,7 @@ static int i2s_checkwidth(struct stm32_i2s_s *priv, int bits)
  * Description:
  *   Set the I2S RX sample rate.  NOTE:  This will have no effect if (1) the
  *   driver does not support an I2C receiver or if (2) the sample rate is
- *   driven by the I2C frame clock.  This may also have unexpected side-
+ *   driven by the I2S frame clock.  This may also have unexpected side-
  *   effects of the RX sample is coupled with the TX sample rate.
  *
  * Input Parameters:
@@ -1962,8 +1967,8 @@ static int roundf(float num)
  *
  * Description:
  *   Set the I2S TX sample rate.  NOTE:  This will have no effect if (1) the
- *   driver does not support an I2C transmitter or if (2) the sample rate is
- *   driven by the I2C frame clock.  This may also have unexpected side-
+ *   driver does not support an I2S transmitter or if (2) the sample rate is
+ *   driven by the I2S frame clock.  This may also have unexpected side-
  *   effects of the TX sample is coupled with the RX sample rate.
  *
  * Input Parameters:
@@ -2160,7 +2165,7 @@ errout_with_exclsem:
  *   Setup the MCK divider based on the currently selected data width and
  *   the sample rate
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - I2C device structure (only the sample rate and data length is
  *          needed at this point).
  *
@@ -2453,15 +2458,16 @@ static void i2s2_configure(struct stm32_i2s_s *priv)
 #ifdef CONFIG_STM32_I2S2_RX
   priv->rxenab = true;
 
-  if ((i2s_getreg(priv, STM32_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
-   {
+  if (!priv->initialized)
+    {
       /* Configure I2S2 pins: MCK, SD, CK, WS */
 
       stm32_configgpio(GPIO_I2S2_MCK);
       stm32_configgpio(GPIO_I2S2_SD);
       stm32_configgpio(GPIO_I2S2_CK);
       stm32_configgpio(GPIO_I2S2_WS);
-   }
+      priv->initialized = true;
+    }
 #endif /* CONFIG_STM32_I2S2_RX */
 
 #ifdef CONFIG_STM32_I2S2_TX
@@ -2469,15 +2475,16 @@ static void i2s2_configure(struct stm32_i2s_s *priv)
 
   /* Only configure if the port is not already configured */
 
-  if ((i2s_getreg(priv, STM32_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
-   {
-     /* Configure I2S2 pins: MCK, SD, CK, WS */
+  if (!priv->initialized)
+    {
+      /* Configure I2S2 pins: MCK, SD, CK, WS */
 
-     stm32_configgpio(GPIO_I2S2_MCK);
-     stm32_configgpio(GPIO_I2S2_SD);
-     stm32_configgpio(GPIO_I2S2_CK);
-     stm32_configgpio(GPIO_I2S2_WS);
-   }
+      stm32_configgpio(GPIO_I2S2_MCK);
+      stm32_configgpio(GPIO_I2S2_SD);
+      stm32_configgpio(GPIO_I2S2_CK);
+      stm32_configgpio(GPIO_I2S2_WS);
+      priv->initialized = true;
+    }
 #endif /* CONFIG_STM32_I2S2_TX */
 
   /* Configure driver state specific to this I2S peripheral */
@@ -2516,7 +2523,7 @@ static void i2s3_configure(struct stm32_i2s_s *priv)
 #ifdef CONFIG_STM32_I2S3_RX
   priv->rxenab = true;
 
-  if ((i2s_getreg(priv, STM32_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
+  if (!priv->initialized)
     {
       /* Configure I2S3 pins: MCK, SD, CK, WS */
 
@@ -2524,6 +2531,7 @@ static void i2s3_configure(struct stm32_i2s_s *priv)
       stm32_configgpio(GPIO_I2S3_SD);
       stm32_configgpio(GPIO_I2S3_CK);
       stm32_configgpio(GPIO_I2S3_WS);
+      priv->initialized = true;
     }
 #endif /* CONFIG_STM32_I2S3_RX */
 
@@ -2532,7 +2540,7 @@ static void i2s3_configure(struct stm32_i2s_s *priv)
 
   /* Only configure if the port is not already configured */
 
-  if ((i2s_getreg(priv, STM32_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
+  if (!priv->initialized)
     {
       /* Configure I2S3 pins: MCK, SD, CK, WS */
 
@@ -2540,6 +2548,7 @@ static void i2s3_configure(struct stm32_i2s_s *priv)
       stm32_configgpio(GPIO_I2S3_SD);
       stm32_configgpio(GPIO_I2S3_CK);
       stm32_configgpio(GPIO_I2S3_WS);
+      priv->initialized = true;
     }
 #endif /* CONFIG_STM32_I2S3_TX */
 
@@ -2562,7 +2571,7 @@ static void i2s3_configure(struct stm32_i2s_s *priv)
  * Description:
  *   Initialize the selected i2S port
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple I2S interfaces)
  *
  * Returned Value:
@@ -2598,7 +2607,7 @@ FAR struct i2s_dev_s *stm32_i2sdev_initialize(int port)
 
   /* Initialize the common parts for the I2S device structure */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   priv->dev.ops = &g_i2sops;
   priv->i2sno   = port;
 
@@ -2649,7 +2658,7 @@ FAR struct i2s_dev_s *stm32_i2sdev_initialize(int port)
   /* Failure exits */
 
 errout_with_alloc:
-  sem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->exclsem);
   kmm_free(priv);
   return NULL;
 }

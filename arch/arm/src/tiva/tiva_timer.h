@@ -49,7 +49,7 @@
 
 #include "up_arch.h"
 #include "chip.h"
-#include "chip/tiva_timer.h"
+#include "hardware/tiva_timer.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -835,7 +835,7 @@ static inline void tiva_gptm0_synchronize(uint32_t sync)
  *     form /dev/timer0
  *   config - 32-bit timer configuration values.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned
  *   to indicate the nature of any failure.
  *

@@ -56,16 +56,17 @@
  * Description:
  *   Remove the referenced name=value pair from the environment
  *
- * Parameters:
- *   group The task group with the environment containing the name=value pair
- *   pvar A pointer to the name=value pair in the restroom
+ * Input Parameters:
+ *   group - The task group with the environment containing the name=value
+ *           pair
+ *   pvar  - A pointer to the name=value pair in the restroom
  *
- * Return Value:
+ * Returned Value:
  *   Zero on success
  *
  * Assumptions:
  *   - Not called from an interrupt handler
- *   - Caller has pre-emptions disabled
+ *   - Caller has pre-emption disabled
  *   - Caller will reallocate the environment structure to the correct size
  *
  ****************************************************************************/
@@ -76,21 +77,21 @@ int env_removevar(FAR struct task_group_s *group, FAR char *pvar)
   int alloc;        /* Size of the allocated environment */
   int ret = ERROR;
 
-  DEBUGASSERT(group && pvar);
+  DEBUGASSERT(group != NULL && pvar != NULL);
 
   /* Verify that the pointer lies within the environment region */
 
-  alloc = group->tg_envsize;          /* Size of the allocated environment */
-  end   = &group->tg_envp[alloc];     /* Pointer to the end+1 of the environment */
+  alloc = group->tg_envsize;             /* Size of the allocated environment */
+  end   = &group->tg_envp[alloc];        /* Pointer to the end+1 of the environment */
 
   if (pvar >= group->tg_envp && pvar < end)
     {
       /* Set up for the removal */
 
-      int   len  = strlen(pvar) + 1;  /* Length of name=value string to remove */
-      char *src  = &pvar[len];        /* Address of name=value string after */
-      char *dest = pvar;              /* Location to move the next string */
-      int   count = end - src;        /* Number of bytes to move (might be zero) */
+      int len        = strlen(pvar) + 1; /* Length of name=value string to remove */
+      FAR char *src  = &pvar[len];       /* Address of name=value string after */
+      FAR char *dest = pvar;             /* Location to move the next string */
+      int count      = end - src;        /* Number of bytes to move (might be zero) */
 
       /* Move all of the environment strings after the removed one 'down.'
        * this is inefficient, but robably not high duty.

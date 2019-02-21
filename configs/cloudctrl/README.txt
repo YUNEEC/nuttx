@@ -20,12 +20,6 @@ Contents
 ========
 
   - STM32F107VCT Pin Usage
-  - Development Environment
-  - GNU Toolchain Options
-  - IDEs
-  - NuttX EABI buildroot Toolchain
-  - NuttX OABI buildroot Toolchain
-  - NXFLAT Toolchain
   - Cloudctrl-specific Configuration Options
   - LEDs
   - Cloudctrl-specific Configuration Options
@@ -167,244 +161,6 @@ PN NAME SIGNAL         NOTES
 19 VSSA                VSSA
 20 VREF-               VREF-
 
-Development Environment
-=======================
-
-  Either Linux or Cygwin on Windows can be used for the development environment.
-  The source has been built only using the GNU toolchain (see below).  Other
-  toolchains will likely cause problems. Testing was performed using the Cygwin
-  environment because the development tools that I used only work under Windows.
-
-GNU Toolchain Options
-=====================
-
-  Toolchain Configurations
-  ------------------------
-  The NuttX make system has been modified to support the following different
-  toolchain options.
-
-  1. The CodeSourcery GNU toolchain,
-  2. The Atollic Toolchain,
-  3. The devkitARM GNU toolchain,
-  4. Raisonance GNU toolchain, or
-  5. The NuttX buildroot Toolchain (see below).
-
-  Most testing has been conducted using the CodeSourcery toolchain for Windows and
-  that is the default toolchain in most configurations.  To use the Atollic,
-  devkitARM, Raisonance GNU, or NuttX buildroot toolchain, you simply need to
-  add one of the following configuration options to your .config (or defconfig)
-  file:
-
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y  : CodeSourcery under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y  : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y        : The Atollic toolchain under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=y      : devkitARM under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_RAISONANCE=y     : Raisonance RIDE7 under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y      : NuttX buildroot under Linux or Cygwin (default)
-
-  You may also have to modify the PATH environment variable if your make cannot
-  find the tools.
-
-  NOTE: the CodeSourcery (for Windows), Atollic, devkitARM, and Raisonance toolchains are
-  Windows native toolchains.  The CodeSourcery (for Linux) and NuttX buildroot
-  toolchains are Cygwin and/or Linux native toolchains. There are several limitations
-  to using a Windows based toolchain in a Cygwin environment.  The three biggest are:
-
-  1. The Windows toolchain cannot follow Cygwin paths.  Path conversions are
-     performed automatically in the Cygwin makefiles using the 'cygpath' utility
-     but you might easily find some new path problems.  If so, check out 'cygpath -w'
-
-  2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
-     problems for the Windows tools by copying directories instead of linking them.
-     But this can also cause some confusion for you:  For example, you may edit
-     a file in a "linked" directory and find that your changes had no effect.
-     That is because you are building the copy of the file in the "fake" symbolic
-     directory.  If you use a Windows toolchain, you should get in the habit of
-     making like this:
-
-       make clean_context all
-
-     An alias in your .bashrc file might make that less painful.
-
-  The CodeSourcery Toolchain (2009q1)
-  -----------------------------------
-  The CodeSourcery toolchain (2009q1) does not work with default optimization
-  level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
-  -Os.
-
-  The Atollic "Pro" and "Lite" Toolchain
-  --------------------------------------
-  One problem that I had with the Atollic toolchains is that the provide a gcc.exe
-  and g++.exe in the same bin/ file as their ARM binaries.  If the Atollic bin/ path
-  appears in your PATH variable before /usr/bin, then you will get the wrong gcc
-  when you try to build host executables.  This will cause to strange, uninterpretable
-  errors build some host binaries in tools/ when you first make.
-
-  The Atollic "Lite" Toolchain
-  ----------------------------
-  The free, "Lite" version of the Atollic toolchain does not support C++ nor
-  does it support ar, nm, objdump, or objdcopy. If you use the Atollic "Lite"
-  toolchain, you will have to set:
-
-    CONFIG_HAVE_CXX=n
-
-  In order to compile successfully.  Otherwise, you will get errors like:
-
-    "C++ Compiler only available in TrueSTUDIO Professional"
-
-  The make may then fail in some of the post link processing because of some of
-  the other missing tools.  The Make.defs file replaces the ar and nm with
-  the default system x86 tool versions and these seem to work okay.  Disable all
-  of the following to avoid using objcopy:
-
-    CONFIG_RRLOAD_BINARY=n
-    CONFIG_INTELHEX_BINARY=n
-    CONFIG_MOTOROLA_SREC=n
-    CONFIG_RAW_BINARY=n
-
-  devkitARM
-  ---------
-  The devkitARM toolchain includes a version of MSYS make.  Make sure that the
-  the paths to Cygwin's /bin and /usr/bin directories appear BEFORE the devkitARM
-  path or will get the wrong version of make.
-
-IDEs
-====
-
-  NuttX is built using command-line make.  It can be used with an IDE, but some
-  effort will be required to create the project.
-
-  Makefile Build
-  --------------
-  Under Eclipse, it is pretty easy to set up an "empty makefile project" and
-  simply use the NuttX makefile to build the system.  That is almost for free
-  under Linux.  Under Windows, you will need to set up the "Cygwin GCC" empty
-  makefile project in order to work with Windows (Google for "Eclipse Cygwin" -
-  there is a lot of help on the internet).
-
-  Native Build
-  ------------
-  Here are a few tips before you start that effort:
-
-  1) Select the toolchain that you will be using in your .config file
-  2) Start the NuttX build at least one time from the Cygwin command line
-     before trying to create your project.  This is necessary to create
-     certain auto-generated files and directories that will be needed.
-  3) Set up include pathes:  You will need include/, arch/arm/src/stm32,
-     arch/arm/src/common, arch/arm/src/armv7-m, and sched/.
-  4) All assembly files need to have the definition option -D __ASSEMBLY__
-     on the command line.
-
-  Startup files will probably cause you some headaches.  The NuttX startup file
-  is arch/arm/src/stm32/stm32_vectors.S.  With RIDE, I have to build NuttX
-  one time from the Cygwin command line in order to obtain the pre-built
-  startup object needed by RIDE.
-
-NuttX EABI buildroot Toolchain
-==============================
-
-  A GNU GCC-based toolchain is assumed.  The PATH environment variable should
-  be modified to point to the correct path to the Cortex-M3 GCC toolchain (if
-  different from the default in your PATH variable).
-
-  If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh shenzhou/<sub-dir>
-
-     cd ..
-     make context
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-eabi-defconfig-4.6.3 .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Edit nuttx/.config to select the buildroot toolchain as described above
-     and below:
-
-     -CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y
-     +CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y
-
-  9. Set the PATH variable so tht it includes the path to the newly built
-     binaries.
-
-  See the file configs/README.txt in the buildroot source tree.  That has more
-  detailed PLUS some special instructions that you will need to follow if you are
-  building a Cortex-M3 toolchain for Cygwin under Windows.
-
-  NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
-  the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
-  more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
-  See instructions below.
-
-NuttX OABI "buildroot" Toolchain
-================================
-
-  The older, OABI buildroot toolchain is also available.  To use the OABI
-  toolchain:
-
-  1. When building the buildroot toolchain, either (1) modify the cortexm3-eabi-defconfig-4.6.3
-     configuration to use EABI (using 'make menuconfig'), or (2) use an exising OABI
-     configuration such as cortexm3-defconfig-4.3.3
-
-  2. Modify the Make.defs file to use the OABI conventions:
-
-    +CROSSDEV = arm-nuttx-elf-
-    +ARCHCPUFLAGS = -mtune=cortex-m3 -march=armv7-m -mfloat-abi=soft
-    +NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-gotoff.ld -no-check-sections
-    -CROSSDEV = arm-nuttx-eabi-
-    -ARCHCPUFLAGS = -mcpu=cortex-m3 -mthumb -mfloat-abi=soft
-    -NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
-
-NXFLAT Toolchain
-================
-
-  If you are *not* using the NuttX buildroot toolchain and you want to use
-  the NXFLAT tools, then you will still have to build a portion of the buildroot
-  tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX Bitbucket download site
-  (https://bitbucket.org/nuttx/nuttx/downloads/).
-
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh lpcxpresso-lpc1768/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-defconfig-nxflat .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     NXFLAT binaries.
-
 LEDs
 ====
 
@@ -501,13 +257,6 @@ Cloudctrl-specific Configuration Options
     CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
-
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
 
   Individual subsystems can be enabled:
 
@@ -641,10 +390,14 @@ Cloudctrl-specific Configuration Options
       Default: 4
     CONFIG_CAN_LOOPBACK - A CAN driver may or may not support a loopback
       mode for testing. The STM32 CAN driver does support loopback mode.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_STM32_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN1
+      is defined.
+    CONFIG_STM32_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2
+      is defined.
+    CONFIG_STM32_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 6
+    CONFIG_STM32_CAN_TSEG2 - the number of CAN time quanta in segment 2.
+      Default: 7
     CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
@@ -712,9 +465,7 @@ Configurations
 Each Cloudctrl configuration is maintained in a sub-directory and
 can be selected as follow:
 
-    cd tools
-    ./configure.sh shenzhou/<subdir>
-    cd -
+    tools/configure.sh shenzhou/<subdir>
 
 Where <subdir> is one of the following:
 
@@ -770,58 +521,15 @@ Where <subdir> is one of the following:
     This is a special configuration setup for the NxWM window manager
     UnitTest.  The NxWM window manager can be found here:
 
-      nuttx-code/NxWidgets/nxwm
+      apps/graphics/NxWidgets/nxwm
 
     The NxWM unit test can be found at:
 
-      nuttx-code/NxWidgets/UnitTests/nxwm
+      apps/graphics/NxWidgets/UnitTests/nxwm
 
     NOTE:  JP6 selects between the touchscreen interrupt and the MII
     interrupt.  It should be positioned 1-2 to enable the touchscreen
     interrupt.
-
-    Documentation for installing the NxWM unit test can be found here:
-
-      nuttx-code/NxWidgets/UnitTests/README.txt
-
-    Here is the quick summary of the build steps (Assuming that all of
-    the required packages are available in a directory ~/nuttx-code):
-
-    1. Intall the nxwm configuration
-
-       $ cd ~/nuttx-code/tools
-       $ ./configure.sh shenzhou/nxwm
-
-    2. Make the build context (only)
-
-       $ cd ..
-       $ make context
-       ...
-
-    3. Install the nxwm unit test
-
-       $ cd ~/nuttx-code/NxWidgets
-       $ tools/install.sh ~/nuttx-code/apps nxwm
-       Creating symbolic link
-        - To ~/nuttx-code/NxWidgets/UnitTests/nxwm
-        - At ~/nuttx-code/apps/external
-
-    4. Build the NxWidgets library
-
-       $ cd ~/nuttx-code/NxWidgets/libnxwidgets
-       $ make TOPDIR=~/nuttx-code
-       ...
-
-    5. Build the NxWM library
-
-       $ cd ~/nuttx-code/NxWidgets/nxwm
-       $ make TOPDIR=~/nuttx-code
-       ...
-
-    6. Built NuttX with the installed unit test as the application
-
-       $ cd ~/nuttx-code
-       $ make
 
     NOTE: Reading from the LCD is not currently supported by this
     configuration.  The hardware will support reading from the LCD
@@ -844,7 +552,5 @@ Where <subdir> is one of the following:
     This builds the THTTPD web server example using the THTTPD and
     the apps/examples/thttpd application.
 
-    NOTE: See note above with regard to the EABI/OABI buildroot
-    toolchains.  This example can only be built using the older
-    OABI toolchain due to incompatibilities introduced in later
-    GCC releases.
+    NOTE:  This example can only be built using older GCC toolchains
+    due to incompatibilities introduced in later GCC releases.

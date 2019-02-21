@@ -97,18 +97,15 @@ static const struct file_operations powerled_fops =
 
 static int powerled_open(FAR struct file *filep)
 {
-  FAR struct inode      *inode = filep->f_inode;
-  FAR struct powerled_dev_s *dev   = inode->i_private;
-  uint8_t                tmp;
-  int                    ret   = OK;
+  FAR struct inode *inode        = filep->f_inode;
+  FAR struct powerled_dev_s *dev = inode->i_private;
+  uint8_t tmp;
+  int ret;
 
   /* If the port is the middle of closing, wait until the close is finished */
 
-  if (sem_wait(&dev->closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->closesem);
+  if (ret >= 0)
     {
       /* Increment the count of references to the device.  If this the first
        * time that the driver has been opened for this device, then initialize
@@ -143,7 +140,7 @@ static int powerled_open(FAR struct file *filep)
             }
         }
 
-      sem_post(&dev->closesem);
+      nxsem_post(&dev->closesem);
     }
 
   return OK;
@@ -160,16 +157,13 @@ static int powerled_open(FAR struct file *filep)
 
 static int powerled_close(FAR struct file *filep)
 {
-  FAR struct inode     *inode = filep->f_inode;
-  FAR struct powerled_dev_s *dev   = inode->i_private;
-  irqstate_t            flags;
-  int                   ret = OK;
+  FAR struct inode *inode        = filep->f_inode;
+  FAR struct powerled_dev_s *dev = inode->i_private;
+  irqstate_t flags;
+  int ret;
 
-  if (sem_wait(&dev->closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->closesem);
+  if (ret >= 0)
     {
       /* Decrement the references to the driver.  If the reference count will
        * decrement to 0, then uninitialize the driver.
@@ -178,7 +172,7 @@ static int powerled_close(FAR struct file *filep)
       if (dev->ocount > 1)
         {
           dev->ocount--;
-          sem_post(&dev->closesem);
+          nxsem_post(&dev->closesem);
         }
       else
         {
@@ -192,7 +186,7 @@ static int powerled_close(FAR struct file *filep)
           dev->ops->shutdown(dev);               /* Disable the POWERLED */
           leave_critical_section(flags);
 
-          sem_post(&dev->closesem);
+          nxsem_post(&dev->closesem);
         }
     }
 
@@ -419,13 +413,13 @@ int powerled_register(FAR const char *path, FAR struct powerled_dev_s *dev, FAR 
   DEBUGASSERT(dev->ops->fault_clean != NULL);
   DEBUGASSERT(dev->ops->ioctl != NULL);
 
-  /* Initialize the HRTIM device structure */
+  /* Initialize the powerled device structure */
 
   dev->ocount = 0;
 
   /* Initialize semaphores */
 
-  sem_init(&dev->closesem, 0, 1);
+  nxsem_init(&dev->closesem, 0, 1);
 
   /* Connect POWERLED driver with lower level interface */
 
@@ -436,7 +430,7 @@ int powerled_register(FAR const char *path, FAR struct powerled_dev_s *dev, FAR 
   ret = register_driver(path, &powerled_fops, 0444, dev);
   if (ret < 0)
     {
-      sem_destroy(&dev->closesem);
+      nxsem_destroy(&dev->closesem);
     }
 
   return ret;

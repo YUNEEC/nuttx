@@ -84,7 +84,7 @@
 void pm_activity(int domain, int priority)
 {
   FAR struct pm_domain_s *pdom;
-  systime_t now;
+  clock_t now, elapsed;
   uint32_t accum;
   irqstate_t flags;
 
@@ -123,8 +123,9 @@ void pm_activity(int domain, int priority)
        * estimated.
        */
 
-      now = clock_systimer();
-      if (now - pdom->stime >= TIME_SLICE_TICKS)
+      now     = clock_systimer();
+      elapsed = now - pdom->stime;
+      if (elapsed >= TIME_SLICE_TICKS)
         {
           int16_t tmp;
 
@@ -137,16 +138,88 @@ void pm_activity(int domain, int priority)
           pdom->stime = now;
           pdom->accum = 0;
 
-          /* Reassessing the PM state may require some computation.  However,
-           * the work will actually be performed on a worker thread at a user-
-           * controlled priority.
-           */
-
           (void)pm_update(domain, tmp);
         }
 
       leave_critical_section(flags);
     }
+}
+
+/****************************************************************************
+ * Name: pm_stay
+ *
+ * Description:
+ *   This function is called by a device driver to indicate that it is
+ *   performing meaningful activities (non-idle), needs the power at kept
+ *   last the specified level.
+ *
+ * Input Parameters:
+ *   domain - The domain of the PM activity
+ *   state - The state want to stay.
+ *
+ *     As an example, media player might stay in normal state during playback.
+ *
+ * Returned Value:
+ *   None.
+ *
+ * Assumptions:
+ *   This function may be called from an interrupt handler.
+ *
+ ****************************************************************************/
+
+void pm_stay(int domain, enum pm_state_e state)
+{
+  FAR struct pm_domain_s *pdom;
+  irqstate_t flags;
+
+  /* Get a convenience pointer to minimize all of the indexing */
+
+  DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
+  pdom = &g_pmglobals.domain[domain];
+
+  flags = enter_critical_section();
+  DEBUGASSERT(state < PM_COUNT);
+  DEBUGASSERT(pdom->stay[state] < UINT16_MAX);
+  pdom->stay[state]++;
+  leave_critical_section(flags);
+}
+
+/****************************************************************************
+ * Name: pm_relax
+ *
+ * Description:
+ *   This function is called by a device driver to indicate that it is
+ *   idle now, could relax the previous requested power level.
+ *
+ * Input Parameters:
+ *   domain - The domain of the PM activity
+ *   state - The state want to relax.
+ *
+ *     As an example, media player might relax power level after playback.
+ *
+ * Returned Value:
+ *   None.
+ *
+ * Assumptions:
+ *   This function may be called from an interrupt handler.
+ *
+ ****************************************************************************/
+
+void pm_relax(int domain, enum pm_state_e state)
+{
+  FAR struct pm_domain_s *pdom;
+  irqstate_t flags;
+
+  /* Get a convenience pointer to minimize all of the indexing */
+
+  DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
+  pdom = &g_pmglobals.domain[domain];
+
+  flags = enter_critical_section();
+  DEBUGASSERT(state < PM_COUNT);
+  DEBUGASSERT(pdom->stay[state] > 0);
+  pdom->stay[state]--;
+  leave_critical_section(flags);
 }
 
 #endif /* CONFIG_PM */

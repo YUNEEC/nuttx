@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/mmap/fs_rammmap.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/fs/fs.h>
 #include <nuttx/kmalloc.h>
 
 #include "inode/inode.h"
@@ -84,7 +85,7 @@ void rammap_initialize(void)
 {
   if (!g_rammaps.initialized)
     {
-      sem_init(&g_rammaps.exclsem, 0, 1);
+      nxsem_init(&g_rammaps.exclsem, 0, 1);
       g_rammaps.initialized = true;
     }
 }
@@ -95,7 +96,7 @@ void rammap_initialize(void)
  * Description:
  *   Support simulation of memory mapped files by copying files into RAM.
  *
- * Parameters:
+ * Input Parameters:
  *   fd      file descriptor of the backing file -- required.
  *   length  The length of the mapping.  For exception #1 above, this length
  *           ignored:  The entire underlying media is always accessible.
@@ -174,30 +175,23 @@ FAR void *rammap(int fd, size_t length, off_t offset)
   rdbuffer = map->addr;
   while (length > 0)
     {
-      nread = read(fd, rdbuffer, length);
+      nread = nx_read(fd, rdbuffer, length);
       if (nread < 0)
         {
           /* Handle the special case where the read was interrupted by a
            * signal.
            */
 
-          errcode = get_errno();
-          if (errcode != EINTR)
+          if (nread != -EINTR)
             {
-              /* All other read errors are bad.  errno is already set.
-               * (but maybe should be forced to EINVAL?).  NOTE that if
-               * FS DEBUG is enabled, then the following ferr() macro will
-               * destroy the errno value.
-               */
+              /* All other read errors are bad. */
 
               ferr("ERROR: Read failed: offset=%d errno=%d\n",
-                   (int)offset, errcode);
-#ifdef CONFIG_DEBUG_FS
+                   (int)offset, (int)nread);
+
+              errcode = (int)-nread;
               goto errout_with_region;
-#else
-              goto errout_with_errno;
-#endif
-             }
+            }
         }
 
       /* Check for end of file. */
@@ -220,26 +214,24 @@ FAR void *rammap(int fd, size_t length, off_t offset)
   /* Add the buffer to the list of regions */
 
   rammap_initialize();
-  ret = sem_wait(&g_rammaps.exclsem);
+  ret = nxsem_wait(&g_rammaps.exclsem);
   if (ret < 0)
     {
-      goto errout_with_errno;
+      errcode = -ret;
+      goto errout_with_region;
     }
 
   map->flink  = g_rammaps.head;
   g_rammaps.head = map;
 
-  sem_post(&g_rammaps.exclsem);
+  nxsem_post(&g_rammaps.exclsem);
   return map->addr;
 
 errout_with_region:
   kumm_free(alloc);
+
 errout:
   set_errno(errcode);
-  return MAP_FAILED;
-
-errout_with_errno:
-  kumm_free(alloc);
   return MAP_FAILED;
 }
 

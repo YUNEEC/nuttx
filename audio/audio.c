@@ -53,8 +53,9 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
-#include <nuttx/fs/fs.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/arch.h>
+#include <nuttx/fs/fs.h>
 #include <nuttx/audio/audio.h>
 #include <mqueue.h>
 
@@ -65,6 +66,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Debug ********************************************************************/
 /* Non-standard debug that may be enabled just for testing Audio */
 
@@ -150,7 +152,7 @@ static int audio_open(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
       ret = -errno;
@@ -178,7 +180,7 @@ static int audio_open(FAR struct file *filep)
   ret = OK;
 
 errout_with_sem:
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
 
 errout:
   return ret;
@@ -202,7 +204,7 @@ static int audio_close(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
       ret = -errno;
@@ -232,10 +234,10 @@ static int audio_close(FAR struct file *filep)
 
       lower->ops->shutdown(lower);
     }
+
   ret = OK;
 
-//errout_with_sem:
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
 
 errout:
   return ret;
@@ -362,7 +364,7 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
       return ret;
@@ -415,6 +417,7 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
           audinfo("AUDIOIOC_SHUTDOWN\n");
 
           /* Call the lower-half driver initialize handler */
+
           ret = lower->ops->shutdown(lower);
         }
         break;
@@ -657,7 +660,7 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   return ret;
 }
 
@@ -679,7 +682,7 @@ static int audio_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
  *      to enqueue additional buffers and "wake them up" for further
  *      processing.
  *
- * Input parameters:
+ * Input Parameters:
  *   handle - This is the handle that was provided to the lower-half
  *     start() method.
  *   apb - A pointer to the previsously enqueued ap_buffer_s
@@ -716,8 +719,8 @@ static inline void audio_dequeuebuffer(FAR struct audio_upperhalf_s *upper,
       msg.session = session;
 #endif
       apb->flags |= AUDIO_APB_DEQUEUED;
-      mq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg),
-              CONFIG_AUDIO_BUFFER_DEQUEUE_PRIO);
+      (void)nxmq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg),
+                      CONFIG_AUDIO_BUFFER_DEQUEUE_PRIO);
     }
 }
 
@@ -754,8 +757,8 @@ static inline void audio_complete(FAR struct audio_upperhalf_s *upper,
 #ifdef CONFIG_AUDIO_MULTI_SESSION
       msg.session = session;
 #endif
-      mq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg),
-              CONFIG_AUDIO_BUFFER_DEQUEUE_PRIO);
+      (void)nxmq_send(upper->usermq, (FAR const char *)&msg, sizeof(msg),
+                      CONFIG_AUDIO_BUFFER_DEQUEUE_PRIO);
     }
 }
 
@@ -766,7 +769,7 @@ static inline void audio_complete(FAR struct audio_upperhalf_s *upper,
  *   Provides a callback interface for lower-half drivers to call to the
  *   upper-half for buffer dequeueing, error reporting, etc.
  *
- * Input parameters:
+ * Input Parameters:
  *   priv - Private context data owned by the upper-half
  *   reason - The reason code for the callback
  *   apb - A pointer to the previsously enqueued ap_buffer_s
@@ -853,7 +856,7 @@ static void audio_callback(FAR void *handle, uint16_t reason,
  *   When this function is called, the "lower half" driver should be in the
  *   reset state (as if the shutdown() method had already been called).
  *
- * Input parameters:
+ * Input Parameters:
  *   path - The full path to the driver to be registers in the NuttX pseudo-
  *     filesystem.  The recommended convention is to name Audio drivers
  *     based on the function they provide, such as "/dev/pcm0", "/dev/mp31",
@@ -891,7 +894,7 @@ int audio_register(FAR const char *name, FAR struct audio_lowerhalf_s *dev)
 
   /* Initialize the Audio device structure (it was already zeroed by kmm_zalloc()) */
 
-  sem_init(&upper->exclsem, 0, 1);
+  nxsem_init(&upper->exclsem, 0, 1);
   upper->dev = dev;
 
 #ifdef CONFIG_AUDIO_CUSTOM_DEV_PATH

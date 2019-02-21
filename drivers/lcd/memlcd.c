@@ -364,7 +364,7 @@ static inline void memlcd_clear(FAR struct memlcd_dev_s *mlcd)
  *   the Memory LCD. Which is always used within setpower() call.
  *   Basically, the frequency shall be 1Hz~60Hz.
  *   If use hardware mode to toggle VCOM, we need to send specific command at a
- *   constant frequency to trigger the LCD intenal hardware logic.
+ *   constant frequency to trigger the LCD internal hardware logic.
  *   While use software mode, we set up a timer to toggle EXTCOMIN connected IO,
  *   basically, it is a hardware timer to ensure a constant frequency.
  *
@@ -419,7 +419,7 @@ static int memlcd_putrun(fb_coord_t row, fb_coord_t col,
   DEBUGASSERT(buffer);
   lcdinfo("row: %d col: %d npixels: %d\n", row, col, npixels);
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
   usrmask = MS_BIT;
 #else
   usrmask = LS_BIT;
@@ -438,7 +438,7 @@ static int memlcd_putrun(fb_coord_t row, fb_coord_t col,
           __clear_bit(col % 8 + i, p);
         }
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
       if (usrmask == LS_BIT)
         {
           buffer++;
@@ -510,7 +510,7 @@ static int memlcd_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t * buffer,
   DEBUGASSERT(buffer);
   lcdinfo("row: %d col: %d npixels: %d\n", row, col, npixels);
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
   usrmask = MS_BIT;
 #else
   usrmask = LS_BIT;
@@ -529,7 +529,7 @@ static int memlcd_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t * buffer,
           *buffer &= ~usrmask;
         }
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
       if (usrmask == LS_BIT)
         {
           buffer++;

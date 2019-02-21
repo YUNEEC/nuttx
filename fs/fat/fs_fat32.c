@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/fat/fs_fat32.c
  *
- *   Copyright (C) 2007-2009, 2011-2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2015, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -86,6 +87,7 @@ static int     fat_sync(FAR struct file *filep);
 static int     fat_dup(FAR const struct file *oldp, FAR struct file *newp);
 static int     fat_fstat(FAR const struct file *filep,
                  FAR struct stat *buf);
+static int     fat_truncate(FAR struct file *filep, off_t length);
 
 static int     fat_opendir(FAR struct inode *mountpt,
                  FAR const char *relpath, FAR struct fs_dirent_s *dir);
@@ -113,7 +115,7 @@ static int     fat_stat_common(FAR struct fat_mountpt_s *fs,
 static int     fat_stat_file(FAR struct fat_mountpt_s *fs,
                  FAR uint8_t *direntry, FAR struct stat *buf);
 static int     fat_stat_root(FAR struct fat_mountpt_s *fs,
-                 FAR uint8_t *direntry, FAR struct stat *buf);
+                 FAR struct stat *buf);
 static int     fat_stat(struct inode *mountpt, const char *relpath,
                  FAR struct stat *buf);
 
@@ -138,6 +140,7 @@ const struct mountpt_operations fat_operations =
   fat_sync,          /* sync */
   fat_dup,           /* dup */
   fat_fstat,         /* fstat */
+  fat_truncate,      /* truncate */
 
   fat_opendir,       /* opendir */
   NULL,              /* closedir */
@@ -214,11 +217,18 @@ static int fat_open(FAR struct file *filep, FAR const char *relpath,
 
       /* The name exists -- but is it a file or a directory? */
 
-      direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
-      if (dirinfo.fd_root ||
-         (DIR_GETATTRIBUTES(direntry) & FATATTR_DIRECTORY))
+      if (dirinfo.fd_root)
         {
-          /* It is a directory */
+          /* It is the root directory */
+
+          ret = -EISDIR;
+          goto errout_with_semaphore;
+        }
+
+      direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
+      if ((DIR_GETATTRIBUTES(direntry) & FATATTR_DIRECTORY) != 0)
+        {
+          /* It is a regular directory */
 
           ret = -EISDIR;
           goto errout_with_semaphore;
@@ -257,7 +267,7 @@ static int fat_open(FAR struct file *filep, FAR const char *relpath,
         {
           /* Truncate the file to zero length */
 
-          ret = fat_dirtruncate(fs, &dirinfo);
+          ret = fat_dirtruncate(fs, direntry);
           if (ret < 0)
             {
               goto errout_with_semaphore;
@@ -792,7 +802,7 @@ static ssize_t fat_write(FAR struct file *filep, FAR const char *buffer,
           ff->ff_sectorsincluster = fs->fs_fatsecperclus;
         }
 
-      /* The current sector can then be determined from the currentcluster
+      /* The current sector can then be determined from the current cluster
        * and the file offset.
        */
 
@@ -1068,10 +1078,13 @@ static off_t fat_seek(FAR struct file *filep, off_t offset, int whence)
    * also happen in other situation such as when SEEK_SET is used to assure
    * assure sequential access in a multi-threaded environment where there
    * may be are multiple users to the file descriptor.
+   * Effectively handles the situation when a new file position is within
+   * the current sector.
    */
 
-  if (position == filep->f_pos)
+  if (position / fs->fs_hwsectorsize == filep->f_pos / fs->fs_hwsectorsize)
     {
+      filep->f_pos = position;
       return OK;
     }
 
@@ -1570,8 +1583,6 @@ static int fat_opendir(FAR struct inode *mountpt, FAR const char *relpath,
       goto errout_with_semaphore;
     }
 
-  direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
-
   /* Check if this is the root directory */
 
   if (dirinfo.fd_root)
@@ -1585,30 +1596,33 @@ static int fat_opendir(FAR struct inode *mountpt, FAR const char *relpath,
       dir->u.fat.fd_currsector   = dirinfo.dir.fd_currsector;
       dir->u.fat.fd_index        = dirinfo.dir.fd_index;
     }
-
-  /* This is not the root directory.  Verify that it is some kind of directory */
-
-  else if ((DIR_GETATTRIBUTES(direntry) & FATATTR_DIRECTORY) == 0)
-    {
-       /* The entry is not a directory */
-
-       ret = -ENOTDIR;
-       goto errout_with_semaphore;
-    }
   else
     {
-       /* The entry is a directory (but not the root directory) */
+      /* This is not the root directory.  Verify that it is some kind of directory */
 
-      dir->u.fat.fd_startcluster =
-          ((uint32_t)DIR_GETFSTCLUSTHI(direntry) << 16) |
-                   DIR_GETFSTCLUSTLO(direntry);
-      dir->u.fat.fd_currcluster  = dir->u.fat.fd_startcluster;
-      dir->u.fat.fd_currsector   = fat_cluster2sector(fs, dir->u.fat.fd_currcluster);
-      dir->u.fat.fd_index        = 2;
+      direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
+
+      if ((DIR_GETATTRIBUTES(direntry) & FATATTR_DIRECTORY) == 0)
+        {
+           /* The entry is not a directory */
+
+           ret = -ENOTDIR;
+           goto errout_with_semaphore;
+        }
+      else
+        {
+           /* The entry is a directory (but not the root directory) */
+
+          dir->u.fat.fd_startcluster =
+              ((uint32_t)DIR_GETFSTCLUSTHI(direntry) << 16) |
+                         DIR_GETFSTCLUSTLO(direntry);
+          dir->u.fat.fd_currcluster  = dir->u.fat.fd_startcluster;
+          dir->u.fat.fd_currsector   = fat_cluster2sector(fs, dir->u.fat.fd_currcluster);
+          dir->u.fat.fd_index        = 2;
+        }
     }
 
-  fat_semgive(fs);
-  return OK;
+  ret = OK;
 
 errout_with_semaphore:
   fat_semgive(fs);
@@ -1620,7 +1634,7 @@ errout_with_semaphore:
  *
  * Description:
  *   Obtain information about an open file associated with the file
- *   descriptor 'fd', and will write it to the area pointed to by 'buf'.
+ *   structure 'filep', and will write it to the area pointed to by 'buf'.
  *
  ****************************************************************************/
 
@@ -1679,6 +1693,139 @@ static int fat_fstat(FAR const struct file *filep, FAR struct stat *buf)
    */
 
   ret = fat_stat_file(fs, direntry, buf);
+
+errout_with_semaphore:
+  fat_semgive(fs);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: fat_truncate
+ *
+ * Description:
+ *   Set the length of the open, regular file associated with the file
+ *   structure 'filep' to 'length'.
+ *
+ ****************************************************************************/
+
+static int fat_truncate(FAR struct file *filep, off_t length)
+{
+  FAR struct inode *inode;
+  FAR struct fat_mountpt_s *fs;
+  FAR struct fat_file_s *ff;
+  off_t oldsize;
+  int ret;
+
+  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+
+  /* Recover our private data from the struct file instance */
+
+  ff = filep->f_priv;
+
+  /* Check for the forced mount condition */
+
+  if ((ff->ff_bflags & UMOUNT_FORCED) != 0)
+    {
+      return -EPIPE;
+    }
+
+  inode = filep->f_inode;
+  fs    = inode->i_private;
+
+  DEBUGASSERT(fs != NULL);
+
+  /* Make sure that the mount is still healthy */
+
+  fat_semtake(fs);
+  ret = fat_checkmount(fs);
+  if (ret != OK)
+    {
+      goto errout_with_semaphore;
+    }
+
+  /* Check if the file was opened for write access */
+
+  if ((ff->ff_oflags & O_WROK) == 0)
+    {
+      ret = -EACCES;
+      goto errout_with_semaphore;
+    }
+
+  /* Are we shrinking the file?  Or extending it? */
+
+  oldsize = ff->ff_size;
+  if (oldsize == length)
+    {
+      /* Do nothing but say that we did */
+
+      ret = OK;
+    }
+  else if (oldsize > length)
+    {
+      FAR uint8_t *direntry;
+      int ndx;
+
+      /* We are shrinking the file. */
+      /* Read the directory entry into the fs_buffer. */
+
+      ret = fat_fscacheread(fs, ff->ff_dirsector);
+      if (ret < 0)
+        {
+          goto errout_with_semaphore;
+        }
+
+      /* Recover a pointer to the specific directory entry in the sector
+       * using the saved directory index.
+       */
+
+      ndx      = (ff->ff_dirindex & DIRSEC_NDXMASK(fs)) * DIR_SIZE;
+      direntry = &fs->fs_buffer[ndx];
+
+      /* Handle the simple case where we are shrinking the file to zero
+       * length.
+       */
+
+      if (length == 0)
+        {
+          /* Shrink to length == 0 */
+
+          ret = fat_dirtruncate(fs, direntry);
+        }
+      else
+        {
+          /* Shrink to 0 < length < oldsize */
+
+          ret = fat_dirshrink(fs, direntry, length);
+        }
+
+      if (ret >= 0)
+        {
+          /* The truncation has completed without error.  Update the file
+           * size.
+           */
+
+          ff->ff_size = length;
+          ret = OK;
+        }
+    }
+  else
+    {
+      /* Otherwise we are extending the file.  This is essentially the same
+       * as a write except that (1) we write zeros and (2) we don't update
+       * the file position.
+       */
+
+      ret = fat_dirextend(fs, ff, length);
+      if (ret >= 0)
+        {
+          /* The truncation has completed without error.  Update the file
+           * size.
+           */
+
+          ff->ff_size = length;
+          ret = OK;
+        }
+    }
 
 errout_with_semaphore:
   fat_semgive(fs);
@@ -1948,8 +2095,8 @@ static int fat_bind(FAR struct inode *blkdriver, FAR const void *data,
    * have to addref() here (but does have to release in unbind().
    */
 
-  fs->fs_blkdriver = blkdriver;  /* Save the block driver reference */
-  sem_init(&fs->fs_sem, 0, 0);   /* Initialize the semaphore that controls access */
+  fs->fs_blkdriver = blkdriver;   /* Save the block driver reference */
+  nxsem_init(&fs->fs_sem, 0, 0);  /* Initialize the semaphore that controls access */
 
   /* Then get information about the FAT32 filesystem on the devices managed
    * by this block driver.
@@ -1958,7 +2105,7 @@ static int fat_bind(FAR struct inode *blkdriver, FAR const void *data,
   ret = fat_mount(fs, true);
   if (ret != 0)
     {
-      sem_destroy(&fs->fs_sem);
+      nxsem_destroy(&fs->fs_sem);
       kmm_free(fs);
       return ret;
     }
@@ -2055,7 +2202,7 @@ static int fat_unbind(FAR void *handle, FAR struct inode **blkdriver,
       fat_io_free(fs->fs_buffer, fs->fs_hwsectorsize);
     }
 
-  sem_destroy(&fs->fs_sem);
+  nxsem_destroy(&fs->fs_sem);
   kmm_free(fs);
   return OK;
 }
@@ -2668,8 +2815,7 @@ static int fat_stat_file(FAR struct fat_mountpt_s *fs,
  *
  ****************************************************************************/
 
-static int fat_stat_root(FAR struct fat_mountpt_s *fs,
-                         FAR uint8_t *direntry, FAR struct stat *buf)
+static int fat_stat_root(FAR struct fat_mountpt_s *fs, FAR struct stat *buf)
 {
   /* Clear the "struct stat"  */
 
@@ -2680,7 +2826,7 @@ static int fat_stat_root(FAR struct fat_mountpt_s *fs,
   buf->st_mode = S_IFDIR | S_IROTH | S_IRGRP | S_IRUSR | S_IWOTH |
                  S_IWGRP | S_IWUSR;
 
-  return fat_stat_common(fs, direntry, buf);
+  return OK;
 }
 
 /****************************************************************************
@@ -2726,18 +2872,18 @@ static int fat_stat(FAR struct inode *mountpt, FAR const char *relpath,
       goto errout_with_semaphore;
     }
 
-  /* Get a pointer to the directory entry */
-
-  direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
-
   /* Get the FAT attribute and map it so some meaningful mode_t values */
 
   if (dirinfo.fd_root)
     {
-      ret = fat_stat_root(fs, direntry, buf);
+      ret = fat_stat_root(fs, buf);
     }
   else
     {
+      /* Get a pointer to the directory entry */
+
+      direntry = &fs->fs_buffer[dirinfo.fd_seq.ds_offset];
+
       /* Call fat_stat_file() to create the buf and to save information to
        * the stat buffer.
        */

@@ -62,12 +62,13 @@
 
 #include "netdev/netdev.h"
 #include "devif/devif.h"
+#include "socket/socket.h"
 #include "inet/inet.h"
 #include "arp/arp.h"
 #include "icmpv6/icmpv6.h"
 #include "neighbor/neighbor.h"
+#include "route/route.h"
 #include "tcp/tcp.h"
-#include "socket/socket.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -106,7 +107,7 @@ struct send_s
   uint32_t                snd_isn;     /* Initial sequence number */
   uint32_t                snd_acked;   /* The number of bytes acked */
 #ifdef CONFIG_NET_SOCKOPTS
-  systime_t               snd_time;    /* Last send time for determining timeout */
+  clock_t                 snd_time;    /* Last send time for determining timeout */
 #endif
 #if defined(CONFIG_NET_TCP_SPLIT)
   bool                    snd_odd;     /* True: Odd packet in pair transaction */
@@ -123,7 +124,7 @@ struct send_s
  * Description:
  *   Check for send timeout.
  *
- * Parameters:
+ * Input Parameters:
  *   pstate   send state structure
  *
  * Returned Value:
@@ -166,7 +167,7 @@ static inline int send_timeout(FAR struct send_s *pstate)
  *   domain is selected, then the setup is already in place and we need do
  *   nothing.
  *
- * Parameters:
+ * Input Parameters:
  *   dev    - The structure of the network driver that caused the event
  *   pstate - sendto state structure
  *
@@ -218,7 +219,7 @@ static inline void tcpsend_ipselect(FAR struct net_driver_s *dev,
  *   NOTE 3: If CONFIG_NET_ARP_SEND then we can be assured that the IP
  *   address mapping is already in the ARP table.
  *
- * Parameters:
+ * Input Parameters:
  *   conn  - The TCP connection structure
  *
  * Returned Value:
@@ -233,10 +234,13 @@ static inline void tcpsend_ipselect(FAR struct net_driver_s *dev,
 #ifdef CONFIG_NET_ETHERNET
 static inline bool psock_send_addrchck(FAR struct tcp_conn_s *conn)
 {
+  /* Only Ethernet drivers are supported by this function */
   /* REVISIT: Could the MAC address not also be in a routing table? */
 
   if (conn->dev->d_lltype != NET_LL_ETHERNET)
     {
+      /* Return true for non-Ethernet devices. */
+
       return true;
     }
 
@@ -245,11 +249,40 @@ static inline bool psock_send_addrchck(FAR struct tcp_conn_s *conn)
   if (conn->domain == PF_INET)
 #endif
     {
-#if !defined(CONFIG_NET_ARP_IPIN) && !defined(CONFIG_NET_ARP_SEND)
-      return (arp_find(conn->u.ipv4.raddr) != NULL);
-#else
-      return true;
+      /* For historical reasons, we will return true if both the ARP and the
+       * routing table are disabled.
+       */
+
+      bool ret = true;
+#ifdef CONFIG_NET_ROUTE
+      in_addr_t router;
 #endif
+#if !defined(CONFIG_NET_ARP_IPIN) && !defined(CONFIG_NET_ARP_SEND)
+      if (arp_find(conn->u.ipv4.raddr, NULL) >= 0)
+        {
+          /* Return true if the address was found in the ARP table */
+
+          return true;
+        }
+
+      /* Otherwise, return false */
+
+      ret = false;
+#endif
+#ifdef CONFIG_NET_ROUTE
+      if (net_ipv4_router(conn->u.ipv4.raddr, &router) == OK)
+        {
+          /* Return true if the address was found in the routing table */
+
+          return true;
+        }
+
+      /* Otherwise, return false */
+
+      ret = false;
+#endif
+
+      return ret;
     }
 #endif /* CONFIG_NET_IPv4 */
 
@@ -258,11 +291,41 @@ static inline bool psock_send_addrchck(FAR struct tcp_conn_s *conn)
   else
 #endif
     {
-#if !defined(CONFIG_NET_ICMPv6_NEIGHBOR)
-      return (neighbor_findentry(conn->u.ipv6.raddr) != NULL);
-#else
-      return true;
+      /* For historical reasons, we will return true if both the ICMPv6
+       * neighbor support and the routing table are disabled.
+       */
+
+      bool ret = true;
+#ifdef CONFIG_NET_ROUTE
+      net_ipv6addr_t router;
 #endif
+
+#if !defined(CONFIG_NET_ICMPv6_NEIGHBOR)
+      if (neighbor_lookup(conn->u.ipv6.raddr, NULL) >= 0)
+        {
+          /* Return true if the address was found in the neighbor table */
+
+          return true;
+        }
+
+      /* Otherwise, return false */
+
+      ret = false;
+#endif
+#ifdef CONFIG_NET_ROUTE
+      if (net_ipv6_router(conn->u.ipv6.raddr, router) == OK)
+        {
+          /* Return true if the address was found in the routing table */
+
+          return true;
+        }
+
+      /* Otherwise, return false */
+
+      ret = false;
+#endif
+
+      return ret;
     }
 #endif /* CONFIG_NET_IPv6 */
 }
@@ -278,7 +341,7 @@ static inline bool psock_send_addrchck(FAR struct tcp_conn_s *conn)
  *   This function is called to perform the actual send operation when
  *   polled by the lower, device interfacing layer.
  *
- * Parameters:
+ * Input Parameters:
  *   dev      The structure of the network driver that caused the event
  *   conn     The connection structure associated with the socket
  *   flags    Set of events describing why the callback was invoked
@@ -396,11 +459,23 @@ static uint16_t tcpsend_eventhandler(FAR struct net_driver_s *dev,
 
   else if ((flags & TCP_DISCONN_EVENTS) != 0)
     {
+      FAR struct socket *psock = pstate->snd_sock;
+
       ninfo("Lost connection\n");
 
-      /* Report not connected */
+      /* We could get here recursively through the callback actions of
+       * tcp_lost_connection().  So don't repeat that action if we have
+       * already been disconnected.
+       */
 
-      tcp_lost_connection(pstate->snd_sock, pstate->snd_cb, flags);
+      DEBUGASSERT(psock != NULL);
+      if (_SS_ISCONNECTED(psock->s_flags))
+         {
+           /* Report not connected */
+
+           tcp_lost_connection(psock, pstate->snd_cb, flags);
+         }
+
       pstate->snd_sent = -ENOTCONN;
       goto end_wait;
     }
@@ -599,7 +674,7 @@ end_wait:
 
   /* Wake up the waiting thread */
 
-  sem_post(&pstate->snd_sem);
+  nxsem_post(&pstate->snd_sem);
   return flags;
 }
 
@@ -610,7 +685,7 @@ end_wait:
  *   Notify the appropriate device driver that we are have data ready to
  *   be send (TCP)
  *
- * Parameters:
+ * Input Parameters:
  *   psock - Socket state structure
  *   conn  - The TCP connection structure
  *
@@ -661,14 +736,14 @@ static inline void send_txnotify(FAR struct socket *psock,
  *   psock_tcp_send() call may be used only when the TCP socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
  *
  * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
- *   -1 is returned, and errno is set appropriately:
+ *   a negated errno value is returned.
  *
  *   EAGAIN or EWOULDBLOCK
  *     The socket is marked non-blocking and the requested operation
@@ -714,7 +789,6 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
 {
   FAR struct tcp_conn_s *conn;
   struct send_s state;
-  int errcode;
   int ret = OK;
 
   /* Verify that the sockfd corresponds to valid, allocated socket */
@@ -722,7 +796,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
   if (psock == NULL || psock->s_crefs <= 0)
     {
       nerr("ERROR: Invalid socket\n");
-      errcode = EBADF;
+      ret = -EBADF;
       goto errout;
     }
 
@@ -731,7 +805,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
   if (psock->s_type != SOCK_STREAM || !_SS_ISCONNECTED(psock->s_flags))
     {
       nerr("ERROR: Not connected\n");
-      errcode = ENOTCONN;
+      ret = -ENOTCONN;
       goto errout;
     }
 
@@ -752,7 +826,6 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
     }
 #endif /* CONFIG_NET_ARP_SEND */
 
-
 #ifdef CONFIG_NET_ICMPv6_NEIGHBOR
 #ifdef CONFIG_NET_ARP_SEND
   else
@@ -769,7 +842,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
   if (ret < 0)
     {
       nerr("ERROR: Not reachable\n");
-      errcode = ENETUNREACH;
+      ret = -ENETUNREACH;
       goto errout;
     }
 #endif /* CONFIG_NET_ARP_SEND || CONFIG_NET_ICMPv6_NEIGHBOR */
@@ -792,8 +865,8 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&state.snd_sem, 0, 0);    /* Doesn't really fail */
-  (void)sem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&state.snd_sem, 0, 0);    /* Doesn't really fail */
+  (void)nxsem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
 
   state.snd_sock      = psock;             /* Socket descriptor to use */
   state.snd_buflen    = len;               /* Number of bytes to send */
@@ -844,7 +917,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
         }
     }
 
-  sem_destroy(&state.snd_sem);
+  nxsem_destroy(&state.snd_sem);
   net_unlock();
 
   /* Set the socket state to idle */
@@ -857,7 +930,7 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
 
   if (state.snd_sent < 0)
     {
-      errcode = state.snd_sent;
+      ret = state.snd_sent;
       goto errout;
     }
 
@@ -867,17 +940,15 @@ ssize_t psock_tcp_send(FAR struct socket *psock,
 
   if (ret < 0)
     {
-      errcode = -ret;
       goto errout;
     }
 
   /* Return the number of bytes actually sent */
 
-  return state.snd_sent;
+  ret = state.snd_sent;
 
 errout:
-  set_errno(errcode);
-  return ERROR;
+  return ret;
 }
 
 /****************************************************************************
@@ -888,11 +959,11 @@ errout:
  *   would block.  It is still possible that the write may block if another
  *   write occurs first.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *
  * Returned Value:
- *   OK (Function not implemented).
+ *   -ENOSYS (Function not implemented, always have to wait to send).
  *
  * Assumptions:
  *   None
@@ -901,9 +972,7 @@ errout:
 
 int psock_tcp_cansend(FAR struct socket *psock)
 {
-  /* TODO: return OK unless someone is waiting for a packet to send */
-
-  return OK;
+  return -ENOSYS;
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_TCP && !CONFIG_NET_TCP_WRITE_BUFFERS */

@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_progmem.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +67,7 @@
 /* All sectors are 128KB and are uniform in size.
  * The only execption is sector 0 which is subdivided into two small sectors
  * of 8KB and one larger sector of 112KB.
- * The page size is 515 bytes.  However, the smallest thing that can be
+ * The page size is 512 bytes.  However, the smallest thing that can be
  * erased is four pages.  We will refer to this as a "cluster".
  */
 
@@ -186,21 +186,24 @@ static sem_t g_page_sem;
 
 static void page_buffer_lock(void)
 {
-  while (sem_wait(&g_page_sem) < 0)
+  int ret;
+
+  do
     {
-      int errcode = errno;
+      /* Take the semaphore (perhaps waiting) */
 
-      /* sem_wait should only fail if it was awakened by a signal */
+      ret = nxsem_wait(&g_page_sem);
 
-      DEBUGASSERT(errcode == EINTR);
-      if (errcode != EINTR)
-        {
-          break;
-        }
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define page_buffer_unlock() sem_post(&g_page_sem)
+#define page_buffer_unlock() nxsem_post(&g_page_sem)
 
 /****************************************************************************
  * Name: efc_command
@@ -363,18 +366,18 @@ void sam_progmem_initialize(void)
    * page buffer.
    */
 
-  sem_init(&g_page_sem, 0, 1);
+  nxsem_init(&g_page_sem, 0, 1);
 }
 
 /****************************************************************************
- * Name: up_progmem_npages
+ * Name: up_progmem_neraseblocks
  *
  * Description:
  *   Return number of clusters in the available FLASH memory.
  *
  ****************************************************************************/
 
-size_t up_progmem_npages(void)
+size_t up_progmem_neraseblocks(void)
 {
   return SAMV7_PROGMEM_NCLUSTERS;
 }
@@ -402,6 +405,19 @@ bool up_progmem_isuniform(void)
  ****************************************************************************/
 
 size_t up_progmem_pagesize(size_t cluster)
+{
+  return SAMV7_CLUSTER_SIZE;
+}
+
+/****************************************************************************
+ * Name: up_progmem_erasesize
+ *
+ * Description:
+ *   Return cluster size
+ *
+ ****************************************************************************/
+
+size_t up_progmem_erasesize(size_t cluster)
 {
   return SAMV7_CLUSTER_SIZE;
 }
@@ -463,7 +479,7 @@ size_t up_progmem_getaddress(size_t cluster)
 }
 
 /****************************************************************************
- * Name: up_progmem_erasepage
+ * Name: up_progmem_eraseblock
  *
  * Description:
  *   Erase selected cluster.
@@ -484,7 +500,7 @@ size_t up_progmem_getaddress(size_t cluster)
  *
  ****************************************************************************/
 
-ssize_t up_progmem_erasepage(size_t cluster)
+ssize_t up_progmem_eraseblock(size_t cluster)
 {
   uint32_t page;
   uint32_t arg;
@@ -574,7 +590,7 @@ ssize_t up_progmem_ispageerased(size_t cluster)
       return -EFAULT;
     }
 
-  /* Flush and invalidate nvalidate D-Cache for this address range */
+  /* Flush and invalidate D-Cache for this address range */
 
   address = (cluster << SAMV7_CLUSTER_SHIFT) + SAMV7_PROGMEM_START;
   arch_flush_dcache(address, address + SAMV7_CLUSTER_SIZE);

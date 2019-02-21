@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/mqueue/mq_release.c
  *
- *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,25 +48,25 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_release
+ * Name: nxmq_release
  *
  * Description:
  *   This function is called when the final member of a task group exits.
  *   This function closes all of the message queues opened by members of
  *   the task group.
  *
- * Inputs:
+ * Input Parameters:
  *   group - The task group that is terminating.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-void mq_release(FAR struct task_group_s *group)
+void nxmq_release(FAR struct task_group_s *group)
 {
   while (group->tg_msgdesq.head)
     {
-      mq_close_group((mqd_t)group->tg_msgdesq.head, group);
+      (void)nxmq_close_group((mqd_t)group->tg_msgdesq.head, group);
     }
 }

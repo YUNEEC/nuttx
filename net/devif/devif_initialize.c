@@ -65,8 +65,7 @@
 struct net_stats_s g_netstats;
 #endif
 
-
-#if defined(CONFIG_NET_IPv4) && defined(CONFIG_NET_TCP_REASSEMBLY)
+#ifdef CONFIG_NET_IPv4_REASSEMBLY
 /* Reassembly timer (units: deci-seconds) */
 
 uint8_t g_reassembly_timer;
@@ -82,11 +81,15 @@ uint8_t g_reassembly_timer;
  * Description:
  *   Perform initialization of the network device interface layer
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return:
+ * Returned Value:
  *   None
+ *
+ * Assumptions:
+ *   Called early in the initialization sequence so that no special
+ *   protection is required.
  *
  ****************************************************************************/
 

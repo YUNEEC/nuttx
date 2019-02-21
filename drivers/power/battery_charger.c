@@ -41,10 +41,10 @@
 #include <nuttx/config.h>
 
 #include <stdbool.h>
-#include <semaphore.h>
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/power/battery_charger.h>
 #include <nuttx/power/battery_ioctl.h>
@@ -162,10 +162,10 @@ static int bat_charger_ioctl(FAR struct file *filep, int cmd,
 
   /* Enforce mutually exclusive access to the battery driver */
 
-  ret = sem_wait(&dev->batsem);
+  ret = nxsem_wait(&dev->batsem);
   if (ret < 0)
     {
-      return -errno; /* Probably EINTR */
+      return ret; /* Probably -EINTR */
     }
 
   /* Process the IOCTL command */
@@ -255,7 +255,7 @@ static int bat_charger_ioctl(FAR struct file *filep, int cmd,
         break;
     }
 
-  sem_post(&dev->batsem);
+  nxsem_post(&dev->batsem);
   return ret;
 }
 
@@ -270,12 +270,12 @@ static int bat_charger_ioctl(FAR struct file *filep, int cmd,
  *   Register a lower half battery driver with the common, upper-half
  *   battery driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   devpath - The location in the pseudo-filesystem to create the driver.
  *     Recommended standard is "/dev/bat0", "/dev/bat1", etc.
  *   dev - An instance of the battery state structure .
  *
- * Returned value:
+ * Returned Value:
  *    Zero on success or a negated errno value on failure.
  *
  ****************************************************************************/
@@ -284,6 +284,10 @@ int battery_charger_register(FAR const char *devpath,
                              FAR struct battery_charger_dev_s *dev)
 {
   int ret;
+
+  /* Initialize the semaphore */
+
+  nxsem_init(&dev->batsem, 0, 1);
 
   /* Register the character driver */
 

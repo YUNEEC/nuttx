@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_dma.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,20 +150,28 @@ static int dma_interrupt_core(void *context)
   struct lc823450_phydmach_s *pdmach;
   struct lc823450_dmach_s *dmach;
   sq_entry_t *q_ent;
+  irqstate_t flags;
 
   pdmach = (struct lc823450_phydmach_s *)context;
 
+  flags = spin_lock_irqsave();
   q_ent = pdmach->req_q.tail;
-  DEBUGASSERT(q_ent);
+  DEBUGASSERT(q_ent != NULL);
   dmach = (struct lc823450_dmach_s *)q_ent;
 
   if (dmach->nxfrs == 0)
     {
       /* finish one transfer */
+
       sq_remlast(&pdmach->req_q);
+      spin_unlock_irqrestore(flags);
 
       if (dmach->callback)
         dmach->callback((DMA_HANDLE)dmach, dmach->arg, 0);
+    }
+  else
+    {
+      spin_unlock_irqrestore(flags);
     }
 
   up_disable_clk(LC823450_CLOCK_DMA);
@@ -218,14 +226,14 @@ static int phydmastart(struct lc823450_phydmach_s *pdmach)
   struct lc823450_dmach_s *dmach;
   sq_entry_t *q_ent;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave();
 
   q_ent = pdmach->req_q.tail;
 
   if (!q_ent)
     {
       pdmach->inprogress = 0;
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(flags);
       return 0;
     }
 
@@ -288,7 +296,7 @@ static int phydmastart(struct lc823450_phydmach_s *pdmach)
 
   modifyreg32(DMACCFG(dmach->chn), 0, DMACCFG_ITC | DMACCFG_E);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(flags);
   return 0;
 }
 
@@ -331,10 +339,10 @@ void lc823450_dma_test()
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_dmainitialize
+ * Name: up_dma_initialize
  ****************************************************************************/
 
-void up_dmainitialize(void)
+void up_dma_initialize(void)
 {
   int i;
 
@@ -344,7 +352,7 @@ void up_dmainitialize(void)
       sq_init(&g_dma.phydmach[i].req_q);
     }
 
-  sem_init(&g_dma.exclsem, 0, 1);
+  nxsem_init(&g_dma.exclsem, 0, 1);
 
   if (irq_attach(LC823450_IRQ_DMAC, dma_interrupt, NULL) != 0)
     {
@@ -453,7 +461,7 @@ void lc823450_dmarequest(DMA_HANDLE handle, uint8_t dmarequest)
         break;
       default:
         dmaerr("ERROR: Not implemetned\n");
-        DEBUGASSERT(0);
+        DEBUGPANIC();
     }
 
   putreg32(val, DMACCFG(dmach->chn));
@@ -537,7 +545,8 @@ void lc823450_dmafree(DMA_HANDLE handle)
 {
   struct lc823450_dmach_s *dmach = (DMA_HANDLE)handle;
 
-  DEBUGASSERT(dmach);
+  DEBUGASSERT(dmach != NULL);
+  UNUSED(dmach);
 
   /* Make sure that the DMA channel was properly stopped */
 
@@ -563,7 +572,7 @@ int lc823450_dmasetup(DMA_HANDLE handle, uint32_t control,
 {
   struct lc823450_dmach_s *dmach = (DMA_HANDLE)handle;
 
-  DEBUGASSERT(dmach);
+  DEBUGASSERT(dmach != NULL);
 
   dmach->srcaddr = srcaddr;
   dmach->destaddr = destaddr;
@@ -579,7 +588,7 @@ int lc823450_dmallsetup(DMA_HANDLE handle, uint32_t control,
 {
   struct lc823450_dmach_s *dmach = (DMA_HANDLE)handle;
 
-  DEBUGASSERT(dmach);
+  DEBUGASSERT(dmach != NULL);
 
   dmach->srcaddr = srcaddr;
   dmach->destaddr = destaddr;
@@ -610,11 +619,11 @@ int lc823450_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg)
   struct lc823450_dmach_s *dmach = (DMA_HANDLE)handle;
   irqstate_t flags;
 
-  DEBUGASSERT(dmach);
+  DEBUGASSERT(dmach != NULL);
 
   /* select physical channel */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave();
 
   sq_addfirst(&dmach->q_ent, &g_dma.phydmach[dmach->chn].req_q);
 
@@ -628,7 +637,7 @@ int lc823450_dmastart(DMA_HANDLE handle, dma_callback_t callback, void *arg)
       phydmastart(&g_dma.phydmach[dmach->chn]);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(flags);
 
   return OK;
 }
@@ -643,9 +652,9 @@ void lc823450_dmastop(DMA_HANDLE handle)
   struct lc823450_phydmach_s *pdmach;
   irqstate_t flags;
 
-  DEBUGASSERT(dmach);
+  DEBUGASSERT(dmach != NULL);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave();
 
   modifyreg32(DMACCFG(dmach->chn), DMACCFG_ITC | DMACCFG_E, 0);
 
@@ -660,6 +669,6 @@ void lc823450_dmastop(DMA_HANDLE handle)
       sq_rem(&dmach->q_ent, &pdmach->req_q);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(flags);
   return;
 }

@@ -1,5 +1,5 @@
 ############################################################################
-# configs/nucleo-f303re/src/Makefile
+# configs/nucleo-f334r8/src/Makefile
 #
 #   Copyright (C) 2017 Gregory Nutt. All rights reserved.
 #   Author: Mateusz Szafoni <raiden00@railab.me>
@@ -76,7 +76,7 @@ ifeq ($(CONFIG_TIMER),y)
 CSRCS += stm32_timer.c
 endif
 
-ifeq ($(CONFIG_HRTIM),y)
+ifeq ($(CONFIG_STM32_HRTIM),y)
 CSRCS += stm32_hrtim.c
 endif
 
@@ -86,6 +86,14 @@ endif
 
 ifeq ($(CONFIG_OPAMP),y)
 CSRCS += stm32_opamp.c
+endif
+
+ifeq ($(CONFIG_NUCLEOF334R8_HIGHPRI),y)
+CSRCS += stm32_highpri.c
+endif
+
+ifeq ($(CONFIG_NUCLEOF334R8_SPWM),y)
+CSRCS += stm32_spwm.c
 endif
 
 include $(TOPDIR)/configs/Board.mk

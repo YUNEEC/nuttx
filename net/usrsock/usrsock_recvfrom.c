@@ -42,7 +42,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
@@ -50,11 +49,10 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
-#include <nuttx/kmalloc.h>
 
-#include "socket/socket.h"
 #include "usrsock/usrsock.h"
 
 /****************************************************************************
@@ -83,7 +81,7 @@ static uint16_t recvfrom_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
   else if (flags & USRSOCK_EVENT_REQ_COMPLETE)
     {
@@ -118,7 +116,7 @@ static uint16_t recvfrom_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
   else if (flags & USRSOCK_EVENT_REMOTE_CLOSED)
     {
@@ -134,7 +132,7 @@ static uint16_t recvfrom_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
   else if (flags & USRSOCK_EVENT_RECVFROM_AVAIL)
     {
@@ -150,7 +148,7 @@ static uint16_t recvfrom_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->reqstate.recvsem);
+      nxsem_post(&pstate->reqstate.recvsem);
     }
 
   return flags;
@@ -190,30 +188,6 @@ static int do_recvfrom_request(FAR struct usrsock_conn_s *conn, size_t buflen,
 }
 
 /****************************************************************************
- * Name: setup_conn_recvfrom
- ****************************************************************************/
-
-static void setup_conn_recvfrom(FAR struct usrsock_conn_s *conn,
-                                FAR struct iovec *iov, unsigned int iovcnt)
-{
-  unsigned int i;
-
-  conn->resp.datain.iov = iov;
-  conn->resp.datain.pos = 0;
-  conn->resp.datain.total = 0;
-  conn->resp.datain.iovcnt = iovcnt;
-
-  for (i = 0; i < iovcnt; i++)
-    {
-      conn->resp.datain.total += iov[i].iov_len;
-    }
-}
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Name: usrsock_recvfrom
  *
  * Description:
@@ -225,7 +199,7 @@ static void setup_conn_recvfrom(FAR struct usrsock_conn_s *conn,
  *   initialized to the size of the buffer associated with from, and modified
  *   on return to indicate the actual size of the address stored there.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Buffer to receive data
  *   len      Length of buffer
@@ -435,7 +409,7 @@ ssize_t usrsock_recvfrom(FAR struct socket *psock, FAR void *buf, size_t len,
       inbufs[1].iov_base = (FAR void *)buf;
       inbufs[1].iov_len = len;
 
-      setup_conn_recvfrom(conn, inbufs, ARRAY_SIZE(inbufs));
+      usrsock_setup_datain(conn, inbufs, ARRAY_SIZE(inbufs));
 
       /* Request user-space daemon to close socket. */
 
@@ -446,7 +420,7 @@ ssize_t usrsock_recvfrom(FAR struct socket *psock, FAR void *buf, size_t len,
 
           while ((ret = net_lockedwait(&state.reqstate.recvsem)) < 0)
             {
-              DEBUGASSERT(ret == -EINTR);
+              DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
             }
 
           ret = state.reqstate.result;
@@ -464,7 +438,7 @@ ssize_t usrsock_recvfrom(FAR struct socket *psock, FAR void *buf, size_t len,
             }
         }
 
-      setup_conn_recvfrom(conn, NULL, 0);
+      usrsock_teardown_datain(conn);
       usrsock_teardown_data_request_callback(&state);
     }
   while (ret == -EAGAIN);

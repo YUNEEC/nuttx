@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/stm32/stm32_i2s.h
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@ extern "C"
  * Description:
  *   Initialize the selected I2S port
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple I2S interfaces)
  *
  * Returned Value:

@@ -161,6 +161,19 @@ config MTD_CONFIG_ERASEDVALUE
 		most FLASH parts, this is 0xff, but could also be zero depending
 		on the device.
 
+config MTD_CONFIG_NAMED
+	bool "Use item NAMES instead of ID/enumeration in Dev Config device"
+	default n
+	---help---
+		Changes config item identification from ID/INST to NAMED values.
+
+config MTD_CONFIG_NAME_LEN
+	int "Dev Config item max name length"
+	default 24
+	depends on MTD_CONFIG_NAMED
+	---help---
+		Sets the maximum length of config item names.
+
 endif # MTD_CONFIG
 
 comment "MTD Device Drivers"
@@ -210,7 +223,7 @@ config MTD_NAND_BLOCKCHECK
 		Enable support for ECC and bad block checking.
 
 config MTD_NAND_SWECC
-	bool "Sofware ECC support"
+	bool "Software ECC support"
 	default n if ARCH_NAND_HWECC
 	default y if !ARCH_NAND_HWECC
 	---help---
@@ -415,7 +428,7 @@ config IS25XP_SPIFREQUENCY
 endif # MTD_IS25XP
 
 config MTD_M25P
-	bool "SPI-based M25P FLASH"
+	bool "SPI-based M25P/MT25Q FLASH"
 	default n
 	select SPI
 
@@ -444,7 +457,13 @@ config M25P_MEMORY_TYPE
 		The memory type for M25 "P" series is 0x20, but the driver also supports "F" series
 		devices, such as the EON EN25F80 part which adds a 4K sector erase capability.  The
 		memory type for "F" series parts from EON is 0x31.  The 4K sector erase size will
-		automatically be enabled when filesytems that can use it are enabled, such as SMART.
+		automatically be enabled when filesystems that can use it are enabled, such as SMART.
+
+config MT25Q_MEMORY_TYPE
+	hex "MT25Q memory type ID"
+	default 0xBA
+	---help---
+		The memory type for MT25 "Q" series is 0xBA.
 
 config M25P_SUBSECTOR_ERASE
 	bool "Sub-Sector Erase"
@@ -490,6 +509,27 @@ config MX25L_DEBUG
 	default n
 
 endif # MTD_MX25L
+
+config MTD_MX35
+	bool "SPI-based MX35LF1GE4AB / MX35LF2GE4AB"
+	default n
+	select SPI
+	---help---
+		SPI-based driver for Macronix MX35LF1GE4AB or MX35LF2GE4AB.
+
+if MTD_MX35
+
+config MX35_SPIMODE
+	int "MX35 SPI mode"
+	default 0
+
+config MX35_SPIFREQUENCY
+	int "MX35 SPI Frequency"
+	default 104000000
+	---help---
+		SPI frequency for MX35 is 104 MHz.
+
+endif # MTD_MX35
 
 config MTD_S25FL1
 	bool "QuadSPI-based S25FL1 FLASH"
@@ -965,3 +1005,32 @@ config QSPI_FREQUENCY
 	default 72000000
 	depends on MTD_SPI_FLASH
 
+<<<<<<< HEAD
+=======
+endif # MTD_W25
+
+config MTD_GD25
+	bool "SPI-based GD25 FLASH"
+	default n
+	select SPI
+
+if MTD_GD25
+
+config GD25_SPIMODE
+	int "GD25 SPI Mode"
+	default 0
+
+config GD25_SPIFREQUENCY
+	int "GD25 SPI Frequency"
+	default 20000000
+
+config GD25_READONLY
+	bool "GD25 Read-Only FLASH"
+	default n
+
+config GD25_SLOWREAD
+	bool
+	default n
+
+endif # MTD_GD25
+>>>>>>> nuttx-7.28

@@ -225,13 +225,13 @@ void kl_gpioirqinitialize(void)
  *   2. Call kl_gpioirqattach() to attach the pin interrupt handling function.
  *   3. Call kl_gpioirqenable() to enable interrupts on the pin.
  *
- * Parameters:
+ * Input Parameters:
  *  - pinset:  Pin configuration
  *  - pinisr:  Pin interrupt service routine
  *  - pinarg:  The argument that will accompany the pin interrupt
  *
- * Returns:
- * Returns:
+ * Returned Value:
+ * Returned Value:
  *   Zero (OK) is returned on success; On any failure, a negated errno value is
  *   returned to indicate the nature of the failure.
  *

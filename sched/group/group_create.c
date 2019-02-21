@@ -89,10 +89,10 @@ FAR struct task_group_s *g_grouphead;
  * Description:
  *   Create a unique group ID.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - The tcb in need of the task group.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -161,11 +161,11 @@ static void group_assigngid(FAR struct task_group_s *group)
  *   group container, then (2) group_initialize() is called to set up the
  *   group membership.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb   - The tcb in need of the task group.
  *   ttype - Type of the thread that is the parent of the group
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) on success; a negated errno value on failure.
  *
  * Assumptions:
@@ -203,6 +203,9 @@ int group_allocate(FAR struct task_tcb_s *tcb, uint8_t ttype)
   /* In a flat, single-heap build.  The stream list is allocated with the
    * group structure.  But in a kernel build with a kernel allocator, it
    * must be separately allocated using a user-space allocator.
+   *
+   * REVISIT:  Kernel threads should not require a stream allocation.  They
+   * should not be using C buffered I/O at all.
    */
 
   group->tg_streamlist = (FAR struct streamlist *)
@@ -245,7 +248,7 @@ int group_allocate(FAR struct task_tcb_s *tcb, uint8_t ttype)
 #ifndef CONFIG_DISABLE_PTHREAD
   /* Initialize the pthread join semaphore */
 
-  (void)sem_init(&group->tg_joinsem, 0, 1);
+  (void)nxsem_init(&group->tg_joinsem, 0, 1);
 #endif
 
 #if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
@@ -255,8 +258,8 @@ int group_allocate(FAR struct task_tcb_s *tcb, uint8_t ttype)
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&group->tg_exitsem, 0, 0);
-  (void)sem_setprotocol(&group->tg_exitsem, SEM_PRIO_NONE);
+  (void)nxsem_init(&group->tg_exitsem, 0, 0);
+  (void)nxsem_setprotocol(&group->tg_exitsem, SEM_PRIO_NONE);
 #endif
 
   return OK;
@@ -271,10 +274,10 @@ int group_allocate(FAR struct task_tcb_s *tcb, uint8_t ttype)
  *   allocated by group_allocate() early in the task creation sequence, then
  *   (2) this function  is called to set up the initial group membership.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - The tcb in need of the task group.
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) on success; a negated errno value on failure.
  *
  * Assumptions:

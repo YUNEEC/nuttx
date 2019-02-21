@@ -43,6 +43,10 @@ ifeq ($(CONFIG_INPUT_TSC2007),y)
   CSRCS += tsc2007.c
 endif
 
+ifeq ($(CONFIG_INPUT_FT5X06),y)
+  CSRCS += ft5x06.c
+endif
+
 ifeq ($(CONFIG_INPUT_ADS7843E),y)
   CSRCS += ads7843e.c
 endif
@@ -89,6 +93,10 @@ endif
 
 ifeq ($(CONFIG_AJOYSTICK),y)
   CSRCS += ajoystick.c
+endif
+
+ifeq ($(CONFIG_INPUT_NUNCHUCK),y)
+  CSRCS += nunchuck.c
 endif
 
 # Include input device driver build support

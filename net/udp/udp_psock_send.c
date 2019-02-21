@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/udp/udp_psock_send.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,6 @@
 #include <nuttx/config.h>
 
 #include <sys/types.h>
-#include <string.h>
 #include <assert.h>
 #include <errno.h>
 
@@ -64,59 +63,26 @@
 ssize_t psock_udp_send(FAR struct socket *psock, FAR const void *buf,
                        size_t len)
 {
-  FAR struct udp_conn_s *conn;
-  union
-  {
-    struct sockaddr     addr;
-#ifdef CONFIG_NET_IPv4
-    struct sockaddr_in  addr4;
-#endif
-#ifdef CONFIG_NET_IPv6
-    struct sockaddr_in6 addr6;
-#endif
-  } to;
-  socklen_t tolen;
-
-  DEBUGASSERT(psock != NULL && psock->s_crefs > 0);
+  DEBUGASSERT(psock != NULL && psock->s_crefs > 0 && psock->s_conn != NULL);
   DEBUGASSERT(psock->s_type == SOCK_DGRAM);
 
-  conn = (FAR struct udp_conn_s *)psock->s_conn;
-  DEBUGASSERT(conn);
-
-  /* Was the UDP socket connected via connect()? */
+  /* Was the UDP socket connected via connect()?
+   * REVISIT:  This same test is performed in psock_udp_sendto() where
+   * -EDESTADDRREQ is returned.  There is a fine distinction in the
+   * meaning of the reported errors that I am not sure I have correct.
+   */
 
   if (!_SS_ISCONNECTED(psock->s_flags))
     {
-      /* No, then it is not legal to call send() with this socket. */
+      /* No, then it is not legal to call send() with this socket.
+       * ENOTCONN - The socket is not connected or otherwise has not had
+       * the peer pre-specified.
+       */
 
       return -ENOTCONN;
     }
 
-  /* Yes, then let psock_sendto to the work */
+  /* Let psock_sendto() do all of the work work */
 
-#ifdef CONFIG_NET_IPv4
-#ifdef CONFIG_NET_IPv6
-  if (conn->domain == PF_INET)
-#endif
-    {
-      tolen               = sizeof(struct sockaddr_in);
-      to.addr4.sin_family = AF_INET;
-      to.addr4.sin_port   = conn->rport;
-      net_ipv4addr_copy(to.addr4.sin_addr.s_addr, conn->u.ipv4.raddr);
-    }
-#endif /* CONFIG_NET_IPv4 */
-
-#ifdef CONFIG_NET_IPv6
-#ifdef CONFIG_NET_IPv4
-  else
-#endif
-    {
-      tolen               = sizeof(struct sockaddr_in6);
-      to.addr6.sin6_family = AF_INET6;
-      to.addr6.sin6_port   = conn->rport;
-      net_ipv6addr_copy(to.addr6.sin6_addr.s6_addr, conn->u.ipv6.raddr);
-    }
-#endif /* CONFIG_NET_IPv6 */
-
-  return psock_udp_sendto(psock, buf, len, 0, &to.addr, tolen);
+  return psock_udp_sendto(psock, buf, len, 0, NULL, 0);
 }

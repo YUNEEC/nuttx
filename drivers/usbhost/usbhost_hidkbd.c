@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_hidkbd.c
  *
- *   Copyright (C) 2011-2013, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,10 +57,11 @@
 #include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/kthread.h>
-#include <nuttx/fs/fs.h>
 #include <nuttx/arch.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
+#include <nuttx/fs/fs.h>
 
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
@@ -96,7 +97,7 @@
 #  warning "Worker thread support is required (CONFIG_SCHED_WORKQUEUE)"
 #endif
 
-/* Signals must not be disabled as they are needed by usleep.  Need to have
+/* Signals must not be disabled as they are needed by nxsig_usleep.  Need to have
  * CONFIG_DISABLE_SIGNALS=n
  */
 
@@ -261,7 +262,7 @@ struct usbhost_outstream_s
 /* Semaphores */
 
 static void usbhost_takesem(sem_t *sem);
-#define usbhost_givesem(s) sem_post(s);
+#define usbhost_givesem(s) nxsem_post(s);
 
 /* Polling support */
 
@@ -350,7 +351,7 @@ static int usbhost_poll(FAR struct file *filep, FAR struct pollfd *fds,
  * device.
  */
 
-static const const struct usbhost_id_s g_hidkbd_id =
+static const struct usbhost_id_s g_hidkbd_id =
 {
   USB_CLASS_HID,            /* base     */
   USBHID_SUBCLASS_BOOTIF,   /* subclass */
@@ -599,16 +600,21 @@ static const uint8_t lcmap[USBHID_NUMSCANCODES] =
 
 static void usbhost_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -629,7 +635,7 @@ static void usbhost_pollnotify(FAR struct usbhost_state_s *priv)
           if (fds->revents != 0)
             {
               uinfo("Report events: %02x\n", fds->revents);
-              sem_post(fds->sem);
+              nxsem_post(fds->sem);
             }
         }
     }
@@ -647,7 +653,7 @@ static void usbhost_pollnotify(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s.  NULL is returned on failure; this function will
  *   will fail only if there are insufficient resources to create another
@@ -674,7 +680,7 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
  * Input Parameters:
  *   usbclass - A reference to the class instance to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -747,7 +753,7 @@ static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *dev
  * Input Parameters:
  *   arg - A reference to the class instance to be destroyed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -791,8 +797,8 @@ static void usbhost_destroy(FAR void *arg)
 
   /* Destroy the semaphores */
 
-  sem_destroy(&priv->exclsem);
-  sem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->waitsem);
 
   /* Disconnect the USB host device */
 
@@ -818,7 +824,7 @@ static void usbhost_destroy(FAR void *arg)
  *   priv - Driver internal state
  *   keycode - The value to add to the user buffer
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -874,7 +880,7 @@ static void usbhost_putbuffer(FAR struct usbhost_state_s *priv,
  *   stream - The struct lib_outstream_s reference
  *   ch - The character to add to the user buffer
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -902,7 +908,7 @@ static void usbhost_putstream(FAR struct lib_outstream_s *stream, int ch)
  *   scancode - Scan code to be mapped.
  *   modifier - Ctrl,Alt,Shift,GUI modifier bits
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -944,7 +950,7 @@ static inline uint8_t usbhost_mapscancode(uint8_t scancode, uint8_t modifier)
  *   scancode - Scan code to be mapped.
  *   modifier - Ctrl, Alt, Shift, GUI modifier bits
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -993,7 +999,7 @@ static inline void usbhost_encodescancode(FAR struct usbhost_state_s *priv,
  * Input Parameters:
  *   arg - A reference to the class instance to be destroyed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1034,7 +1040,7 @@ static int usbhost_kbdpoll(int argc, char *argv[])
 
   priv->polling = true;
   usbhost_givesem(&g_syncsem);
-  sleep(1);
+  nxsig_sleep(1);
 
   /* Loop here until the device is disconnected */
 
@@ -1245,7 +1251,7 @@ static int usbhost_kbdpoll(int argc, char *argv[])
           delay = CONFIG_HIDKBD_POLLUSEC;
         }
 
-      usleep(delay);
+      nxsig_usleep(delay);
     }
 
   /* We get here when the driver is removed.. or when too many errors have
@@ -1320,7 +1326,7 @@ static int usbhost_kbdpoll(int argc, char *argv[])
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1572,7 +1578,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1607,7 +1613,7 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
 
   uinfo("Start poll task\n");
 
-  /* The inputs to a task started by kernel_thread() are very awkard for this
+  /* The inputs to a task started by kthread_create() are very awkard for this
    * purpose.  They are really designed for command line tasks (argc/argv). So
    * the following is kludge pass binary data when the keyboard poll task
    * is started.
@@ -1619,15 +1625,16 @@ static inline int usbhost_devinit(FAR struct usbhost_state_s *priv)
   usbhost_takesem(&g_exclsem);
   g_priv = priv;
 
-  priv->pollpid = kernel_thread("kbdpoll", CONFIG_HIDKBD_DEFPRIO,
-                                CONFIG_HIDKBD_STACKSIZE,
-                                (main_t)usbhost_kbdpoll, (FAR char * const *)NULL);
-  if (priv->pollpid == ERROR)
+  priv->pollpid = kthread_create("kbdpoll", CONFIG_HIDKBD_DEFPRIO,
+                                 CONFIG_HIDKBD_STACKSIZE,
+                                 (main_t)usbhost_kbdpoll,
+                                 (FAR char * const *)NULL);
+  if (priv->pollpid < 0)
     {
       /* Failed to started the poll thread... probably due to memory resources */
 
       usbhost_givesem(&g_exclsem);
-      ret = -ENOMEM;
+      ret = (int)priv->pollpid;
       goto errout;
     }
 
@@ -1662,7 +1669,7 @@ errout:
  * Input Parameters:
  *   val - A pointer to the first byte of the little endian value.
  *
- * Returned Values:
+ * Returned Value:
  *   A uint16_t representing the whole 16-bit integer value
  *
  ****************************************************************************/
@@ -1682,7 +1689,7 @@ static inline uint16_t usbhost_getle16(const uint8_t *val)
  *   dest - A pointer to the first byte to save the little endian value.
  *   val - The 16-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1703,7 +1710,7 @@ static void usbhost_putle16(uint8_t *dest, uint16_t val)
  *   dest - A pointer to the first byte to save the big endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1725,7 +1732,7 @@ static inline uint32_t usbhost_getle32(const uint8_t *val)
  *   dest - A pointer to the first byte to save the little endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1749,7 +1756,7 @@ static void usbhost_putle32(uint8_t *dest, uint32_t val)
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned.  On failure, an negated errno value
  *   is returned to indicate the nature of the failure.
  *
@@ -1775,7 +1782,7 @@ static inline int usbhost_tdalloc(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned.  On failure, an negated errno value
  *   is returned to indicate the nature of the failure.
  *
@@ -1820,7 +1827,7 @@ static inline int usbhost_tdfree(FAR struct usbhost_state_s *priv)
  *   id - In the case where the device supports multiple base classes,
  *     subclasses, or protocols, this specifies which to configure for.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s that can be used by the USB host driver to communicate
  *   with the USB host class.  NULL is returned on failure; this function
@@ -1862,14 +1869,14 @@ static FAR struct usbhost_class_s *
 
           /* Initialize semaphores */
 
-          sem_init(&priv->exclsem, 0, 1);
-          sem_init(&priv->waitsem, 0, 0);
+          nxsem_init(&priv->exclsem, 0, 1);
+          nxsem_init(&priv->waitsem, 0, 0);
 
           /* The waitsem semaphore is used for signaling and, hence, should
            * not have priority inheritance enabled.
            */
 
-          sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+          nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
           /* Return the instance of the USB keyboard class driver */
 
@@ -1905,7 +1912,7 @@ static FAR struct usbhost_class_s *
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1974,7 +1981,7 @@ static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
  *   usbclass - The USB host class entry previously obtained from a call to
  *     create().
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -2022,7 +2029,7 @@ static int usbhost_disconnected(struct usbhost_class_s *usbclass)
        * perhaps, destroy the class instance.  Then it will exit.
        */
 
-      (void)kill(priv->pollpid, SIGALRM);
+      (void)nxsig_kill(priv->pollpid, SIGALRM);
     }
   else
     {
@@ -2178,7 +2185,7 @@ static int usbhost_close(FAR struct file *filep)
                * signal that we use does not matter in this case.
                */
 
-              (void)kill(priv->pollpid, SIGALRM);
+              (void)nxsig_kill(priv->pollpid, SIGALRM);
             }
         }
     }
@@ -2397,7 +2404,7 @@ static int usbhost_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return ret;
 }
 #endif
@@ -2417,7 +2424,7 @@ errout:
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   On success this function will return zero (OK);  A negated errno value
  *   will be returned on failure.
  *
@@ -2427,14 +2434,14 @@ int usbhost_kbdinit(void)
 {
   /* Perform any one-time initialization of the class implementation */
 
-  sem_init(&g_exclsem, 0, 1);
-  sem_init(&g_syncsem, 0, 0);
+  nxsem_init(&g_exclsem, 0, 1);
+  nxsem_init(&g_syncsem, 0, 0);
 
   /* The g_syncsem semaphore is used for signaling and, hence, should not
    * have priority inheritance enabled.
    */
 
-  sem_setprotocol(&g_syncsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&g_syncsem, SEM_PRIO_NONE);
 
   /* Advertise our availability to support (certain) devices */
 

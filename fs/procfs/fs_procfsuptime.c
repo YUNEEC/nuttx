@@ -208,7 +208,7 @@ static ssize_t uptime_read(FAR struct file *filep, FAR char *buffer,
   size_t linesize;
   off_t offset;
   ssize_t ret;
-  systime_t ticktime;
+  clock_t ticktime;
 
 #if defined(CONFIG_HAVE_DOUBLE) && defined(CONFIG_LIBC_FLOATINGPOINT)
   double now;
@@ -240,7 +240,7 @@ static ssize_t uptime_read(FAR struct file *filep, FAR char *buffer,
     {
       /* System time */
 
-      ticktime = clock_systimer();
+      ticktime = clock_systimer() - INITIAL_SYSTEM_TIMER_TICKS;
 
 #if defined(CONFIG_HAVE_DOUBLE) && defined(CONFIG_LIBC_FLOATINGPOINT)
       /* Convert the system up time to a seconds + hundredths of seconds string */

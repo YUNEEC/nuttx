@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/mtd/mtd_progmem.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,9 +49,7 @@
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/mtd/mtd.h>
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
+#ifdef CONFIG_ARCH_HAVE_PROGMEM
 
 /****************************************************************************
  * Private Types
@@ -71,7 +69,8 @@ struct progmem_dev_s
   /* Fields unique to the progmem MTD driver */
 
   bool    initialized;      /* True: Already initialized */
-  uint8_t blkshift;         /* Log2 of the flash block size */
+  uint8_t blkshift;         /* Log2 of the flash read/write block size */
+  uint8_t ersshift;         /* Log2 of the flash erase block size */
 };
 
 /****************************************************************************
@@ -102,6 +101,7 @@ static int     progmem_ioctl(FAR struct mtd_dev_s *dev, int cmd,
 /****************************************************************************
  * Private Data
  ****************************************************************************/
+
 /* This structure holds the state of the MTD driver */
 
 static struct progmem_dev_s g_progmem =
@@ -114,7 +114,8 @@ static struct progmem_dev_s g_progmem =
 #ifdef CONFIG_MTD_BYTE_WRITE
     progmem_write,
 #endif
-    progmem_ioctl
+    progmem_ioctl,
+    "progmem",
   }
 };
 
@@ -172,7 +173,7 @@ static int progmem_erase(FAR struct mtd_dev_s *dev, off_t startblock,
 
   while (nblocks > 0)
     {
-      result = up_progmem_erasepage(startblock);
+      result = up_progmem_eraseblock(startblock);
       if (result < 0)
         {
           return (int)result;
@@ -225,8 +226,9 @@ static ssize_t progmem_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
   FAR struct progmem_dev_s *priv = (FAR struct progmem_dev_s *)dev;
   ssize_t result;
 
-  /* Write the specified blocks from the provided user buffer and return status
-   * (The positive, number of blocks actually written or a negated errno)
+  /* Write the specified blocks from the provided user buffer and return
+   * status (The positive, number of blocks actually written or a negated
+   * errno)
    */
 
   result = up_progmem_write(up_progmem_getaddress(startblock), buffer,
@@ -256,7 +258,7 @@ static ssize_t progmem_read(FAR struct mtd_dev_s *dev, off_t offset,
 
   startblock = offset >> priv->blkshift;
   src = (FAR const uint8_t *)up_progmem_getaddress(startblock) +
-                                (offset & ((1 << priv->blkshift) - 1));
+                             (offset & ((1 << priv->blkshift) - 1));
   memcpy(buffer, src, nbytes);
   return nbytes;
 }
@@ -284,7 +286,7 @@ static ssize_t progmem_write(FAR struct mtd_dev_s *dev, off_t offset,
 
   startblock = offset >> priv->blkshift;
   result = up_progmem_write(up_progmem_getaddress(startblock) +
-                  (offset & ((1 << priv->blkshift) - 1)), buffer, nbytes);
+           (offset & ((1 << priv->blkshift) - 1)), buffer, nbytes);
   return result < 0 ? result : nbytes;
 }
 #endif
@@ -314,9 +316,9 @@ static int progmem_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
                * appear so.
                */
 
-              geo->blocksize    = (1 << priv->blkshift);  /* Size of one read/write block */
-              geo->erasesize    = (1 << priv->blkshift);  /* Size of one erase block */
-              geo->neraseblocks = up_progmem_npages();    /* Number of erase blocks */
+              geo->blocksize    = (1 << priv->blkshift);     /* Size of one read/write block */
+              geo->erasesize    = (1 << priv->ersshift);     /* Size of one erase block */
+              geo->neraseblocks = up_progmem_neraseblocks(); /* Number of erase blocks */
               ret               = OK;
           }
         }
@@ -338,7 +340,7 @@ static int progmem_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
 
       case MTDIOC_BULKERASE:
         {
-          size_t nblocks = up_progmem_npages();
+          size_t nblocks = up_progmem_neraseblocks();
 
           /* Erase the entire device */
 
@@ -375,6 +377,7 @@ FAR struct mtd_dev_s *progmem_initialize(void)
 {
   FAR struct progmem_dev_s *priv = (FAR struct progmem_dev_s *)&g_progmem;
   int32_t blkshift;
+  int32_t ersshift;
 
   /* Perform initialization if necessary */
 
@@ -387,7 +390,7 @@ FAR struct mtd_dev_s *progmem_initialize(void)
 
       size_t blocksize = up_progmem_pagesize(0);
 
-     /* Calculate Log2 of the flash block size */
+      /* Calculate Log2 of the flash read/write block size */
 
       blkshift = progmem_log2(blocksize);
       if (blkshift < 0)
@@ -395,19 +398,26 @@ FAR struct mtd_dev_s *progmem_initialize(void)
           return NULL;
         }
 
+      /* Calculate Log2 of the flash erase block size */
+
+      blocksize = up_progmem_erasesize(0);
+
+      ersshift = progmem_log2(blocksize);
+      if (ersshift < 0)
+        {
+          return NULL;
+        }
+
       /* Save the configuration data */
 
       g_progmem.blkshift    = blkshift;
+      g_progmem.ersshift    = ersshift;
       g_progmem.initialized = true;
-
-#ifdef CONFIG_MTD_REGISTRATION
-      /* Register the MTD with the procfs system if enabled */
-
-      mtd_register(&priv->mtd, "progmem");
-#endif
     }
 
   /* Return the implementation-specific state structure as the MTD device */
 
   return (FAR struct mtd_dev_s *)priv;
 }
+
+#endif /* CONFIG_ARCH_HAVE_PROGMEM */

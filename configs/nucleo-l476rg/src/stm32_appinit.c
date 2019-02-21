@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/nucleo-l476rg/src/stm32l4_appinit.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,22 +64,22 @@
 #  include "stm32l4_rtc.h"
 #endif
 
+#include "stm32l4_i2c.h"
+
+/****************************************************************************
+ * Private Data
+ ***************************************************************************/
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
-/****************************************************************************
- * Name: up_netinitialize
- *
- * Description:
- *   Dummy function expected to start-up logic.
- *
- ****************************************************************************/
+/* Checking needed by MMC/SDCard */
 
-#ifdef CONFIG_WL_CC3000
-void up_netinitialize(void)
-{
-}
+#ifdef CONFIG_NSH_MMCSDMINOR
+#  define MMCSD_MINOR       CONFIG_NSH_MMCSDMINOR
+#else
+#  define MMCSD_MINOR       0
 #endif
 
 /****************************************************************************
@@ -159,7 +159,7 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
-#ifdef HAVE_MMCSD
+#ifdef HAVE_MMCSD_SDIO
   /* First, get an instance of the SDIO interface */
 
   g_sdio = sdio_initialize(CONFIG_NSH_MMCSDSLOTNO);
@@ -173,7 +173,7 @@ int board_app_initialize(uintptr_t arg)
   /* Now bind the SDIO interface to the MMC/SD driver */
 
   ret = mmcsd_slotinitialize(CONFIG_NSH_MMCSDMINOR, g_sdio);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to bind SDIO to the MMC/SD driver: %d\n",
@@ -210,11 +210,31 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#ifdef CONFIG_CAN
+  ret = stm32l4_can_setup();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32l4_can_setup failed: %d\n", ret);
+      return ret;
+    }
+#endif
+
+/* Initialize MMC and register the MMC driver. */
+
+#ifdef HAVE_MMCSD_SPI
+  ret = stm32l4_mmcsd_initialize(MMCSD_MINOR);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize SD slot %d: %d\n", ret);
+      return ret;
+    }
+#endif
+
 #ifdef CONFIG_AJOYSTICK
   /* Initialize and register the joystick driver */
 
   ret = board_ajoy_initialize();
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the joystick driver: %d\n",
@@ -227,7 +247,7 @@ int board_app_initialize(uintptr_t arg)
   /* Initialize and register the timer driver */
 
   ret = board_timer_driver_initialize("/dev/timer0", 2);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the timer driver: %d\n",
@@ -237,7 +257,6 @@ int board_app_initialize(uintptr_t arg)
 #endif
 
 #ifdef CONFIG_SENSORS_QENCODER
-
   /* Initialize and register the qencoder driver */
 
   index = 0;
@@ -245,7 +264,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM1_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 1);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -257,7 +276,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM2_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 2);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -269,7 +288,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM3_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 3);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -281,7 +300,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM4_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 4);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -293,7 +312,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM5_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 5);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -305,7 +324,7 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_STM32L4_TIM8_QE
   sprintf(buf, "/dev/qe%d", index++);
   ret = stm32l4_qencoder_initialize(buf, 8);
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR,
              "ERROR: Failed to register the qencoder: %d\n",
@@ -313,7 +332,52 @@ int board_app_initialize(uintptr_t arg)
       return ret;
     }
 #endif
+#endif /* CONFIG_SENSORS_QENCODER */
 
+#ifdef CONFIG_SENSORS_HTS221
+  ret = stm32l4_hts221_initialize("/dev/hts221");
+  if (ret < 0)
+    {
+      serr("ERROR: Failed to initialize HTC221 driver: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_SENSORS_LSM6DSL
+  ret = stm32l4_lsm6dsl_initialize("/dev/lsm6dsl0");
+  if (ret < 0)
+    {
+      serr("ERROR: Failed to initialize LSM6DSL driver: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_SENSORS_LSM303AGR
+  ret = stm32l4_lsm303agr_initialize("/dev/lsm303mag0");
+  if (ret < 0)
+    {
+      serr("ERROR: Failed to initialize LSM303AGR driver: %d\n", ret);
+    }
+#endif    
+
+#ifdef CONFIG_DEV_GPIO
+  ret = stm32l4_gpio_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "Failed to initialize GPIO Driver: %d\n", ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_WL_CC1101
+  /* Initialize and register the cc1101 radio */
+
+  ret = stm32_cc1101_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR,
+             "ERROR: stm32_cc1101_initialize failed: %d\n",
+             ret);
+      return ret;
+    }
 #endif
 
   UNUSED(ret);
@@ -339,4 +403,3 @@ int board_uniqueid(uint8_t *uniqueid)
   return OK;
 }
 #endif
-

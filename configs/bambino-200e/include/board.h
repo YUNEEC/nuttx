@@ -3,7 +3,7 @@
  *
  *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@yahoogroups.com>
+ *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@googlegroups.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -141,6 +141,8 @@
 
 #endif
 
+#define BOARD_MAIN_CLK              BOARD_FCCO_FREQUENCY   /* Main clock frequency */
+
 /* This is the clock setup we configure for:
  *
  *   SYSCLK = BOARD_OSCCLK_FREQUENCY = 12MHz  -> Select Main oscillator for source
@@ -178,6 +180,10 @@
 
 #define BOARD_SSP1_CLKSRC           BASE_SSP1_CLKSEL_IDIVA
 #define BOARD_SSP1_BASEFREQ         BOARD_IDIVA_FREQUENCY
+
+/* SDIO Clocking */
+
+#define BOARD_SDIO_CLKSRC           BASE_SDIO_CLKSEL_PLL1
 
 /* USB0 ********************************************************************/
 /* Settings needed in lpc43_cpu.c */
@@ -217,6 +223,41 @@
 #  define BOARD_SPIFI_DIVIDER       (14)        /* 204MHz / 14 = 14.57MHz */
 #  define BOARD_SPIFI_FREQUENCY     (102000000) /* 204MHz / 14 = 14.57MHz */
 #endif
+
+/* SD/MMC or SDIO interface
+ *
+ * NOTE: The SDIO function clock to the interface can be up to 50 MHZ.
+ * Example:  BOARD_MAIN_CLK=220MHz, CLKDIV=5, Finput=44MHz.
+ */
+
+#define BOARD_SDMMC_MAXFREQ      50000000
+#define BOARD_SDMMC_CEIL(a,b)    (((a) + (b) - 1) / (b))
+
+#define BOARD_SDMMC_CLKDIV       (1)            /* No source clock divider */
+#define BOARD_SDMMC_FREQUENCY    (BOARD_MAIN_CLK / BOARD_SDMMC_CLKDIV)
+
+/* Mode-dependent function clock division
+ *
+ * Example:  BOARD_SDMMC_FREQUENCY=44MHz
+ *           BOARD_CLKDIV_INIT=110,    Fsdmmc=400KHz  (400KHz max)
+ *           BOARD_CLKDIV_MMCXFR=4[3], Fsdmmc=11Mhz   (20MHz max) See NOTE:
+ *           BOARD_CLKDIV_SDWIDEXFR=2, Fsdmmc=22MHz   (25MHz max)
+ *           BOARD_CLKDIV_SDXFR=2,     Fsdmmc=22MHz   (25MHz max)
+ *
+ * NOTE:  Clock division is 2*n. For example, value of 0 means divide by
+ * 2 * 0 = 0 (no division, bypass), value of 1 means divide by 2 * 1 = 2, value
+ * of 255 means divide by 2 * 255 = 510, and so on.
+ *
+ * SD/MMC logic will write the value ((clkdiv + 1) >> 1) as the divisor.  So an
+ * odd value calculated below will be moved up to next higher divider value.  So
+ * the value 3 will cause 2 to be written as the divider value and the effective
+ * divider will be 4.
+ */
+
+#define BOARD_CLKDIV_INIT       BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 400000)
+#define BOARD_CLKDIV_MMCXFR     BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 20000000)
+#define BOARD_CLKDIV_SDWIDEXFR  BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 25000000)
+#define BOARD_CLKDIV_SDXFR      BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 25000000)
 
 /* UART clocking ***********************************************************/
 /* Configure all U[S]ARTs to use the XTAL input frequency */
@@ -308,52 +349,54 @@
 #define PINCONF_U3_RXD      PINCONF_U3_RXD_2
 #define PINCONF_U3_DIR      PINCONF_U3_DIR_2
 
+/* SPI Pins ****************************************************************/
+/* The Bambino 200E has SPI peripheral pins reserved for SPIFI.
+ * SSP0 and SSP1 are available on Socket 1 and 10, respectively:
+ *
+ *   ---------  ----------  -----------------
+ *    SIGNAL    Socket/Pin  LPC4330FBD144 PIN
+ *   ---------  ----------  -----------------
+ *   SSP0_SCK   s:1  / p:9      112  P3_0
+ *   SSP0_SSEL  s:1  / p:6      38   P1_0
+ *   SSP0_MISO  s:1  / p:8      42   P1_1
+ *   SSP0_MOSI  s:1  / p:7      43   P1_2
+ *   SSP1_SCK   s:10 / p:9      120  PF_4
+ *   SSP1_SSEL  s:10 / p:6      48   P1_5
+ *   SSP1_MISO  s:10 / p:8      44   P1_3
+ *   SSP1_MOSI  s:10 / p:7      47   P1_4
+ *   ---------  ----------  -----------------
+ *
+ * The following definitions must be provided so that the LPC43 serial
+ * driver can set up the SPI ports properly (see the
+ * file arch/arm/src/lpc43xx/lpc4310203050_pinconf.h for more info).
+ */
+
+#define PINCONF_SSP0_SCK  PINCONF_SSP0_SCK_3
+#define PINCONF_SSP0_SSEL PINCONF_SSP0_SSEL_3
+#define PINCONF_SSP0_MISO PINCONF_SSP0_MISO_3
+#define PINCONF_SSP0_MOSI PINCONF_SSP0_MOSI_3
+
+#define PINCONF_SSP1_SCK  PINCONF_SSP1_SCK_1
+#define PINCONF_SSP1_SSEL PINCONF_SSP1_SSEL_3
+#define PINCONF_SSP1_MISO PINCONF_SSP1_MISO_3
+#define PINCONF_SSP1_MOSI PINCONF_SSP1_MOSI_3
+
 /* Ethernet */
 
 #define PINCONF_ENET_RX_DV  PINCONF_ENET_RX_DV_2
 #define PINCONF_ENET_RESET  PINCONF_GPIO0p4
 #define GPIO_ENET_RESET     (GPIO_MODE_OUTPUT | GPIO_VALUE_ONE | GPIO_PORT0 | GPIO_PIN4)
 #define PINCONF_ENET_MDC    PINCONF_ENET_MDC_3
+#define PINCONF_ENET_TX_EN  PINCONF_ENET_TX_EN_1
 
-/****************************************************************************
- * Public Types
- ****************************************************************************/
+/* SD/MMC pinout */
 
-#ifndef __ASSEMBLY__
+#define GPIO_SD_CARD_DET_N         PINCONF_SD_CD_1
+#define GPIO_SD_D0                 PINCONF_SD_DAT0_1
+#define GPIO_SD_D1                 PINCONF_SD_DAT1_1
+#define GPIO_SD_D2                 PINCONF_SD_DAT2_1
+#define GPIO_SD_D3                 PINCONF_SD_DAT3_1
+#define GPIO_SD_CMD                PINCONF_SD_CMD_1
+#define GPIO_SD_CLK                CLKCONF_SD_CLK_2
 
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/****************************************************************************
- * Public Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Name: lpc43_boardinitialize
- *
- * Description:
- *   All LPC43xx architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ****************************************************************************/
-
-void lpc43_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __CONFIG_BAMBINO_200E_INCLUDE_BOARD_H */

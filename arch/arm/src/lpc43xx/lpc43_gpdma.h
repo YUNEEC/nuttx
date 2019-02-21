@@ -120,19 +120,6 @@ extern "C"
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lpc43_dmainitialize
- *
- * Description:
- *   Initialize the GPDMA subsystem.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void lpc43_dmainitilaize(void);
-
-/****************************************************************************
  * Name: lpc43_dmachannel
  *
  * Description:
@@ -171,8 +158,8 @@ void lpc43_dmafree(DMA_HANDLE handle);
  *
  ****************************************************************************/
 
-int lpc43_dmarxsetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
-                     uint32_t srcaddr, uint32_t destaddr, size_t nbytes);
+int lpc43_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
+                   uint32_t srcaddr, uint32_t destaddr, size_t nbytes);
 
 /****************************************************************************
  * Name: lpc43_dmastart

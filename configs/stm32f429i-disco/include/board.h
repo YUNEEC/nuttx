@@ -206,10 +206,10 @@
 
 /* Alternate function pin selections ************************************************/
 
-/* UART2:
+/* USART1:
  *
  * The STM32F4 Discovery has no on-board serial devices, but the console is
- * brought out to PA2 (TX) and PA3 (RX) for connection to an external serial device.
+ * brought out to PA9 (TX) and PA10 (RX) for connection to an external serial device.
  * (See the README.txt file for other options)
  */
 
@@ -223,6 +223,13 @@
  */
 
 #define GPIO_TIM4_CH2OUT GPIO_TIM4_CH2OUT_2
+
+#define GPIO_TIM1_CH1OUT  GPIO_TIM1_CH1OUT_2 /* PE9 */
+#define GPIO_TIM1_CH1NOUT GPIO_TIM1_CH1N_3   /* PE8 */
+#define GPIO_TIM1_CH2OUT  GPIO_TIM1_CH2OUT_2 /* PE11 */
+#define GPIO_TIM1_CH2NOUT GPIO_TIM1_CH2N_3   /* PE10 */
+#define GPIO_TIM1_CH3OUT  GPIO_TIM1_CH3OUT_2 /* PE13 */
+#define GPIO_TIM1_CH3NOUT GPIO_TIM1_CH3N_3   /* PE12 */
 
 /* I2C - There is a STMPE811 TouchPanel on I2C3 using these pins: */
 
@@ -437,40 +444,24 @@
 
 #endif /* CONFIG_STM32_LTDC */
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-#ifndef __ASSEMBLY__
+/* Configuration specific to high priority interrupts example:
+ *   - TIM1 CC1 trigger for ADC if DMA transfer and TIM1 PWM
+ *   - ADC DMA transfer on DMA1_CH1
+ */
 
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
+#ifdef CONFIG_STM32F429I_DISCO_HIGHPRI
 
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
+#if defined(CONFIG_STM32_TIM1_PWM) && defined(CONFIG_STM32_ADC1_DMA)
 
-/************************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
+/* TIM1 - ADC trigger */
 
-void stm32_boardinitialize(void);
+#define ADC1_EXTSEL_VALUE ADC1_EXTSEL_T1CC1
 
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
+#endif  /* CONFIG_STM32_TIM1_PWM */
+#endif  /* CONFIG_STM32F429I_DISCO_HIGHPRI */
 
-#endif /* __ASSEMBLY__ */
+/* DMA *************************************************************************/
+
+#define ADC1_DMA_CHAN DMAMAP_ADC1_1
+
 #endif  /* __CONFIG_STM32F429I_DISCO_INCLUDE_BOARD_H */

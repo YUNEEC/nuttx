@@ -2,7 +2,7 @@
  * arch/arm/src/stm32f7/stm32_rtc.h
  *
  *   Copyright (C) 2011 Uros Platise. All rights reserved.
- *   Copyright (C) 2011-2013, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2013, 2015-2018 Gregory Nutt. All rights reserved.
  *   Authors: Uros Platise <uros.platise@isotel.eu> (Original for the F1)
  *            Gregory Nutt <gnutt@nuttx.org> (On-going support and development)
  *            David Sidrane <david_s5@nscdg.com>
@@ -59,24 +59,24 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define STM32_RTC_PRESCALER_SECOND  32767  /* Default prescaler to get a second base */
-#define STM32_RTC_PRESCALER_MIN         1  /* Maximum speed of 16384 Hz */
+#define STM32_RTC_PRESCALER_SECOND          32767  /* Default prescaler to get a second base */
+#define STM32_RTC_PRESCALER_MIN             1      /* Maximum speed of 16384 Hz */
 
-#if !defined(CONFIG_RTC_MAGIC)
-# define CONFIG_RTC_MAGIC           (0xfacefeee)
+#if !defined(CONFIG_STM32F7_RTC_MAGIC)
+# define CONFIG_STM32F7_RTC_MAGIC           (0xfacefeed)
 #endif
 
-#if !defined(CONFIG_RTC_MAGIC_TIME_SET)
-#  define CONFIG_RTC_MAGIC_TIME_SET  (CONFIG_RTC_MAGIC + 1)
+#if !defined(CONFIG_STM32F7_RTC_MAGIC_TIME_SET)
+#  define CONFIG_STM32F7_RTC_MAGIC_TIME_SET (0xf00dface)
 #endif
 
-#if !defined(CONFIG_RTC_MAGIC_REG)
-# define CONFIG_RTC_MAGIC_REG       (0)
+#if !defined(CONFIG_STM32F7_RTC_MAGIC_REG)
+# define CONFIG_STM32F7_RTC_MAGIC_REG       (0)
 #endif
 
-#define RTC_MAGIC                   CONFIG_RTC_MAGIC
-#define RTC_MAGIC_TIME_SET          CONFIG_RTC_MAGIC_TIME_SET
-#define RTC_MAGIC_REG               STM32_RTC_BKR(CONFIG_RTC_MAGIC_REG)
+#define RTC_MAGIC                            CONFIG_STM32F7_RTC_MAGIC
+#define RTC_MAGIC_TIME_SET                   CONFIG_STM32F7_RTC_MAGIC_TIME_SET
+#define RTC_MAGIC_REG                        STM32_RTC_BKR(CONFIG_STM32F7_RTC_MAGIC_REG)
 
 /****************************************************************************
  * Public Types
@@ -111,8 +111,7 @@ extern "C"
  *   during initialization to set up the system time when CONFIG_RTC and
  *   CONFIG_RTC_DATETIME are selected (and CONFIG_RTC_HIRES is not).
  *
- *   NOTE: Some date/time RTC hardware is capability of sub-second accuracy.
- *   Thatsub-second accuracy is returned through 'nsec'.
+ *   NOTE: The sub-second accuracy is returned through 'nsec'.
  *
  * Input Parameters:
  *   tp - The location to return the high resolution time value.
@@ -147,6 +146,19 @@ int stm32_rtc_getdatetime_with_subseconds(FAR struct tm *tp, FAR long *nsec);
 struct tm;
 int stm32_rtc_setdatetime(FAR const struct tm *tp);
 #endif
+
+/****************************************************************************
+ * Name: stm32_rtc_havesettime
+ *
+ * Description:
+ *   Check if RTC time has been set.
+ *
+ * Returned Value:
+ *   Returns true if RTC date-time have been previously set.
+ *
+ ****************************************************************************/
+
+bool stm32_rtc_havesettime(void);
 
 /****************************************************************************
  * Name: stm32_rtc_lowerhalf

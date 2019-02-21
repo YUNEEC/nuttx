@@ -61,10 +61,10 @@
  *   intended to provide a mechanism for user-mode programs to set the
  *   thread-specific errno value.
  *
- * Parameters:
+ * Input Parameters:
  *   errcode - The thread specific errno will be set to this error code value.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:

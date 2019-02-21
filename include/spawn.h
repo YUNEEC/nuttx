@@ -137,7 +137,7 @@ extern "C"
  * file system at 'path'
  */
 
-#ifdef CONFIG_BINFMT_EXEPATH
+#ifdef CONFIG_LIB_ENVPATH
 int posix_spawnp(FAR pid_t *pid, FAR const char *path,
       FAR const posix_spawn_file_actions_t *file_actions,
       FAR const posix_spawnattr_t *attr,
@@ -186,11 +186,7 @@ int posix_spawn_file_actions_addopen(FAR posix_spawn_file_actions_t *file_action
 int posix_spawnattr_init(FAR posix_spawnattr_t *attr);
 
 /* int posix_spawnattr_destroy(FAR posix_spawnattr_t *); */
-#ifdef CONFIG_DEBUG_FEATURES
-#  define posix_spawnattr_destroy(attr) (attr ? 0 : EINVAL)
-#else
-#  define posix_spawnattr_destroy(attr) (0)
-#endif
+#define posix_spawnattr_destroy(attr) (0)
 
 /* Get spawn attributes interfaces */
 

@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/sama5/chip.h
  *
- *   Copyright (C) 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,10 @@
  ************************************************************************************/
 
 #include <nuttx/config.h>
-#include <arch/sama5/chip.h>
+
+#ifndef __ASSEMBLY__
+#  include <arch/sama5/chip.h>
+#endif
 
 #include "chip/sam_memorymap.h"
 
@@ -55,7 +58,7 @@
 
 #define L2CC_VBASE SAM_L2CC_VSECTION
 
-/* Cache line sizes (in bytes)for the SAVA5Dx */
+/* Cache line sizes (in bytes) */
 
 #define ARMV7A_DCACHE_LINESIZE 32  /* 32 bytes (8 words) */
 #define ARMV7A_ICACHE_LINESIZE 32  /* 32 bytes (8 words) */

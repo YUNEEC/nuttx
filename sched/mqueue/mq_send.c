@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/mqueue/mq_send.c
  *
- *   Copyright (C) 2007, 2009, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,118 @@
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: nxmq_send
+ *
+ * Description:
+ *   This function adds the specified message (msg) to the message queue
+ *   (mqdes).  This is an internal OS interface.  It is functionally
+ *   equivalent to mq_send() except that:
+ *
+ *   - It is not a cancellaction point, and
+ *   - It does not modify the errno value.
+ *
+ *  See comments with mq_send() for a more complete description of the
+ *  behavior of this function
+ *
+ * Input Parameters:
+ *   mqdes  - Message queue descriptor
+ *   msg    - Message to send
+ *   msglen - The length of the message in bytes
+ *   prio   - The priority of the message
+ *
+ * Returned Value:
+ *   This is an internal OS interface and should not be used by applications.
+ *   It follows the NuttX internal error return policy:  Zero (OK) is
+ *   returned on success.  A negated errno value is returned on failure.
+ *   (see mq_send() for the list list valid return values).
+ *
+ ****************************************************************************/
+
+int nxmq_send(mqd_t mqdes, FAR const char *msg, size_t msglen, int prio)
+{
+  FAR struct mqueue_inode_s  *msgq;
+  FAR struct mqueue_msg_s *mqmsg = NULL;
+  irqstate_t flags;
+  int ret;
+
+  /* Verify the input parameters -- setting errno appropriately
+   * on any failures to verify.
+   */
+
+  ret = nxmq_verify_send(mqdes, msg, msglen, prio);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  /* Get a pointer to the message queue */
+
+  sched_lock();
+  msgq = mqdes->msgq;
+
+  /* Allocate a message structure:
+   * - Immediately if we are called from an interrupt handler.
+   * - Immediately if the message queue is not full, or
+   * - After successfully waiting for the message queue to become
+   *   non-FULL.  This would fail with EAGAIN, EINTR, or ETIMEOUT.
+   */
+
+  mqmsg = NULL;
+  flags = enter_critical_section();
+  ret   = OK;
+
+  if (!up_interrupt_context())           /* In an interrupt handler? */
+    {
+      /* No.. Not in an interrupt handler.  Is the message queue FULL? */
+
+      if (msgq->nmsgs >= msgq->maxmsgs) /* Message queue not-FULL? */
+        {
+         /* Yes.. the message queue is full.  Wait for space to become
+          * available in the message queue.
+           */
+
+          ret = nxmq_wait_send(mqdes);
+        }
+    }
+
+  /* ret can only be negative if nxmq_wait_send failed */
+
+  leave_critical_section(flags);
+  if (ret >= 0)
+    {
+      /* Now allocate the message. */
+
+      mqmsg = nxmq_alloc_msg();
+
+      /* Check if the message was successfully allocated */
+
+      ret = (mqmsg == NULL) ? -ENOMEM : OK;
+    }
+
+  /* Check if we were able to get a message structure -- this can fail
+   * either because we cannot send the message (and didn't bother trying
+   * to allocate it) or because the allocation failed.
+   */
+
+  if (mqmsg != NULL)
+    {
+      /* The allocation was successful (implying that we can also send the
+       * message). Perform the message send.
+       *
+       * NOTE: There is a race condition here: What if a message is added by
+       * interrupt related logic so that queue again becomes non-empty.
+       * That is handled because nxmq_do_send() will permit the maxmsgs limit
+       * to be exceeded in that case.
+       */
+
+      ret = nxmq_do_send(mqdes, mqmsg, msg, msglen, prio);
+    }
+
+  sched_unlock();
+  return ret;
+}
+
+/****************************************************************************
  * Name: mq_send
  *
  * Description:
@@ -75,13 +187,13 @@
  *   If the message queue is full and O_NONBLOCK is set, the message is not
  *   queued and ERROR is returned.
  *
- * Parameters:
- *   mqdes - Message queue descriptor
- *   msg - Message to send
+ * Input Parameters:
+ *   mqdes  - Message queue descriptor
+ *   msg    - Message to send
  *   msglen - The length of the message in bytes
- *   prio - The priority of the message
+ *   prio   - The priority of the message
  *
- * Return Value:
+ * Returned Value:
  *   On success, mq_send() returns 0 (OK); on error, -1 (ERROR)
  *   is returned, with errno set to indicate the error:
  *
@@ -93,96 +205,25 @@
  *            message queue.
  *   EINTR    The call was interrupted by a signal handler.
  *
- * Assumptions/restrictions:
- *
  ****************************************************************************/
 
 int mq_send(mqd_t mqdes, FAR const char *msg, size_t msglen, int prio)
 {
-  FAR struct mqueue_inode_s  *msgq;
-  FAR struct mqueue_msg_s *mqmsg = NULL;
-  irqstate_t flags;
-  int ret = ERROR;
+  int ret;
 
   /* mq_send() is a cancellation point */
 
   (void)enter_cancellation_point();
 
-  /* Verify the input parameters -- setting errno appropriately
-   * on any failures to verify.
-   */
+  /* Let nxmq_send() do all of the work */
 
-  if (mq_verifysend(mqdes, msg, msglen, prio) != OK)
+  ret = nxmq_send(mqdes, msg, msglen, prio);
+  if (ret < 0)
     {
-      leave_cancellation_point();
-      return ERROR;
+      set_errno(-ret);
+      ret = ERROR;
     }
 
-  /* Get a pointer to the message queue */
-
-  sched_lock();
-  msgq = mqdes->msgq;
-
-  /* Allocate a message structure:
-   * - Immediately if we are called from an interrupt handler.
-   * - Immediately if the message queue is not full, or
-   * - After successfully waiting for the message queue to become
-   *   non-FULL.  This would fail with EAGAIN, EINTR, or ETIMEOUT.
-   */
-
-  flags = enter_critical_section();
-  if (up_interrupt_context()      || /* In an interrupt handler */
-      msgq->nmsgs < msgq->maxmsgs || /* OR Message queue not full */
-      mq_waitsend(mqdes) == OK)      /* OR Successfully waited for mq not full */
-    {
-      /* Allocate the message */
-
-      leave_critical_section(flags);
-      mqmsg = mq_msgalloc();
-
-      /* Check if the message was sucessfully allocated */
-
-      if (mqmsg == NULL)
-        {
-          /* No... mq_msgalloc() does not set the errno value */
-
-          set_errno(ENOMEM);
-        }
-    }
-  else
-    {
-      /* We cannot send the message (and didn't even try to allocate it)
-       * because:
-       * - We are not in an interrupt handler AND
-       * - The message queue is full AND
-       * - When we tried waiting, the wait was unsuccessful.
-       *
-       * In this case mq_waitsend() has already set the errno value.
-       */
-
-      leave_critical_section(flags);
-    }
-
-  /* Check if we were able to get a message structure -- this can fail
-   * either because we cannot send the message (and didn't bother trying
-   * to allocate it) or because the allocation failed.
-   */
-
-  if (mqmsg != NULL)
-    {
-      /* The allocation was successful (implying that we can also send the
-       * message). Perform the message send.
-       *
-       * NOTE: There is a race condition here: What if a message is added by
-       * interrupt related logic so that queue again becomes non-empty.
-       * That is handled because mq_dosend() will permit the maxmsgs limit
-       * to be exceeded in that case.
-       */
-
-      ret = mq_dosend(mqdes, mqmsg, msg, msglen, prio);
-    }
-
-  sched_unlock();
   leave_cancellation_point();
   return ret;
 }

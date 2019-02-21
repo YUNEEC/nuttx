@@ -1,7 +1,7 @@
 /****************************************************************************
  * include/nuttx/mm/mm.h
  *
- *   Copyright (C) 2007-2009, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Configuration ************************************************************/
 /* If the MCU has a small (16-bit) address capability, then we will use
  * a smaller chunk header that contains 16-bit size/offset information.
@@ -58,7 +59,7 @@
  */
 
 #ifdef CONFIG_SMALL_MEMORY
-  /* If the MCU has a small addressing capability, then for the smaller
+  /* If the MCU has a small addressing capability, then force the smaller
    * chunk header.
    */
 
@@ -240,11 +241,11 @@ struct mm_heap_s
 
   sem_t mm_semaphore;
   pid_t mm_holder;
-  int   mm_counts_held;
+  int mm_counts_held;
 
   /* This is the size of the heap provided to mm */
 
-  size_t  mm_heapsize;
+  size_t mm_heapsize;
 
   /* This is the first and last nodes of the heap */
 
@@ -425,9 +426,17 @@ FAR void *mm_memalign(FAR struct mm_heap_s *heap, size_t alignment,
 FAR void *kmm_memalign(size_t alignment, size_t size);
 #endif
 
+/* Functions contained in mm_heapmember.c ***********************************/
+
+bool mm_heapmember(FAR struct mm_heap_s *heap, FAR void *mem);
+
+/* Functions contained in mm_uheapmember.c **********************************/
+
+bool umm_heapmember(FAR void *mem);
+
 /* Functions contained in kmm_heapmember.c **********************************/
 
-#if defined(CONFIG_MM_KERNEL_HEAP) && defined(CONFIG_DEBUG_FEATURES)
+#ifdef CONFIG_MM_KERNEL_HEAP
 bool kmm_heapmember(FAR void *mem);
 #endif
 

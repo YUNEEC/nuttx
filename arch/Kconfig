@@ -94,6 +94,11 @@ config ARCH_Z80
 	---help---
 		ZiLOG 8-bit architectures (z80, ez80, z8).
 
+config ARCH_OR1K
+	bool "OpenRISC"
+	---help---
+		OpenRISC architectures.
+
 endchoice
 
 config ARCH
@@ -110,6 +115,7 @@ config ARCH
 	default "xtensa"  if ARCH_XTENSA
 	default "z16"     if ARCH_Z16
 	default "z80"     if ARCH_Z80
+	default "or1k"    if ARCH_OR1K
 
 source arch/arm/Kconfig
 source arch/avr/Kconfig
@@ -123,6 +129,7 @@ source arch/x86/Kconfig
 source arch/xtensa/Kconfig
 source arch/z16/Kconfig
 source arch/z80/Kconfig
+source arch/or1k/Kconfig
 
 config ARCH_TOOLCHAIN_IAR
 	bool
@@ -131,6 +138,13 @@ config ARCH_TOOLCHAIN_IAR
 config ARCH_TOOLCHAIN_GNU
 	bool
 	default n
+
+config ARCH_GNU_NO_WEAKFUNCTIONS
+	bool
+	depends on ARCH_TOOLCHAIN_GNU
+	default n
+	---help---
+		Disable support for weak functions.
 
 comment "Architecture Options"
 
@@ -141,6 +155,11 @@ config ARCH_NOINTC
 config ARCH_VECNOTIRQ
 	bool
 	default n
+
+config ARCH_HAVE_IRQTRIGGER
+	bool
+	default n
+	depends on !ARCH_NOINTC
 
 config ARCH_DMA
 	bool
@@ -194,13 +213,34 @@ config ARCH_HAVE_POWEROFF
 	bool
 	default n
 
+config ARCH_HAVE_PROGMEM
+	bool
+	default n
+
 config ARCH_HAVE_RESET
+	bool
+	default n
+
+config ARCH_HAVE_FETCHADD
 	bool
 	default n
 
 config ARCH_HAVE_RTC_SUBSECONDS
 	bool
 	default n
+
+config ARCH_HAVE_GARBAGE
+	bool
+	default n
+
+config ARCH_GLOBAL_IRQDISABLE
+	bool
+	default n
+	---help---
+		Indicates that disabling interrupts on one CPU will either (1) disable
+		all interrupts globally on all CPUs, or (2) will disable interprocessor
+		interrupts as well so that no context switches can occur on the CPU
+		that disabled "local" interrupts.
 
 config ARCH_USE_MMU
 	bool "Enable MMU"
@@ -403,7 +443,7 @@ config ARCH_PGPOOL_VBASE
 		environment logic.
 
 config ARCH_PGPOOL_SIZE
-	int "Page pool size (byes)"
+	int "Page pool size (bytes)"
 	default 0
 	---help---
 		The size of the page pool memory in bytes.  This setting is probably
@@ -585,10 +625,10 @@ config ARCH_IDLE_CUSTOM
 		a custom IDLE loop may do things like a continuous built-in test or
 		perhaps or IDLE low power operations.
 
-		NOTE: As of this writing, this capability is only supported by the
-		STM32.  However, the implementation is trivial:  If CONFIG_ARCH_IDLE_CUSTOM,
-		then the default IDLE loop file is not included in the MCU-specific
-		Make.defs file.
+		NOTE: As of this writing, this capability is only supported by ARM
+		and MIPS architectures.  However, the implementation is trivial:  If
+		CONFIG_ARCH_IDLE_CUSTOM is defined, then the default IDLE loop file
+		is not included in the MCU-specific Make.defs file.
 
 config ARCH_CUSTOM_PMINIT
 	bool "Custom PM initialization"
@@ -671,6 +711,57 @@ config ARCH_NUSER_INTERRUPTS
 		defines the actual number of valid, mapped interrupts in g_irqmap.
 		This number will be the new size of the OS vector table
 
+# Bring-up debug configuration options.  These are only intended for low level
+# bring-up and not part of normal platform configuration.  They should never be
+# selected in a "normal" configuration and, hence, depend on both EXPERIMENTAL
+# and DEBUG_FEATURES.
+
+menu "Bring-Up Options"
+	depends on EXPERIMENTAL && DEBUG_FEATURES
+
+config SUPPRESS_CLOCK_CONFIG
+	bool "Suppress clock configuration"
+	default n
+	depends on ARCH_XTENSA
+	---help---
+		Do not configure clocking.  Instead relies on the reset clock
+		configuration (or clock configuration provided by a bootloader).
+
+config SUPPRESS_INTERRUPTS
+	bool "Suppress all interrupts"
+	default n
+	---help---
+		Do not enable interrupts
+
+config SUPPRESS_TIMER_INTS
+	bool "No timer"
+	default n
+	---help---
+		Do not initialize or enable the system timer
+
+config SUPPRESS_SERIAL_INTS
+	bool "Suppress serial interrupts"
+	default n
+	---help---
+		Console will poll
+
+config SUPPRESS_UART_CONFIG
+	bool "Do no re-configure UART"
+	default n
+	---help---
+		Do not re-configure the serial console UART from its start-up state.
+		This is useful when a boot loader has already initialized the serial
+		port.
+
+config DUMP_ON_EXIT
+	bool "Dump task state"
+	default n
+	depends on DEBUG_SCHED_INFO
+	---help---
+		Dump task state on exit()
+
+endmenu # Bring-Up Options
+
 comment "Board Settings"
 
 config BOARD_LOOPSPERMSEC
@@ -680,16 +771,6 @@ config BOARD_LOOPSPERMSEC
 		Simple delay loops are used by some logic, especially during boot-up,
 		driver initialization.  These delay loops must be calibrated for each
 		board in order to assure accurate timing by the delay loops.
-
-config ARCH_CALIBRATION
-	bool "Calibrate delay loop"
-	default n
-	---help---
-		Enables some built in instrumentation that causes a 100 second delay
-		during boot-up.  This 100 second delay serves no purpose other than it
-		allows you to calibrate BOARD_LOOPSPERMSEC.  You simply use a stop
-		watch to measure the actual delay then adjust BOARD_LOOPSPERMSEC until
-		the actual delay is 100 seconds.
 
 comment "Interrupt options"
 

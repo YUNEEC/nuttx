@@ -1,7 +1,7 @@
 /****************************************************************************
  * mm/shm/shmctl.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -131,11 +131,11 @@ int shmctl(int shmid, int cmd, struct shmid_ds *buf)
 
   /* Get exclusive access to the region data structure */
 
-  ret = sem_wait(&region->sr_sem);
+  ret = nxsem_wait(&region->sr_sem);
   if (ret < 0)
     {
-      shmerr("ERROR: sem_wait failed: %d\n", ret);
-      return ret;
+      shmerr("ERROR: nxsem_wait failed: %d\n", ret);
+      goto errout_with_ret;
     }
 
   /* Handle the request according to the received cmd */
@@ -208,11 +208,13 @@ int shmctl(int shmid, int cmd, struct shmid_ds *buf)
 
   /* Release our lock on the entry */
 
-  sem_post(&region->sr_sem);
+  nxsem_post(&region->sr_sem);
   return ret;
 
 errout_with_semaphore:
-  sem_post(&region->sr_sem);
+  nxsem_post(&region->sr_sem);
+
+errout_with_ret:
   set_errno(-ret);
   return ERROR;
 }
@@ -256,7 +258,7 @@ void shm_destroy(int shmid)
 
   /* Reset the region entry to its initial state */
 
-  sem_destroy(&region->sr_sem);
+  nxsem_destroy(&region->sr_sem);
   memset(region, 0, sizeof(struct shm_region_s));
 }
 

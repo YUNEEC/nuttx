@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_ioctl.c
  *
- *   Copyright (C) 2007-2010, 2012-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2010, 2012-2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,13 +63,15 @@
  * Description:
  *   Perform device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   file     File structure instance
  *   req      The ioctl command
  *   arg      The argument of the ioctl cmd
  *
- * Return:
- *   See ioctl() below.
+ * Returned Value:
+ *   Returns a non-negative number on success;  A negated errno value is
+ *   returned on any failure (see comments ioctl() for a list of appropriate
+ *   errno values).
  *
  ****************************************************************************/
 
@@ -76,8 +79,6 @@
 int file_ioctl(FAR struct file *filep, int req, unsigned long arg)
 {
   FAR struct inode *inode;
-  int errcode;
-  int ret;
 
   DEBUGASSERT(filep != NULL);
 
@@ -86,32 +87,19 @@ int file_ioctl(FAR struct file *filep, int req, unsigned long arg)
   inode = filep->f_inode;
   if (!inode)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Does the driver support the ioctl method? */
 
   if (inode->u.i_ops == NULL || inode->u.i_ops->ioctl == NULL)
     {
-      errcode = ENOTTY;
-      goto errout;
+      return -ENOTTY;
     }
 
   /* Yes on both accounts.  Let the driver perform the ioctl command */
 
-  ret = (int)inode->u.i_ops->ioctl(filep, req, arg);
-  if (ret < 0)
-    {
-      errcode = -ret;
-      goto errout;
-    }
-
-  return ret;
-
-errout:
-  set_errno(errcode);
-  return ERROR;
+  return (int)inode->u.i_ops->ioctl(filep, req, arg);
 }
 #endif /* CONFIG_NFILE_DESCRIPTORS > 0 */
 
@@ -121,12 +109,12 @@ errout:
  * Description:
  *   Perform device specific operations.
  *
- * Parameters:
+ * Input Parameters:
  *   fd       File/socket descriptor of device
  *   req      The ioctl command
  *   arg      The argument of the ioctl cmd
  *
- * Return:
+ * Returned Value:
  *   >=0 on success (positive non-zero values are cmd-specific)
  *   -1 on failure with errno set properly:
  *
@@ -153,6 +141,7 @@ int ioctl(int fd, int req, unsigned long arg)
   int errcode;
 #if CONFIG_NFILE_DESCRIPTORS > 0
   FAR struct file *filep;
+  int ret;
 
   /* Did we get a valid file descriptor? */
 
@@ -164,7 +153,14 @@ int ioctl(int fd, int req, unsigned long arg)
 #if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
       if ((unsigned int)fd < (CONFIG_NFILE_DESCRIPTORS+CONFIG_NSOCKET_DESCRIPTORS))
         {
-          return netdev_ioctl(fd, req, arg);
+          ret = netdev_ioctl(fd, req, arg);
+          if (ret < 0)
+            {
+              errcode = -ret;
+              goto errout;
+            }
+
+          return ret;
         }
       else
 #endif
@@ -177,22 +173,27 @@ int ioctl(int fd, int req, unsigned long arg)
 #if CONFIG_NFILE_DESCRIPTORS > 0
   /* Get the file structure corresponding to the file descriptor. */
 
-  filep = fs_getfilep(fd);
-  if (!filep)
+  ret = fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* Apparently, the fd does not correspond to any open file.  In the
-       * case of errors, the errno value has already been set by
-       * fs_getfilep().
-       */
-
-      return ERROR;
+      errcode = -ret;
+      goto errout;
     }
+
+  DEBUGASSERT(filep != NULL);
 
   /* Perform the file ioctl.  If file_ioctl() fails, it will set the errno
    * value appropriately.
    */
 
-  return file_ioctl(filep, req, arg);
+  ret = file_ioctl(filep, req, arg);
+  if (ret < 0)
+    {
+      errcode = -ret;
+      goto errout;
+    }
+
+  return ret;
 #else
   errcode = ENOTTY;
 #endif

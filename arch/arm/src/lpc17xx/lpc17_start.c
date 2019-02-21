@@ -1,8 +1,8 @@
 /****************************************************************************
  * arch/arm/src/lpc17xx/lpc17_start.c
- * arch/arm/src/chip/lpc17_start.c
  *
- *   Copyright (C) 2010, 2012-2013, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2012-2013, 2015, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,6 @@
 #include <debug.h>
 
 #include <nuttx/init.h>
-#include <arch/board/board.h>
 
 #include "up_arch.h"
 #include "up_internal.h"
@@ -58,17 +57,37 @@
 #  include "nvic.h"
 #endif
 
+#include "lpc17_start.h"
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-/****************************************************************************
- * Private Data
- ****************************************************************************/
+/* .data is positioned first in the primary RAM followed immediately by .bss.
+ * The IDLE thread stack lies just after .bss and has size give by
+ * CONFIG_IDLETHREAD_STACKSIZE;  The heap then begins just after the IDLE.
+ * ARM EABI requires 64 bit stack alignment.
+ */
+
+#define IDLE_STACKSIZE (CONFIG_IDLETHREAD_STACKSIZE & ~7)
+#define IDLE_STACK     ((uintptr_t)&_ebss + IDLE_STACKSIZE)
+#define HEAP_BASE      ((uintptr_t)&_ebss + IDLE_STACKSIZE)
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
+
+/* g_idle_topstack: _sbss is the start of the BSS region as defined by the
+ * linker script. _ebss lies at the end of the BSS region. The idle task
+ * stack starts at the end of BSS and is of size CONFIG_IDLETHREAD_STACKSIZE.
+ * The IDLE thread is the thread that the system boots on and, eventually,
+ * becomes the IDLE, do nothing task that runs only when there is nothing
+ * else to run.  The heap continues from there until the end of memory.
+ * g_idle_topstack is a read-only variable the provides this computed
+ * address.
+ */
+
+const uintptr_t g_idle_topstack = HEAP_BASE;
 
 /****************************************************************************
  * Private Functions
@@ -112,7 +131,7 @@
  ****************************************************************************/
 
 #ifdef CONFIG_ARCH_FPU
-#if defined(CONFIG_ARMV7M_CMNVECTOR) && !defined(CONFIG_ARMV7M_LAZYFPU)
+#ifndef CONFIG_ARMV7M_LAZYFPU
 
 static inline void lpc17_fpuconfig(void)
 {
@@ -182,6 +201,12 @@ static inline void lpc17_fpuconfig(void)
  * Public Functions
  ****************************************************************************/
 
+#ifdef CONFIG_ARMV7M_STACKCHECK
+/* we need to get r10 set before we can allow instrumentation calls */
+
+void __start(void) __attribute__ ((no_instrument_function));
+#endif
+
 /****************************************************************************
  * Name: _start
  *
@@ -194,6 +219,12 @@ void __start(void)
 {
   const uint32_t *src;
   uint32_t *dest;
+
+#ifdef CONFIG_ARMV7M_STACKCHECK
+  /* Set the stack limit before we attempt to call any functions */
+
+  __asm__ volatile ("sub r10, sp, %0" : : "r" (CONFIG_IDLETHREAD_STACKSIZE - 64) : );
+#endif
 
   /* Configure the uart so that we can get debug output as soon as possible */
 

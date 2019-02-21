@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_twihs.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * This driver derives from the SAMA5Dx TWIHS driver.  References:
@@ -177,7 +177,7 @@ struct twi_dev_s
 /* Low-level helper functions */
 
 static void twi_takesem(sem_t *sem);
-#define     twi_givesem(sem) (sem_post(sem))
+#define     twi_givesem(sem) (nxsem_post(sem))
 
 #ifdef CONFIG_SAMV7_TWIHSHS_REGDEBUG
 static bool twi_checkreg(struct twi_dev_s *priv, bool wr,
@@ -313,16 +313,21 @@ static const struct i2c_ops_s g_twiops =
 
 static void twi_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      DEBUGASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -486,7 +491,8 @@ static int twi_wait(struct twi_dev_s *priv, unsigned int size)
    * TWIHS transfer stalls.
    */
 
-  wd_start(priv->timeout, (timeout * size), twi_timeout, 1, (uint32_t)priv);
+  (void)wd_start(priv->timeout, (timeout * size), twi_timeout, 1,
+                 (uint32_t)priv);
 
   /* Wait for either the TWIHS transfer or the timeout to complete */
 
@@ -595,7 +601,7 @@ static int twi_interrupt(int irq, FAR void *context, FAR void *arg)
            * restart?
            */
 
-          if (priv->msgc <= 1 || (next->flags & I2C_M_NORESTART) == 0)
+          if (priv->msgc <= 1 || (next->flags & I2C_M_NOSTART) == 0)
             {
               /* The transfer is complete.  Disable the RXRDY interrupt and
                * enable the TXCOMP interrupt
@@ -628,7 +634,7 @@ static int twi_interrupt(int irq, FAR void *context, FAR void *arg)
            * restart?
            */
 
-          if (priv->msgc <= 1 || (next->flags & I2C_M_NORESTART) == 0)
+          if (priv->msgc <= 1 || (next->flags & I2C_M_NOSTART) == 0)
             {
               /* This is the last message OR a restart is required before
                * the next mesage.  Send the stop signal.
@@ -682,7 +688,7 @@ static int twi_interrupt(int irq, FAR void *context, FAR void *arg)
            * restart?
            */
 
-          if (priv->msgc <= 1 || (next->flags & I2C_M_NORESTART) == 0)
+          if (priv->msgc <= 1 || (next->flags & I2C_M_NOSTART) == 0)
             {
               /* The transfer is complete.  Disable the TXRDY interrupt and
                * enable the TXCOMP interrupt
@@ -974,7 +980,7 @@ errout:
 * Description:
 *   Perform an I2C bus reset in an attempt to break loose stuck I2C devices.
 *   This function can be called from inside the driver while the TWIHS device is
-*   already locked, so we must not handle any semapores inside.
+*   already locked, so we must not handle any semaphores inside.
 *   To initiate a bus reset from outside the driver use twi_reset(dev).
 *
 * Input Parameters:
@@ -1433,14 +1439,14 @@ struct i2c_master_s *sam_i2cbus_initialize(int bus)
 
       /* Initialize semaphores */
 
-      (void)sem_init(&priv->exclsem, 0, 1);
-      (void)sem_init(&priv->waitsem, 0, 0);
+      (void)nxsem_init(&priv->exclsem, 0, 1);
+      (void)nxsem_init(&priv->waitsem, 0, 0);
 
       /* The waitsem semaphore is used for signaling and, hence, should not
        * have priority inheritance enabled.
        */
 
-      sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+      nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
       /* Perform repeatable TWIHS hardware initialization */
 
@@ -1494,8 +1500,8 @@ int sam_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
 
       /* Reset data structures */
 
-      sem_destroy(&priv->exclsem);
-      sem_destroy(&priv->waitsem);
+      nxsem_destroy(&priv->exclsem);
+      nxsem_destroy(&priv->waitsem);
 
       /* Free the watchdog timer */
 

@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/driver/fs_blockproxy.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,7 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/drivers/drivers.h>
+#include <nuttx/fs/fs.h>
 
 #if !defined(CONFIG_DISABLE_MOUNTPOINT) && \
     !defined(CONFIG_DISABLE_PSEUDOFS_OPERATIONS)
@@ -74,10 +75,10 @@ static sem_t g_devno_sem = SEM_INITIALIZER(1);
  *
  * Description:
  *   Create a unique temporary device name in the /dev/ directory of the
- *   psuedo-file system.  We cannot use mktemp for this because it will
+ *   pseudo-file system.  We cannot use mktemp for this because it will
  *   attempt to open() the file.
  *
- * Input parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -100,20 +101,27 @@ static FAR char *unique_chardev(void)
     {
       /* Get the semaphore protecting the path number */
 
-      while (sem_wait(&g_devno_sem) < 0)
+      do
         {
-          DEBUGASSERT(errno == EINTR);
+          ret = nxsem_wait(&g_devno_sem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
+           */
+
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
 
       /* Get the next device number and release the semaphore */
 
       devno = ++g_devno;
-      sem_post(&g_devno_sem);
+      nxsem_post(&g_devno_sem);
 
       /* Construct the full device number */
 
       devno &= 0xffffff;
-      snprintf(devbuf, 16, "/dev/tmp%06lx", (unsigned long)devno);
+      snprintf(devbuf, 16, "/dev/tmpc%06lx", (unsigned long)devno);
 
       /* Make sure that file name is not in use */
 
@@ -139,7 +147,7 @@ static FAR char *unique_chardev(void)
  *   Create a temporary char driver using drivers/bch to mediate character
  *   oriented accessed to the block driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   blkdev - The path to the block driver
  *   oflags - Character driver open flags
  *
@@ -195,10 +203,10 @@ int block_proxy(FAR const char *blkdev, int oflags)
   /* Open the newly created character driver */
 
   oflags &= ~(O_CREAT | O_EXCL | O_APPEND | O_TRUNC);
-  fd = open(chardev, oflags);
+  fd = nx_open(chardev, oflags);
   if (fd < 0)
     {
-      ret = -errno;
+      ret = fd;
       ferr("ERROR: Failed to open %s: %d\n", chardev, ret);
       goto errout_with_bchdev;
     }

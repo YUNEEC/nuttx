@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_clockconfig.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
@@ -141,7 +141,7 @@ void lc823450_clockconfig()
   val |= OSCCNT_SCKSEL_MAIN;
   putreg32(val, OSCCNT);
 
-#ifdef CONFIG_IPL2
+#ifdef CONFIG_LC823450_IPL2
   /* set the common PLL values */
   /* XTAL / XT1OSC_CLK = 1MHz */
 
@@ -168,7 +168,7 @@ void lc823450_clockconfig()
     }
   else
     {
-      ASSERT(false);
+      DEBUGASSERT(false);
     }
 #endif
 

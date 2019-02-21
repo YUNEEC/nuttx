@@ -70,14 +70,14 @@
 #  error CONFIG_SCHED_CPULOAD_TICKSPERSEC not defined
 #endif
 
-/* CONFIG_CPULOAD_ONESHOT_ENTROPY determines that amount of random "jitter"
+/* CONFIG_CPULOAD_ENTROPY determines that amount of random "jitter"
  * that will be added to the nominal sample interval.  Specified as a number
  * bits.
  */
 
-#ifndef CONFIG_CPULOAD_ONESHOT_ENTROPY
-#  warning CONFIG_CPULOAD_ONESHOT_ENTROPY not defined
-#  define CONFIG_CPULOAD_ONESHOT_ENTROPY 0
+#ifndef CONFIG_CPULOAD_ENTROPY
+#  warning CONFIG_CPULOAD_ENTROPY not defined
+#  define CONFIG_CPULOAD_ENTROPY 0
 #endif
 
 /* Calculate the nomimal sample interval in microseconds:
@@ -93,10 +93,10 @@
 
 /* Convert the entropy from number of bits to a numeric value */
 
-#define CPULOAD_ONESHOT_ENTROPY      (1 << CONFIG_CPULOAD_ONESHOT_ENTROPY)
+#define CPULOAD_ONESHOT_ENTROPY      (1 << CONFIG_CPULOAD_ENTROPY)
 
 #if CPULOAD_ONESHOT_NOMINAL < CPULOAD_ONESHOT_ENTROPY
-#  error CPULOAD_ONESHOT_NOMINAL too small for CONFIG_CPULOAD_ONESHOT_ENTROPY
+#  error CPULOAD_ONESHOT_NOMINAL too small for CONFIG_CPULOAD_ENTROPY
 #endif
 
 #define CPULOAD_ONESHOT_ENTROPY_MASK (CPULOAD_ONESHOT_ENTROPY - 1)
@@ -108,7 +108,7 @@
 struct sched_oneshot_s
 {
   FAR struct oneshot_lowerhalf_s *oneshot;
-#if CONFIG_CPULOAD_ONESHOT_ENTROPY > 0
+#if CONFIG_CPULOAD_ENTROPY > 0
   struct xorshift128_state_s prng;
   int32_t maxdelay;
   int32_t error;
@@ -152,7 +152,7 @@ static struct sched_oneshot_s g_sched_oneshot;
 static void sched_oneshot_start(void)
 {
   struct timespec ts;
-#if CONFIG_CPULOAD_ONESHOT_ENTROPY > 0
+#if CONFIG_CPULOAD_ENTROPY > 0
   uint32_t entropy;
 #endif
   int32_t secs;
@@ -160,7 +160,7 @@ static void sched_oneshot_start(void)
 
   /* Get the next delay */
 
-#if CONFIG_CPULOAD_ONESHOT_ENTROPY > 0
+#if CONFIG_CPULOAD_ENTROPY > 0
   /* The one shot will be set to this interval:
    *
    *  CPULOAD_ONESHOT_NOMINAL - (CPULOAD_ONESHOT_ENTROPY / 2) + error
@@ -234,7 +234,6 @@ static void sched_oneshot_callback(FAR struct oneshot_lowerhalf_s *lower,
     {
       sched_process_cpuload();
     }
-#endif
 
   /* Then restart the oneshot */
 
@@ -264,14 +263,14 @@ static void sched_oneshot_callback(FAR struct oneshot_lowerhalf_s *lower,
 
 void sched_oneshot_extclk(FAR struct oneshot_lowerhalf_s *lower)
 {
-#if CONFIG_CPULOAD_ONESHOT_ENTROPY > 0
+#if CONFIG_CPULOAD_ENTROPY > 0
   struct timespec ts;
 #endif
 
   DEBUGASSERT(lower != NULL && lower->ops != NULL);
   DEBUGASSERT(lower->ops->start != NULL);
 
-#if CONFIG_CPULOAD_ONESHOT_ENTROPY > 0
+#if CONFIG_CPULOAD_ENTROPY > 0
   DEBUGASSERT(lower->ops->max_delay != NULL);
 
   /* Get the maximum delay */
@@ -302,3 +301,4 @@ void sched_oneshot_extclk(FAR struct oneshot_lowerhalf_s *lower)
   g_sched_oneshot.oneshot = lower;
   sched_oneshot_start();
 }
+#endif

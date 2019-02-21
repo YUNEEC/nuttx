@@ -56,6 +56,8 @@
 
 #define XBEE_ASSOC_POLLDELAY 100
 
+#define XBEE_RESPONSE_TIMEOUT MSEC2TICK(200)
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -88,7 +90,7 @@ static void xbee_assocworker(FAR void *arg);
  *   is called when it expires. The watchdog timer is scheduled again until
  *   the association is either successful or fails.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -128,9 +130,9 @@ static void xbee_assoctimer(int argc, uint32_t arg, ...)
  * Description:
  *   Poll the device for the assosciation status.  This function is indirectly
  *   scheduled rom xbee_req_associate in order to poll the device for association
- *    progress.
+ *   progress.
  *
- * Parameters:
+ * Input Parameters:
  *   arg     - The reference to the driver structure (cast to void*)
  *
  * Returned Value:
@@ -144,9 +146,43 @@ static void xbee_assocworker(FAR void *arg)
 {
   FAR struct xbee_priv_s *priv = (FAR struct xbee_priv_s *)arg;
 
-  xbee_at_query(priv, "AI");
+  xbee_send_atquery(priv, "AI");
 
   (void)wd_start(priv->assocwd, XBEE_ASSOC_POLLDELAY, xbee_assoctimer, 1, (wdparm_t)arg);
+}
+
+/****************************************************************************
+ * Name: xbee_reqdata_timeout
+ *
+ * Description:
+ *   This function runs when a send request has timed out waiting for a response
+ *   from the XBee module. This really should never happen, but if it does,
+ *   handle it gracefully by retrying the query. Although I still think this
+ *   should not happen, it does seem to happen. The XBee seemingly randomly drops
+ *   the request and never sends a response.
+ *
+ * Parameters:
+ *   argc - The number of available arguments
+ *   arg  - The first argument
+ *
+ * Returned Value:
+ *   None
+ *
+ * Assumptions:
+ *
+ ****************************************************************************/
+
+static void xbee_reqdata_timeout(int argc, uint32_t arg, ...)
+{
+  FAR struct xbee_priv_s *priv = (FAR struct xbee_priv_s *)arg;
+
+  DEBUGASSERT(priv != NULL);
+
+  wlwarn("Send timeout\n");
+
+  /* Wake the pending reqdata thread so it can retry */
+
+  nxsem_post(&priv->txdone_sem);
 }
 
 /****************************************************************************
@@ -159,7 +195,7 @@ static void xbee_assocworker(FAR void *arg)
  * Description:
  *   Bind the MAC callback table to the XBee driver.
  *
- * Parameters:
+ * Input Parameters:
  *   xbee - Reference to the XBee driver structure
  *   cb   - MAC callback operations
  *
@@ -268,6 +304,10 @@ int xbee_req_data(XBEEHANDLE xbee,
   int prevoffs = frame->io_offset;
 #endif
 
+  /* Support one pending transmit at a time */
+
+  while (nxsem_wait(&priv->tx_sem) < 0);
+
   /* Figure out how much room we need to place the API frame header */
 
   if (meta->destaddr.mode == IEEE802154_ADDRMODE_EXTENDED)
@@ -323,9 +363,27 @@ int xbee_req_data(XBEEHANDLE xbee,
   xbee_insert_checksum(&frame->io_data[frame->io_offset],
                        (frame->io_len - frame->io_offset));
 
-  xbee_send_apiframe(priv, &frame->io_data[frame->io_offset],
-                     (frame->io_len - frame->io_offset));
+  priv->txdone = false;
 
+  do
+    {
+      /* Setup a timeout in case the XBee never responds with a tx status */
+
+      (void)wd_start(priv->reqdata_wd, XBEE_RESPONSE_TIMEOUT, xbee_reqdata_timeout,
+                     1, (wdparm_t)priv);
+
+      /* Send the frame */
+
+      xbee_send_apiframe(priv, &frame->io_data[frame->io_offset],
+                         (frame->io_len - frame->io_offset));
+
+      /* Wait for a transmit status to be received. Does not necessarily mean success */
+
+      while (nxsem_wait(&priv->txdone_sem) < 0);
+    }
+  while (!priv->txdone);
+
+  nxsem_post(&priv->tx_sem);
   iob_free(frame);
   return OK;
 }
@@ -399,6 +457,17 @@ int xbee_req_get(XBEEHANDLE xbee, enum ieee802154_attr_e attr,
         }
         break;
 
+      case IEEE802154_ATTR_PHY_TX_POWER:
+        {
+          /* TODO: Convert pwrlvl and boost mode settings to int32_t dbm. This
+           * depends on whether device is XBee or XBee Pro to do this look-up.
+           */
+
+          xbee_query_powerlevel(priv);
+          attrval->phy.txpwr = priv->pwrlvl;
+        }
+        break;
+
       case IEEE802154_ATTR_RADIO_REGDUMP:
         {
           xbee_regdump(priv);
@@ -469,6 +538,15 @@ int xbee_req_set(XBEEHANDLE xbee, enum ieee802154_attr_e attr,
             {
               xbee_set_coordassocflags(priv, 0);
             }
+        }
+        break;
+      case IEEE802154_ATTR_PHY_TX_POWER:
+        {
+          /* TODO: Convert int32_t dbm input to closest PM/PL settings. Need to
+           * know whether device is XBee or XBee Pro to do this look-up.
+           */
+
+          xbee_set_powerlevel(priv, attrval->phy.txpwr);
         }
         break;
 #if 0

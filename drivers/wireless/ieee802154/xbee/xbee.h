@@ -49,10 +49,8 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/spi/spi.h>
 
+#include <nuttx/wireless/ieee802154/ieee802154_mac.h>
 #include <nuttx/wireless/ieee802154/xbee.h>
-
-#include "xbee_notif.h"
-#include "xbee_dataind.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -60,8 +58,8 @@
 
 /* Configuration *************************************************************/
 
-#ifndef CONFIG_SCHED_HPWORK
-#  error High priority work queue required in this driver
+#if !defined(CONFIG_SCHED_HPWORK) || !defined(CONFIG_SCHED_LPWORK)
+#  error Both Low and High priority work queues are required for this driver
 #endif
 
 #ifndef CONFIG_IEEE802154_XBEE_FREQUENCY
@@ -70,16 +68,6 @@
 
 #ifndef CONFIG_SPI_EXCHANGE
 #  error CONFIG_SPI_EXCHANGE required for this driver
-#endif
-
-#if !defined(CONFIG_XBEE_NNOTIF) || CONFIG_XBEE_NNOTIF <= 0
-#  undef CONFIG_XBEE_NNOTIF
-#  define CONFIG_XBEE_NNOTIF 6
-#endif
-
-#if !defined(CONFIG_XBEE_NDATAIND) || CONFIG_XBEE_NDATAIND <= 0
-#  undef CONFIG_XBEE_NDATAIND
-#  define CONFIG_XBEE_NDATAIND 8
 #endif
 
 #define XBEE_APIFRAME_MODEMSTATUS       0x8A
@@ -166,22 +154,31 @@ struct xbee_priv_s
   FAR const struct xbee_lower_s *lower;
   FAR struct spi_dev_s *spi;      /* Saved SPI interface instance */
 
-  FAR struct xbee_maccb_s   *cb;  /* Head of a list of XBee MAC callbacks */
+  /* Fields related to interface with next layer */
 
+  FAR struct xbee_maccb_s *cb;    /* Head of a list of XBee MAC callbacks */
+  uint8_t nclients;               /* Number of registered callbacks */
   FAR struct iob_s *rx_apiframes; /* List of incoming API frames to process */
-
+  struct work_s notifwork;        /* For deferring notifications to LPWORK queue*/
   struct work_s attnwork;         /* For deferring interrupt work to work queue */
-  sem_t         exclsem;          /* Exclusive access to this struct */
-
+  volatile bool attn_latched;     /* Latched state of ATTN */
+  sem_t primitive_sem;            /* Exclusive access to the primitive queue */
+  sq_queue_t primitive_queue;     /* Queue of primitives to pass via notify()
+                                   * callback to registered receivers */
   WDOG_ID assocwd;                /* Association watchdog */
   struct work_s assocwork;        /* For polling for association status */
-
-  volatile bool attn_latched;     /* Latched state of ATTN */
-
-  sq_queue_t waiter_queue;        /* List of response waiters */
-
-  sq_queue_t tx_queue;            /* List of pending TX requests */
+  sem_t atquery_sem;              /* Only allow one AT query at a time */
+  sem_t atresp_sem;               /* For signaling pending AT response received */
+  char querycmd[2];               /* Stores the pending AT Query command */
+  bool querydone;                 /* Used to tell waiting thread query is done*/
+  WDOG_ID atquery_wd;             /* Support AT Query timeout and retry */
+  WDOG_ID reqdata_wd;             /* Support send timeout and retry */
   uint8_t frameid;                /* For differentiating AT request/response */
+  sem_t tx_sem;                   /* Support a single pending transmit */
+  sem_t txdone_sem;               /* For signalling tx is completed */
+  bool txdone;
+
+  /******************* Fields related to Xbee radio ***************************/
 
   uint16_t firmwareversion;
 
@@ -190,31 +187,7 @@ struct xbee_priv_s
   /* Holds all address information (Extended, Short, and PAN ID) for the MAC. */
 
   struct ieee802154_addr_s addr;
-
   struct ieee802154_pandesc_s pandesc;
-
-  /******************* Fields related to notifications ************************/
-
-  /* Pre-allocated notifications to be passed to the registered callback.  These
-   * need to be freed by the application using xbee_xxxxnotif_free when
-   * the callee layer is finished with it's use.
-   */
-
-  FAR struct xbee_notif_s *notif_free;
-  struct xbee_notif_s notif_pool[CONFIG_XBEE_NNOTIF];
-  sem_t notif_sem;
-  uint8_t nclients;
-
-  /******************* Fields related to data indications *********************/
-
-  /* Pre-allocated notifications to be passed to the registered callback.  These
-   * need to be freed by the application using xbee_dataind_free when
-   * the callee layer is finished with it's use.
-   */
-
-  FAR struct xbee_dataind_s *dataind_free;
-  struct xbee_dataind_s dataind_pool[CONFIG_XBEE_NDATAIND];
-  sem_t dataind_sem;
 
   /****************** Uncategorized MAC PIB attributes ***********************/
 
@@ -225,6 +198,8 @@ struct xbee_priv_s
   /****************** PHY attributes ***********************/
 
   uint8_t chan;
+  uint8_t pwrlvl;
+  bool boostmode;
 };
 
 /****************************************************************************
@@ -234,123 +209,6 @@ struct xbee_priv_s
 /****************************************************************************
  * Inline Functions
  ****************************************************************************/
-
-#define xbee_givesem(s) sem_post(s)
-
-static inline int xbee_takesem(sem_t *sem, bool allowinterrupt)
-{
-  int ret;
-  do
-    {
-      /* Take a count from the semaphore, possibly waiting */
-
-      ret = sem_wait(sem);
-      if (ret < 0)
-        {
-          /* EINTR is the only error that we expect */
-
-          DEBUGASSERT(get_errno() == EINTR);
-
-          if (allowinterrupt)
-            {
-              return -EINTR;
-            }
-        }
-    }
-  while (ret != OK);
-
-  return OK;
-}
-
-#ifdef CONFIG_XBEE_LOCK_VERBOSE
-#define xbee_unlock(dev) \
-  xbee_givesem(&dev->exclsem); \
-  wlinfo("MAC unlocked\n");
-#else
-#define xbee_unlock(dev) \
-  xbee_givesem(&dev->exclsem);
-#endif
-
-#define xbee_lock(dev, allowinterrupt) \
-  xbee_lockpriv(dev, allowinterrupt, __FUNCTION__)
-
-static inline int xbee_lockpriv(FAR struct xbee_priv_s *dev,
-                    bool allowinterrupt, FAR const char *funcname)
-{
-  int ret;
-
-#ifdef CONFIG_XBEE_LOCK_VERBOSE
-  wlinfo("Locking MAC: %s\n", funcname);
-#endif
-  ret = xbee_takesem(&dev->exclsem, allowinterrupt);
-  if (ret < 0)
-    {
-      wlwarn("Failed to lock MAC\n");
-    }
-  else
-    {
-#ifdef CONFIG_XBEE_LOCK_VERBOSE
-      wlinfo("MAC locked\n");
-#endif
-    }
-
-  return ret;
-}
-
-/****************************************************************************
- * Name: xbee_register_respwaiter
- *
- * Description:
- *   Register a respone waiter
- *
- ****************************************************************************/
-
-static inline void xbee_register_respwaiter(FAR struct xbee_priv_s *priv,
-                                            FAR struct xbee_respwaiter_s *waiter)
-{
-  sq_addlast((sq_entry_t *)waiter, &priv->waiter_queue);
-}
-
-/****************************************************************************
- * Name: xbee_unregister_respwaiter
- *
- * Description:
- *   Unregister a respone waiter
- *
- ****************************************************************************/
-
-static inline void xbee_unregister_respwaiter(FAR struct xbee_priv_s *priv,
-                                              FAR struct xbee_respwaiter_s *waiter)
-{
-  sq_rem((sq_entry_t *)waiter, &priv->waiter_queue);
-}
-
-/****************************************************************************
- * Name: xbee_notify_respwaiter
- *
- * Description:
- *   Check to see if there are any respwaiters waiting for this response type.
- *   If so, signal them.
- *
- ****************************************************************************/
-
-static inline void xbee_notify_respwaiter(FAR struct xbee_priv_s *priv,
-                                          enum xbee_response_e resp_id)
-{
-  FAR struct xbee_respwaiter_s *waiter;
-
-  waiter = (FAR struct xbee_respwaiter_s *)sq_peek(&priv->waiter_queue);
-
-  while (waiter != NULL)
-    {
-      if (waiter->resp_id == resp_id)
-        {
-          sem_post(&waiter->sem);
-        }
-
-      waiter = (FAR struct xbee_respwaiter_s *)sq_next((FAR sq_entry_t *)waiter);
-    }
-}
 
 /****************************************************************************
  * Name: xbee_next_frameid
@@ -379,7 +237,7 @@ static inline uint8_t xbee_next_frameid(FAR struct xbee_priv_s *priv)
  * Description:
  *   Insert checksum into outbound API frame.
  *
- * Parameters:
+ * Input Parameters:
  *    frame - pointer to the frame data
  *    framelen - size of the overall frame. NOT the data length field
  *
@@ -418,14 +276,24 @@ void xbee_send_apiframe(FAR struct xbee_priv_s *priv,
                         FAR const uint8_t *frame, uint16_t framelen);
 
 /****************************************************************************
- * Name: xbee_at_query
+ * Name: xbee_atquery
  *
  * Description:
- *   Helper function to query a AT Command value.
+ *   Sends AT Query and waits for response from device
  *
  ****************************************************************************/
 
-void xbee_at_query(FAR struct xbee_priv_s *priv, FAR const char *atcommand);
+int xbee_atquery(FAR struct xbee_priv_s *priv, FAR const char *atcommand);
+
+/****************************************************************************
+ * Name: xbee_send_atquery
+ *
+ * Description:
+ *   Helper function to send the AT query to the XBee
+ *
+ ****************************************************************************/
+
+void xbee_send_atquery(FAR struct xbee_priv_s *priv, FAR const char *atcommand);
 
 /****************************************************************************
  * Name: xbee_query_firmwareversion
@@ -436,7 +304,7 @@ void xbee_at_query(FAR struct xbee_priv_s *priv, FAR const char *atcommand);
  *
  ****************************************************************************/
 
-void xbee_query_firmwareversion(FAR struct xbee_priv_s *priv);
+#define xbee_query_firmwareversion(priv) xbee_atquery(priv, "VR")
 
 /****************************************************************************
  * Name: xbee_query_panid
@@ -447,7 +315,7 @@ void xbee_query_firmwareversion(FAR struct xbee_priv_s *priv);
  *
  ****************************************************************************/
 
-void xbee_query_panid(FAR struct xbee_priv_s *priv);
+#define xbee_query_panid(priv) xbee_atquery(priv, "ID")
 
 /****************************************************************************
  * Name: xbee_query_eaddr
@@ -458,7 +326,8 @@ void xbee_query_panid(FAR struct xbee_priv_s *priv);
  *
  ****************************************************************************/
 
-void xbee_query_eaddr(FAR struct xbee_priv_s *priv);
+#define xbee_query_eaddr(priv) xbee_atquery(priv, "SH"); \
+                               xbee_atquery(priv, "SL")
 
 /****************************************************************************
  * Name: xbee_query_saddr
@@ -469,7 +338,7 @@ void xbee_query_eaddr(FAR struct xbee_priv_s *priv);
  *
  ****************************************************************************/
 
-void xbee_query_saddr(FAR struct xbee_priv_s *priv);
+#define xbee_query_saddr(priv) xbee_atquery(priv, "MY")
 
 /****************************************************************************
  * Name: xbee_query_chan
@@ -480,7 +349,29 @@ void xbee_query_saddr(FAR struct xbee_priv_s *priv);
  *
  ****************************************************************************/
 
-void xbee_query_chan(FAR struct xbee_priv_s *priv);
+#define xbee_query_chan(priv) xbee_atquery(priv, "CH")
+
+/****************************************************************************
+ * Name: xbee_query_powerlevel
+ *
+ * Description:
+ *   Sends API frame with AT command request in order to get the RF Power
+ *   Level from the device.
+ *
+ ****************************************************************************/
+
+#define xbee_query_powerlevel(priv) xbee_atquery(priv, "PL")
+
+/****************************************************************************
+ * Name: xbee_query_powermode
+ *
+ * Description:
+ *   Sends API frame with AT command request in order to get the RF Power Mode
+ *   from the device.
+ *
+ ****************************************************************************/
+
+#define xbee_query_powermode(priv) xbee_atquery(priv, "PM")
 
 /****************************************************************************
  * Name: xbee_query_assoc
@@ -491,7 +382,7 @@ void xbee_query_chan(FAR struct xbee_priv_s *priv);
  *
  ****************************************************************************/
 
-void xbee_query_assoc(FAR struct xbee_priv_s *priv);
+#define xbee_query_assoc(priv) xbee_atquery(priv "AI")
 
 /****************************************************************************
  * Name: xbee_set_panid
@@ -525,6 +416,17 @@ void xbee_set_saddr(FAR struct xbee_priv_s *priv, FAR const uint8_t *saddr);
  ****************************************************************************/
 
 void xbee_set_chan(FAR struct xbee_priv_s *priv, uint8_t chan);
+
+/****************************************************************************
+ * Name: xbee_set_powerlevel
+ *
+ * Description:
+ *   Sends API frame with AT command request in order to set the RF power level
+ *   of the device.
+ *
+ ****************************************************************************/
+
+void xbee_set_powerlevel(FAR struct xbee_priv_s *priv, uint8_t level);
 
 /****************************************************************************
  * Name: xbee_set_epassocflags

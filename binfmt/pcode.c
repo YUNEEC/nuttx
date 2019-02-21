@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/pcode.c
  *
- *   Copyright (C) 2014-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,7 @@
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/poff.h>
+#include <nuttx/fs/fs.h>
 #include <nuttx/drivers/ramdisk.h>
 #include <nuttx/binfmt/binfmt.h>
 #include <nuttx/binfmt/pcode.h>
@@ -61,6 +62,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* Check configuration.  This is not all of the configuration settings that
  * are required -- only the more obvious.
  */
@@ -198,7 +200,7 @@ static int pcode_run(FAR char *exepath, size_t varsize, size_t strsize)
 
   /* Execute the P-Code program until a stopping condition occurs */
 
-  for (;;)
+  for (; ; )
     {
       /* Execute the instruction; Check for exceptional conditions */
 
@@ -274,7 +276,7 @@ static int pcode_mount_testfs(void)
    * the ROMFS mountpoint.
    */
 
-#if defined(CONFIG_BINFMT_EXEPATH) && !defined(CONFIG_PATH_INITIAL)
+#if defined(CONFIG_LIB_ENVPATH) && !defined(CONFIG_PATH_INITIAL)
   (void)setenv("PATH", CONFIG_BINFMT_PCODE_TEST_MOUNTPOINT, 1);
 #endif
 
@@ -300,7 +302,7 @@ static void pcode_onexit(int exitcode, FAR void *arg)
 
   /* And unload the module */
 
-  unload_module(binp);
+  (void)unload_module(binp);
 }
 #endif
 
@@ -330,7 +332,7 @@ static int pcode_proxy(int argc, char **argv)
   fullpath                 = g_pcode_handoff.fullpath;
   g_pcode_handoff.fullpath = NULL;
 
-  sem_post(&g_pcode_handoff.exclsem);
+  nxsem_post(&g_pcode_handoff.exclsem);
   DEBUGASSERT(binp && fullpath);
 
   binfo("Executing %s\n", fullpath);
@@ -389,12 +391,11 @@ static int pcode_load(struct binary_s *binp)
 
   /* Open the binary file for reading (only) */
 
-  fd = open(binp->filename, O_RDONLY);
+  fd = nx_open(binp->filename, O_RDONLY);
   if (fd < 0)
     {
-      int errval = get_errno();
-      berr("ERROR: Failed to open binary %s: %d\n", binp->filename, errval);
-      return -errval;
+      berr("ERROR: Failed to open binary %s: %d\n", binp->filename, fd);
+      return fd;
     }
 
   /* Read the POFF file header */
@@ -404,20 +405,17 @@ static int pcode_load(struct binary_s *binp)
     {
       /* Read the next GULP */
 
-      nread = read(fd, ptr, remaining);
+      nread = nx_read(fd, ptr, remaining);
       if (nread < 0)
         {
-          /* If errno is EINTR, then this is not an error; the read() was
-           * simply interrupted by a signal.
+          /* If the failure is EINTR, then this is not an error; the
+           * nx_read() was simply interrupted by a signal.
            */
 
-          int errval = get_errno();
-          DEBUGASSERT(errval > 0);
-
-          if (errval != EINTR)
+          if (nread != -EINTR)
             {
-              berr("ERROR: read failed: %d\n", errval);
-              ret = -errval;
+              berr("ERROR: read failed: %d\n", (int)nread);
+              ret = nread;
               goto errout_with_fd;
             }
 
@@ -459,10 +457,10 @@ static int pcode_load(struct binary_s *binp)
 
   do
     {
-      ret = sem_wait(&g_pcode_handoff.exclsem);
-      DEBUGASSERT(ret == OK || get_errno() == EINTR);
+      ret = nxsem_wait(&g_pcode_handoff.exclsem);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 
   /* Save the data that we need to handoff to the child thread */
 
@@ -477,7 +475,7 @@ static int pcode_load(struct binary_s *binp)
       berr("ERROR: Failed to duplicate the full path: %d\n",
            binp->filename);
 
-      sem_post(&g_pcode_handoff.exclsem);
+      nxsem_post(&g_pcode_handoff.exclsem);
       ret = -ENOMEM;
       goto errout_with_fd;
     }
@@ -510,7 +508,7 @@ static int pcode_unload(struct binary_s *binp)
   if (g_pcode_handoff.binp)
     {
       g_pcode_handoff.binp = NULL;
-      sem_post(&g_pcode_handoff.exclsem);
+      nxsem_post(&g_pcode_handoff.exclsem);
     }
 
   return OK;
@@ -524,9 +522,8 @@ static int pcode_unload(struct binary_s *binp)
  * Name: pcode_initialize
  *
  * Description:
- *   P-code support is built based on the configuration.  However, in order
- *   to use this binary format, this function must be called during system
- *   initialization in order to register the P-Code binary format.
+ *   In order to use the P-code binary format, this function must be called
+ *   during system initialization to register the P-Code binary format.
  *
  * Returned Value:
  *   This is a NuttX internal function so it follows the convention that
@@ -541,7 +538,7 @@ int pcode_initialize(void)
 
   /* Initialize globals */
 
-  sem_init(&g_pcode_handoff.exclsem, 0, 1);
+  nxsem_init(&g_pcode_handoff.exclsem, 0, 1);
 
   /* Mount the test file system */
 
@@ -585,11 +582,7 @@ void pcode_uninitialize(void)
   ret = unregister_binfmt(&g_pcode_binfmt);
   if (ret < 0)
     {
-      int errval = get_errno();
-      DEBUGASSERT(errval > 0);
-
-      berr("ERROR: unregister_binfmt() failed: %d\n", errval);
-      UNUSED(errval);
+      berr("ERROR: unregister_binfmt() failed: %d\n", ret);
     }
 
 #ifdef CONFIG_BINFMT_PCODE_TEST_FS
@@ -607,7 +600,7 @@ void pcode_uninitialize(void)
 
   /* Uninitialize globals */
 
-  sem_destroy(&g_pcode_handoff.exclsem);
+  nxsem_destroy(&g_pcode_handoff.exclsem);
 }
 
 #endif /* CONFIG_BINFMT_PCODE */

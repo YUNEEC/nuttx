@@ -42,8 +42,6 @@
 
 #include <nuttx/config.h>
 
-#include <queue.h>
-
 #include <net/if.h>
 
 #include <nuttx/net/ip.h>
@@ -51,48 +49,38 @@
 #ifdef CONFIG_NET_ROUTE
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-/* Configuration ************************************************************/
-
-#ifndef CONFIG_NET_MAXROUTES
-#  define CONFIG_NET_MAXROUTES 4
-#endif
-
-/****************************************************************************
  * Public Types
  ****************************************************************************/
+
 /* This structure describes one entry in the routing table */
 
 #ifdef CONFIG_NET_IPv4
 struct net_route_ipv4_s
 {
-  FAR struct net_route_ipv4_s *flink; /* Supports a singly linked list */
-  in_addr_t target;                   /* The destination network */
-  in_addr_t netmask;                  /* The network address mask */
-  in_addr_t router;                   /* Route packets via this router */
+  in_addr_t target;          /* The destination network */
+  in_addr_t netmask;         /* The network address mask */
+  in_addr_t router;          /* Route packets via this router */
 };
 
 /* Type of the call out function pointer provided to net_foreachroute_ipv4() */
 
-typedef int (*route_handler_t)(FAR struct net_route_ipv4_s *route,
+typedef int (*route_handler_ipv4_t)(FAR struct net_route_ipv4_s *route,
                                FAR void *arg);
-#endif
+#endif /* CONFIG_NET_IPv4 */
 
 #ifdef CONFIG_NET_IPv6
 struct net_route_ipv6_s
 {
-  FAR struct net_route_ipv6_s *flink; /* Supports a singly linked list */
-  net_ipv6addr_t target;              /* The destination network */
-  net_ipv6addr_t netmask;             /* The network address mask */
-  net_ipv6addr_t router;              /* Route packets via this router */
+  net_ipv6addr_t target;     /* The destination network */
+  net_ipv6addr_t netmask;    /* The network address mask */
+  net_ipv6addr_t router;     /* Route packets via this router */
 };
 
 /* Type of the call out function pointer provided to net_foreachroute_ipv6() */
 
 typedef int (*route_handler_ipv6_t)(FAR struct net_route_ipv6_s *route,
                                     FAR void *arg);
-#endif
+#endif /* CONFIG_NET_IPv6 */
 
 /****************************************************************************
  * Public Data
@@ -106,27 +94,17 @@ extern "C"
 #define EXTERN extern
 #endif
 
-/* This is the routing table */
-
-#ifdef CONFIG_NET_IPv4
-EXTERN sq_queue_t g_ipv4_routes;
-#endif
-
-#ifdef CONFIG_NET_IPv6
-EXTERN sq_queue_t g_ipv6_routes;
-#endif
-
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Name: net_initroute
+ * Name: net_init_route
  *
  * Description:
  *   Initialize to the routing table
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -134,52 +112,7 @@ EXTERN sq_queue_t g_ipv6_routes;
  *
  ****************************************************************************/
 
-void net_initroute(void);
-
-/****************************************************************************
- * Name: net_allocroute_ipv4 and net_allocroute_ipv6
- *
- * Description:
- *   Allocate one route by removing it from the free list
- *
- * Parameters:
- *   None
- *
- * Returned Value:
- *   On success, a pointer to the newly allocated routing table entry is
- *   returned; NULL is returned on failure.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_NET_IPv4
-FAR struct net_route_ipv4_s *net_allocroute_ipv4(void);
-#endif
-
-#ifdef CONFIG_NET_IPv6
-FAR struct net_route_ipv6_s *net_allocroute_ipv6(void);
-#endif
-
-/****************************************************************************
- * Name: net_freeroute_ipv4 and net_freeroute_ipv6
- *
- * Description:
- *   Free one route by adding it from the free list
- *
- * Parameters:
- *   route - The route to be freed
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-#ifdef CONFIG_NET_IPv4
-void net_freeroute_ipv4(FAR struct net_route_ipv4_s *route);
-#endif
-
-#ifdef CONFIG_NET_IPv6
-void net_freeroute_ipv6(FAR struct net_route_ipv6_s *route);
-#endif
+void net_init_route(void);
 
 /****************************************************************************
  * Name: net_addroute_ipv4 and net_addroute_ipv6
@@ -187,7 +120,7 @@ void net_freeroute_ipv6(FAR struct net_route_ipv6_s *route);
  * Description:
  *   Add a new route to the routing table
  *
- * Parameters:
+ * Input Parameters:
  *   target   - The destination IP address on the destination network
  *   netmask  - The mask defining the destination sub-net
  *   router   - The IP address on one of our networks that provides the
@@ -214,7 +147,7 @@ int net_addroute_ipv6(net_ipv6addr_t target, net_ipv6addr_t netmask,
  * Description:
  *   Remove an existing route from the routing table
  *
- * Parameters:
+ * Input Parameters:
  *
  * Returned Value:
  *   OK on success; Negated errno on failure.
@@ -236,7 +169,7 @@ int net_delroute_ipv6(net_ipv6addr_t target, net_ipv6addr_t netmask);
  *   Given an IPv4 address on a external network, return the address of the
  *   router on a local network that can forward to the external network.
  *
- * Parameters:
+ * Input Parameters:
  *   target - An IPv4 address on a remote network to use in the lookup.
  *   router - The address of router on a local network that can forward our
  *     packets to the target.
@@ -257,7 +190,7 @@ int net_ipv4_router(in_addr_t target, FAR in_addr_t *router);
  *   Given an IPv6 address on a external network, return the address of the
  *   router on a local network that can forward to the external network.
  *
- * Parameters:
+ * Input Parameters:
  *   target - An IPv6 address on a remote network to use in the lookup.
  *   router - The address of router on a local network that can forward our
  *     packets to the target.
@@ -280,7 +213,7 @@ int net_ipv6_router(const net_ipv6addr_t target, net_ipv6addr_t router);
  *   This is similar to net_ipv4_router().  However, the set of routers is
  *   constrained to those accessible by the specific device
  *
- * Parameters:
+ * Input Parameters:
  *   dev    - We are committed to using this device.
  *   target - An IPv4 address on a remote network to use in the lookup.
  *   router - The address of router on a local network that can forward our
@@ -307,7 +240,7 @@ void netdev_ipv4_router(FAR struct net_driver_s *dev, in_addr_t target,
  *   This is similar to net_ipv6_router().  However, the set of routers is
  *   constrained to those accessible by the specific device
  *
- * Parameters:
+ * Input Parameters:
  *   dev    - We are committed to using this device.
  *   target - An IPv6 address on a remote network to use in the lookup.
  *   router - The address of router on a local network that can forward our
@@ -327,20 +260,24 @@ void netdev_ipv6_router(FAR struct net_driver_s *dev,
 #endif
 
 /****************************************************************************
- * Name: net_foreachroute_ipv4
+ * Name: net_foreachroute_ipv4/net_foreachroute_ipv6
  *
  * Description:
  *   Traverse the routing table
  *
- * Parameters:
+ * Input Parameters:
+ *   handler - Will be called for each route in the routing table.
+ *   arg     - An arbitrary value that will be passed tot he handler.
  *
  * Returned Value:
- *   OK on success; Negated errno on failure.
+ *   Zero (OK) returned if the entire table was searched.  A negated errno
+ *   value will be returned in the event of a failure.  Handlers may also
+ *   terminate the search early with any non-zero value.
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv4
-int net_foreachroute_ipv4(route_handler_t handler, FAR void *arg);
+int net_foreachroute_ipv4(route_handler_ipv4_t handler, FAR void *arg);
 #endif
 
 #ifdef CONFIG_NET_IPv6
@@ -353,7 +290,7 @@ int net_foreachroute_ipv6(route_handler_ipv6_t handler, FAR void *arg);
  * Description:
  *   Dump a routing table entry
  *
- * Parameters:
+ * Input Parameters:
  *   route - The entry to be dumped
  *
  * Returned Value:

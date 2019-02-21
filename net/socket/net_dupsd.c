@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/socket/net_dupsd.c
  *
- *   Copyright (C) 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: net_dupsd
+ * Name: psock_dupsd
  *
  * Description:
  *   Clone a socket descriptor to an arbitrary descriptor number.  If file
@@ -61,14 +61,16 @@
  *   of socket file descriptors.  If file descriptors are not implemented,
  *   then this function IS dup().
  *
+ * Returned Value:
+ *   On success, returns the number of characters sent.  On any error,
+ *   a negated errno value is returned:.
+ *
  ****************************************************************************/
 
-int net_dupsd(int sockfd, int minsd)
+int psock_dupsd(FAR struct socket *psock, int minsd)
 {
-  FAR struct socket *psock1;
   FAR struct socket *psock2;
   int sockfd2;
-  int errcode;
   int ret;
 
   /* Make sure that the minimum socket descriptor is within the legal range.
@@ -91,15 +93,11 @@ int net_dupsd(int sockfd, int minsd)
 
   sched_lock();
 
-  /* Get the socket structure underlying sockfd */
-
-  psock1 = sockfd_socket(sockfd);
-
   /* Verify that the sockfd corresponds to valid, allocated socket */
 
-  if (!psock1 || psock1->s_crefs <= 0)
+  if (!psock || psock->s_crefs <= 0)
     {
-      errcode = EBADF;
+      ret = -EBADF;
       goto errout;
     }
 
@@ -108,7 +106,7 @@ int net_dupsd(int sockfd, int minsd)
   sockfd2 = sockfd_allocate(minsd);
   if (sockfd2 < 0)
     {
-      errcode = ENFILE;
+      ret = -ENFILE;
       goto errout;
     }
 
@@ -117,27 +115,47 @@ int net_dupsd(int sockfd, int minsd)
   psock2 = sockfd_socket(sockfd2);
   if (!psock2)
     {
-      errcode = ENOSYS; /* should not happen */
-      goto errout;
+      ret = -ENOSYS; /* Should not happen */
+      goto errout_with_sockfd;
     }
 
   /* Duplicate the socket state */
 
-  ret = net_clone(psock1, psock2);
+  ret = net_clone(psock, psock2);
   if (ret < 0)
     {
-      errcode = -ret;
-      goto errout;
-
+      goto errout_with_sockfd;
     }
 
   sched_unlock();
   return sockfd2;
 
+errout_with_sockfd:
+  sockfd_release(sockfd2);
+
 errout:
   sched_unlock();
-  set_errno(errcode);
-  return ERROR;
+  return ret;
+}
+
+/****************************************************************************
+ * Name: net_dupsd
+ *
+ * Description:
+ *   Clone a socket descriptor to an arbitrary descriptor number.  If file
+ *   descriptors are implemented, then this is called by dup() for the case
+ *   of socket file descriptors.  If file descriptors are not implemented,
+ *   then this function IS dup().
+ *
+ * Returned Value:
+ *   On success, returns the number of characters sent.  On any error,
+ *   a negated errno value is returned:.
+ *
+ ****************************************************************************/
+
+int net_dupsd(int sockfd, int minsd)
+{
+  return psock_dupsd(sockfd_socket(sockfd), minsd);
 }
 
 #endif /* defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0 */

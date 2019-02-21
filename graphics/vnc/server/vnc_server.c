@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/vnc/vnc_server.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -131,8 +131,8 @@ static void vnc_reset_session(FAR struct vnc_session_s *session,
 
   /* Set the INITIALIZED state */
 
-  sem_reset(&session->freesem, CONFIG_VNCSERVER_NUPDATES);
-  sem_reset(&session->queuesem, 0);
+  nxsem_reset(&session->freesem, CONFIG_VNCSERVER_NUPDATES);
+  nxsem_reset(&session->queuesem, 0);
 
   session->fb      = fb;
   session->display = display;
@@ -176,7 +176,6 @@ static int vnc_connect(FAR struct vnc_session_s *session, int port)
   ret = psock_socket(AF_INET, SOCK_STREAM, 0, &session->listen);
   if (ret < 0)
     {
-      ret = -get_errno();
       return ret;
     }
 
@@ -186,7 +185,6 @@ static int vnc_connect(FAR struct vnc_session_s *session, int port)
                    sizeof(struct sockaddr_in));
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout_with_listener;
     }
 
@@ -195,7 +193,6 @@ static int vnc_connect(FAR struct vnc_session_s *session, int port)
   ret = psock_listen(&session->listen, 5);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout_with_listener;
     }
 
@@ -206,7 +203,6 @@ static int vnc_connect(FAR struct vnc_session_s *session, int port)
   ret = psock_accept(&session->listen, NULL, NULL, &session->connect);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout_with_listener;
     }
 
@@ -295,13 +291,13 @@ int vnc_server(int argc, FAR char *argv[])
     }
 
   g_vnc_sessions[display] = session;
-  sem_init(&session->freesem, 0, CONFIG_VNCSERVER_NUPDATES);
-  sem_init(&session->queuesem, 0, 0);
+  nxsem_init(&session->freesem, 0, CONFIG_VNCSERVER_NUPDATES);
+  nxsem_init(&session->queuesem, 0, 0);
 
   /* Inform any waiter that we have started */
 
   vnc_reset_session(session, fb, display);
-  sem_post(&g_fbstartup[display].fbinit);
+  nxsem_post(&g_fbstartup[display].fbinit);
 
   /* Loop... handling each each VNC client connection to this display.  Only
    * a single client is allowed for each display.
@@ -315,7 +311,7 @@ int vnc_server(int argc, FAR char *argv[])
 
       vnc_reset_session(session, fb, display);
       g_fbstartup[display].result = -EBUSY;
-      sem_reset(&g_fbstartup[display].fbconnect, 0);
+      nxsem_reset(&g_fbstartup[display].fbconnect, 0);
 
       /* Establish a connection with the VNC client */
 
@@ -325,7 +321,7 @@ int vnc_server(int argc, FAR char *argv[])
           ginfo("New VNC connection\n");
 
           /* Perform the VNC initialization sequence after the client has
-           * sucessfully connected to the server.  Negotiate security,
+           * successfully connected to the server.  Negotiate security,
            * framebuffer and color properties.
            */
 
@@ -353,7 +349,7 @@ int vnc_server(int argc, FAR char *argv[])
            */
 
           g_fbstartup[display].result = OK;
-          sem_post(&g_fbstartup[display].fbconnect);
+          nxsem_post(&g_fbstartup[display].fbconnect);
 
           /* Run the VNC receiver on this trhead.  The VNC receiver handles
            * all Client-to-Server messages.  The VNC receiver function does
@@ -380,7 +376,7 @@ errout_with_fb:
 
 errout_with_post:
   g_fbstartup[display].result = ret;
-  sem_post(&g_fbstartup[display].fbconnect);
+  nxsem_post(&g_fbstartup[display].fbconnect);
 
 errout_with_hang:
   return EXIT_FAILURE;

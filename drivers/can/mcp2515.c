@@ -51,6 +51,7 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/spi/spi.h>
@@ -75,11 +76,20 @@
 #define MCP2515_TSEG2    MCP2515_PHSEG2
 #define MCP2515_BRP      ((uint8_t)(((float) MCP2515_CANCLK_FREQUENCY / \
                          ((float)(MCP2515_TSEG1 + MCP2515_TSEG2 + 1) * \
-                         (float)CONFIG_MCP2515_BITRATE)) - 1))
+                         (float)(2 * CONFIG_MCP2515_BITRATE))) - 1))
 #define MCP2515_SJW      CONFIG_MCP2515_SJW
 
-#if MCP2515_TSEG1 > 16
-#  error Invalid MCP2515 TSEG1
+#if MCP2515_PROPSEG < 1
+#  error Invalid PROPSEG. It cannot be lower than 1
+#endif
+#if MCP2515_PROPSEG > 8
+#  error Invalid PROPSEG. It cannot be greater than 8
+#endif
+#if MCP2515_PHSEG1 < 1
+#  error Invalid PHSEG1. It cannot be lower than 1
+#endif
+#if MCP2515_PHSEG1 > 8
+#  error Invalid PHSEG1. It cannot be greater than 1
 #endif
 #if MCP2515_TSEG2 < 2
 #  error Invalid TSEG2. It cannot be lower than 2
@@ -231,7 +241,7 @@ static void mcp2515_dumpregs(FAR struct mcp2515_can_s *priv, FAR const char *msg
 /* Semaphore helpers */
 
 static void mcp2515_dev_lock(FAR struct mcp2515_can_s *priv);
-#define mcp2515_dev_unlock(priv) sem_post(&priv->locksem)
+#define mcp2515_dev_unlock(priv) nxsem_post(&priv->locksem)
 
 /* MCP2515 helpers */
 
@@ -499,10 +509,10 @@ static void mcp2515_dev_lock(FAR struct mcp2515_can_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->locksem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(&priv->locksem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1135,7 +1145,7 @@ static void mcp2515_reset_lowlevel(FAR struct mcp2515_can_s *priv)
 
   /* Wait 1ms to let MCP2515 restart */
 
-  usleep(1000);
+  nxsig_usleep(1000);
 
   /* Make sure that all buffers are released.
    *
@@ -1143,8 +1153,8 @@ static void mcp2515_reset_lowlevel(FAR struct mcp2515_can_s *priv)
    * will not wake up any waiting threads.
    */
 
-  sem_destroy(&priv->txfsem);
-  sem_init(&priv->txfsem, 0, config->ntxbuffers);
+  nxsem_destroy(&priv->txfsem);
+  nxsem_init(&priv->txfsem, 0, config->ntxbuffers);
 
   /* Define the current state and unlock */
 
@@ -1403,7 +1413,7 @@ static int mcp2515_ioctl(FAR struct can_dev_s *dev, int cmd, unsigned long arg)
 
           mcp2515_readregs(priv, MCP2515_CNF1, &regval, 1);
           bt->bt_sjw   = ((regval & CNF1_SJW_MASK) >> CNF1_SJW_SHIFT) + 1;
-          brp          = ((regval & CNF1_BRP_MASK) >> CNF1_BRP_SHIFT) + 1;
+          brp          = (((regval & CNF1_BRP_MASK) >> CNF1_BRP_SHIFT) + 1) * 2;
 
           mcp2515_readregs(priv, MCP2515_CNF2, &regval, 1);
           bt->bt_tseg1 = ((regval & CNF2_PRSEG_MASK) >> CNF2_PRSEG_SHIFT) + 1;
@@ -1476,7 +1486,7 @@ static int mcp2515_ioctl(FAR struct can_dev_s *dev, int cmd, unsigned long arg)
 
           brp = (uint32_t)
             (((float) MCP2515_CANCLK_FREQUENCY /
-             ((float)(tseg1 + tseg2 + 1) * (float)bt->bt_baud)) - 1);
+             ((float)(tseg1 + tseg2 + 1) * (float)(2 * bt->bt_baud))) - 1);
 
           /* Save the value of the new bit timing register */
 
@@ -2359,7 +2369,7 @@ static int mcp2515_interrupt(FAR struct mcp2515_config_s *config, FAR void *arg)
  * Description:
  *   MCP2515 hardware initialization
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this MCP2515 peripheral
  *
  * Returned Value:
@@ -2434,7 +2444,7 @@ static int mcp2515_hw_initialize(struct mcp2515_can_s *priv)
   regval = (regval & ~CANCTRL_REQOP_MASK) | (CANCTRL_REQOP_NORMAL);
   mcp2515_writeregs(priv, MCP2515_CANCTRL, &regval, 1);
 
-  usleep(100);
+  nxsig_usleep(100);
 
   /* Read the CANINTF */
 
@@ -2473,7 +2483,7 @@ static int mcp2515_hw_initialize(struct mcp2515_can_s *priv)
  * Description:
  *   Initialize the selected MCP2515 CAN Bus Controller over SPI
  *
- * Input Parameter:
+ * Input Parameters:
  *   config - The configuration structure passed by the board.
  *
  * Returned Value:
@@ -2516,8 +2526,8 @@ FAR struct mcp2515_can_s *mcp2515_instantiate(FAR struct mcp2515_config_s *confi
 
   /* Initialize semaphores */
 
-  sem_init(&priv->locksem, 0, 1);
-  sem_init(&priv->txfsem, 0, config->ntxbuffers);
+  nxsem_init(&priv->locksem, 0, 1);
+  nxsem_init(&priv->txfsem, 0, config->ntxbuffers);
 
   /* And put the hardware in the initial state */
 
@@ -2544,7 +2554,7 @@ FAR struct mcp2515_can_s *mcp2515_instantiate(FAR struct mcp2515_config_s *confi
  * Description:
  *   Initialize the selected MCP2515 CAN Bus Controller over SPI
  *
- * Input Parameter:
+ * Input Parameters:
  *   config - The configuration structure passed by the board.
  *
  * Returned Value:

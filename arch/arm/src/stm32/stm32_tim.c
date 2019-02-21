@@ -732,8 +732,11 @@ static int stm32_tim_setmode(FAR struct stm32_tim_dev_s *dev, stm32_tim_mode_t m
 #if STM32_NATIM > 0
   /* Advanced registers require Main Output Enable */
 
-    if (((struct stm32_tim_priv_s *)dev)->base == STM32_TIM1_BASE ||
-        ((struct stm32_tim_priv_s *)dev)->base == STM32_TIM8_BASE)
+    if (((struct stm32_tim_priv_s *)dev)->base == STM32_TIM1_BASE
+#ifdef STM32_TIM8_BASE
+        || ((struct stm32_tim_priv_s *)dev)->base == STM32_TIM8_BASE
+#endif
+      )
       {
         stm32_modifyreg16(dev, STM32_ATIM_BDTR_OFFSET, 0, ATIM_BDTR_MOE);
       }
@@ -1656,12 +1659,6 @@ static int stm32_tim_setisr(FAR struct stm32_tim_dev_s *dev, xcpt_t handler,
   irq_attach(vectorno, handler ,arg);
   up_enable_irq(vectorno);
 
-#ifdef CONFIG_ARCH_IRQPRIO
-  /* Set the interrupt priority */
-
-  up_prioritize_irq(vectorno, NVIC_SYSH_PRIORITY_DEFAULT);
-#endif
-
   return OK;
 }
 
@@ -1672,7 +1669,7 @@ static int stm32_tim_setisr(FAR struct stm32_tim_dev_s *dev, xcpt_t handler,
 static void stm32_tim_enableint(FAR struct stm32_tim_dev_s *dev, int source)
 {
   DEBUGASSERT(dev != NULL);
-  stm32_modifyreg16(dev, STM32_BTIM_DIER_OFFSET, 0, ATIM_DIER_UIE);
+  stm32_modifyreg16(dev, STM32_BTIM_DIER_OFFSET, 0, source);
 }
 
 /************************************************************************************
@@ -1682,7 +1679,7 @@ static void stm32_tim_enableint(FAR struct stm32_tim_dev_s *dev, int source)
 static void stm32_tim_disableint(FAR struct stm32_tim_dev_s *dev, int source)
 {
   DEBUGASSERT(dev != NULL);
-  stm32_modifyreg16(dev, STM32_BTIM_DIER_OFFSET, ATIM_DIER_UIE, 0);
+  stm32_modifyreg16(dev, STM32_BTIM_DIER_OFFSET, source, 0);
 }
 
 /************************************************************************************
@@ -1691,7 +1688,7 @@ static void stm32_tim_disableint(FAR struct stm32_tim_dev_s *dev, int source)
 
 static void stm32_tim_ackint(FAR struct stm32_tim_dev_s *dev, int source)
 {
-  stm32_putreg16(dev, STM32_BTIM_SR_OFFSET, ~ATIM_SR_UIF);
+  stm32_putreg16(dev, STM32_BTIM_SR_OFFSET, ~source);
 }
 
 /************************************************************************************
@@ -1701,7 +1698,7 @@ static void stm32_tim_ackint(FAR struct stm32_tim_dev_s *dev, int source)
 static int stm32_tim_checkint(FAR struct stm32_tim_dev_s *dev, int source)
 {
   uint16_t regval = stm32_getreg16(dev, STM32_BTIM_SR_OFFSET);
-  return (regval & ATIM_SR_UIF) ? 1 : 0;
+  return (regval & source) ? 1 : 0;
 }
 
 /************************************************************************************

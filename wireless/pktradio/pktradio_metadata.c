@@ -86,10 +86,10 @@ static struct pktradio_metadata_s g_metadata_pool[CONFIG_PKTRADIO_NRXMETA];
  *   be called early in the initialization sequence before any radios
  *   begin operation.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -120,7 +120,7 @@ void pktradio_metadata_initialize(void)
 
       /* Initialize the mutual exclusion semaphore */
 
-      sem_init(&g_metadata_sem, 0, 1);
+      nxsem_init(&g_metadata_sem, 0, 1);
       g_metadata_initialized = true;
     }
 }
@@ -136,10 +136,10 @@ void pktradio_metadata_initialize(void)
  *   list.  If that the list is empty, then the meta-data structure will be
  *   allocated from the dynamic memory pool.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the allocated metadata structure.  All user fields in this
  *   structure have been zeroed.  On a failure to allocate, NULL is
  *   returned.
@@ -150,13 +150,23 @@ FAR struct pktradio_metadata_s *pktradio_metadata_allocate(void)
 {
   FAR struct pktradio_metadata_s *metadata;
   uint8_t pool;
+  int ret;
 
   /* Get exclusive access to the free list */
 
-  while (sem_wait(&g_metadata_sem) < 0)
+  do
     {
-      DEBUGASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_metadata_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Try the free list first */
 
@@ -168,7 +178,7 @@ FAR struct pktradio_metadata_s *pktradio_metadata_allocate(void)
 
       /* We are finished with the free list */
 
-      sem_post(&g_metadata_sem);
+      nxsem_post(&g_metadata_sem);
     }
   else
     {
@@ -177,7 +187,7 @@ FAR struct pktradio_metadata_s *pktradio_metadata_allocate(void)
        * access the free list.
        */
 
-      sem_post(&g_metadata_sem);
+      nxsem_post(&g_metadata_sem);
 
       metadata = (FAR struct pktradio_metadata_s *)
         kmm_malloc((sizeof (struct pktradio_metadata_s)));
@@ -206,22 +216,33 @@ FAR struct pktradio_metadata_s *pktradio_metadata_allocate(void)
  *   structure. If the metadata structure was allocated dynamically it will
  *   be deallocated.
  *
- * Inputs:
+ * Input Parameters:
  *   metadata - metadata structure to free
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
 
 void pktradio_metadata_free(FAR struct pktradio_metadata_s *metadata)
 {
+  int ret;
+
   /* Get exclusive access to the free list */
 
-  while (sem_wait(&g_metadata_sem) < 0)
+  do
     {
-      DEBUGASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_metadata_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* If this is a pre-allocated meta-data structure, then just put it back
    * in the free list.
@@ -234,7 +255,7 @@ void pktradio_metadata_free(FAR struct pktradio_metadata_s *metadata)
 
       /* We are finished with the free list */
 
-      sem_post(&g_metadata_sem);
+      nxsem_post(&g_metadata_sem);
     }
   else
     {
@@ -242,7 +263,7 @@ void pktradio_metadata_free(FAR struct pktradio_metadata_s *metadata)
 
       /* Otherwise, deallocate it.  We won't access the free list */
 
-      sem_post(&g_metadata_sem);
+      nxsem_post(&g_metadata_sem);
       sched_kfree(metadata);
     }
 }

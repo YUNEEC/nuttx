@@ -517,7 +517,9 @@ static void khci_putreg(uint32_t val, uint32_t addr);
 
 /* Suspend/Resume Helpers ***************************************************/
 
+#ifndef CONFIG_KINETIS_USBOTG
 static void   khci_suspend(struct khci_usbdev_s *priv);
+#endif
 static void   khci_remote_resume(struct khci_usbdev_s *priv);
 static void   khci_resume(struct khci_usbdev_s *priv);
 
@@ -1112,7 +1114,8 @@ static void khci_delayedrestart(struct khci_usbdev_s *priv, uint8_t epno)
 
   /* And start (or re-start) the watchdog timer */
 
-  wd_start(priv->wdog, RESTART_DELAY, khci_rqrestart, 1, (uint32_t)priv);
+  (void)wd_start(priv->wdog, RESTART_DELAY, khci_rqrestart, 1,
+                 (uint32_t)priv);
 }
 
 /****************************************************************************
@@ -1865,7 +1868,7 @@ static void khci_eptransfer(struct khci_usbdev_s *priv, uint8_t epno,
  * Name: khci_ep0nextsetup
  *
  * Description:
- *   This function is called (1) after sucessful completion of an EP0 Setup
+ *   This function is called (1) after successful completion of an EP0 Setup
  *   command, or (2) after receipt of the OUT complete event (for simple
  *   transfers).  It simply sets up the single BDT to accept the next
  *   SETUP commend.
@@ -2790,6 +2793,7 @@ static int khci_interrupt(int irq, void *context, FAR void *arg)
       /* Clear all pending USB error interrupts */
 
       khci_putreg(USB_EINT_ALL, KINETIS_USB0_ERRSTAT);
+      khci_putreg(USB_INT_ERROR, KINETIS_USB0_ISTAT);
     }
 
   /* Service resume interrupts */
@@ -2894,7 +2898,7 @@ static int khci_interrupt(int irq, void *context, FAR void *arg)
     {
       usbtrace(TRACE_INTDECODE(KHCI_TRACEINTID_IDLE), usbir);
 
-#ifdef  CONFIG_KINETIS_USBOTG
+#ifdef CONFIG_KINETIS_USBOTG
       /* If Suspended, Try to switch to Host */
 #warning "Missing logic"
 #else
@@ -2976,6 +2980,7 @@ interrupt_exit:
  * Name: khci_suspend
  ****************************************************************************/
 
+#ifndef CONFIG_KINETIS_USBOTG
 static void khci_suspend(struct khci_usbdev_s *priv)
 {
   uint32_t regval;
@@ -3013,6 +3018,7 @@ static void khci_suspend(struct khci_usbdev_s *priv)
   kinetis_usbsuspend((struct usbdev_s *)priv, false);
 
 }
+#endif
 
 /****************************************************************************
  * Name: khci_remote_resume
@@ -4397,12 +4403,6 @@ void up_usbinitialize(void)
       up_usbuninitialize();
       return;
     }
-
-#ifdef CONFIG_ARCH_IRQPRIO
-  /* Set the interrupt priority */
-
-  up_prioritize_irq(KINETIS_IRQ_USBOTG, 112);
-#endif
 
   khci_hwinitalize(priv);
 }

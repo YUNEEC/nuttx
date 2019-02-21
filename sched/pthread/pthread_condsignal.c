@@ -55,10 +55,10 @@
  * Description:
  *    A thread can signal on a condition variable.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -80,7 +80,7 @@ int pthread_cond_signal(FAR pthread_cond_t *cond)
     {
       /* Get the current value of the semaphore */
 
-      if (sem_getvalue((FAR sem_t *)&cond->sem, &sval) != OK)
+      if (nxsem_getvalue((FAR sem_t *)&cond->sem, &sval) != OK)
         {
           ret = EINVAL;
         }

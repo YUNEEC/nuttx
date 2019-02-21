@@ -129,7 +129,6 @@
 #define STM32_TIM13_BASE     0x40001c00     /* 0x40001c00-0x40001fff: TIM13 timer */
 #define STM32_TIM14_BASE     0x40002000     /* 0x40002000-0x400023ff: TIM14 timer */
 #define STM32_RTC_BASE       0x40002800     /* 0x40002800-0x40002bff: RTC & BKP registers */
-#define STM32_BKP_BASE       0x40002850
 #define STM32_WWDG_BASE      0x40002c00     /* 0x40002c00-0x40002fff: Window watchdog (WWDG) */
 #define STM32_IWDG_BASE      0x40003000     /* 0x40003000-0x400033ff: Independent watchdog (IWDG) */
 #define STM32_I2S2EXT_BASE   0x40003400     /* 0x40003400-0x400037ff: I2S2ext */
@@ -148,7 +147,7 @@
 #define STM32_CAN1_BASE      0x40006400     /* 0x40006400-0x400067ff: bxCAN1 */
 #define STM32_CAN2_BASE      0x40006800     /* 0x40006800-0x40006bff: bxCAN2 */
 #define STM32_PWR_BASE       0x40007000     /* 0x40007000-0x400073ff: Power control PWR */
-#define STM32_DAC_BASE       0x40007400     /* 0x40007400-0x400077ff: DAC */
+#define STM32_DAC1_BASE      0x40007400     /* 0x40007400-0x400077ff: DAC1 */
 #define STM32_UART7_BASE     0x40007800     /* 0x40007800-0x40007bff: UART7 */
 #define STM32_UART8_BASE     0x40007c00     /* 0x40007c00-0x40007fff: UART8 */
 
@@ -159,10 +158,6 @@
 #define STM32_USART1_BASE    0x40011000     /* 0x40011000-0x400113ff: USART1 */
 #define STM32_USART6_BASE    0x40011400     /* 0x40011400-0x400117ff: USART6 */
 #define STM32_ADC_BASE       0x40012000     /* 0x40012000-0x400123ff: ADC1-3 */
-#  define STM32_ADC1_BASE    0x40012000     /*                        ADC1 */
-#  define STM32_ADC2_BASE    0x40012100     /*                        ADC2 */
-#  define STM32_ADC3_BASE    0x40012200     /*                        ADC3 */
-#  define STM32_ADCCMN_BASE  0x40012300     /*                        Common */
 #define STM32_SDIO_BASE      0x40012c00     /* 0x40012c00-0x40012fff: SDIO  */
 #define STM32_SPI1_BASE      0x40013000     /* 0x40013000-0x400133ff: SPI1 */
 #define STM32_SPI4_BASE      0x40013400     /* 0x40013000-0x400137ff: SPI4 */

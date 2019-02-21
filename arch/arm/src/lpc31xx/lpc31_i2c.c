@@ -219,7 +219,7 @@ static void i2c_progress(struct lpc31_i2cdev_s *priv)
       /* FIXME: automatic retry? */
 
       priv->state = I2C_STATE_DONE;
-      sem_post(&priv->wait);
+      nxsem_post(&priv->wait);
       return;
     }
 
@@ -388,7 +388,7 @@ out:
         }
 
       priv->state = I2C_STATE_DONE;
-      sem_post(&priv->wait);
+      nxsem_post(&priv->wait);
     }
 }
 
@@ -427,7 +427,7 @@ static void i2c_timeout(int argc, uint32_t arg, ...)
       /* Mark the transfer as finished */
 
       priv->state = I2C_STATE_DONE;
-      sem_post(&priv->wait);
+      nxsem_post(&priv->wait);
     }
 
   leave_critical_section(flags);
@@ -467,7 +467,7 @@ static int i2c_transfer(FAR struct i2c_master_s *dev, FAR struct i2c_msg_s *msgs
 
   /* Get exclusive access to the I2C bus */
 
-  sem_wait(&priv->mutex);
+  nxsem_wait(&priv->mutex);
   flags = enter_critical_section();
 
   /* Set up for the transfer */
@@ -490,20 +490,20 @@ static int i2c_transfer(FAR struct i2c_master_s *dev, FAR struct i2c_msg_s *msgs
 
   /* Start a watchdog to timeout the transfer if the bus is locked up... */
 
-  wd_start(priv->timeout, I2C_TIMEOUT, i2c_timeout, 1, (uint32_t)priv);
+  (void)wd_start(priv->timeout, I2C_TIMEOUT, i2c_timeout, 1, (uint32_t)priv);
 
   /* Wait for the transfer to complete */
 
   while (priv->state != I2C_STATE_DONE)
     {
-      sem_wait(&priv->wait);
+      nxsem_wait(&priv->wait);
     }
 
   wd_cancel(priv->timeout);
   ret = count - priv->nmsg;
 
   leave_critical_section(flags);
-  sem_post(&priv->mutex);
+  nxsem_post(&priv->mutex);
   return ret;
 }
 
@@ -551,14 +551,14 @@ struct i2c_master_s *lpc31_i2cbus_initialize(int port)
 
   /* Initialize semaphores */
 
-  sem_init(&priv->mutex, 0, 1);
-  sem_init(&priv->wait, 0, 0);
+  nxsem_init(&priv->mutex, 0, 1);
+  nxsem_init(&priv->wait, 0, 0);
 
   /* The wait semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->wait, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->wait, SEM_PRIO_NONE);
 
   /* Enable I2C system clocks */
 

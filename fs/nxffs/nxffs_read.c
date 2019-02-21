@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/nxffs/nxffs_read.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -48,6 +48,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mtd/mtd.h>
 
@@ -169,11 +170,10 @@ ssize_t nxffs_read(FAR struct file *filep, FAR char *buffer, size_t buflen)
    * protects the open file list.
    */
 
-  ret = sem_wait(&volume->exclsem);
-  if (ret != OK)
+  ret = nxsem_wait(&volume->exclsem);
+  if (ret < 0)
     {
-      ret = -get_errno();
-      ferr("ERROR: sem_wait failed: %d\n", ret);
+      ferr("ERROR: nxsem_wait failed: %d\n", ret);
       goto errout;
     }
 
@@ -232,11 +232,11 @@ ssize_t nxffs_read(FAR struct file *filep, FAR char *buffer, size_t buflen)
       total        += readsize;
     }
 
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
   return total;
 
 errout_with_semaphore:
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
 errout:
   return (ssize_t)ret;
 }

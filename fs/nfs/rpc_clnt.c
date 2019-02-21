@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/nfs/rpc_clnt.c
  *
- *   Copyright (C) 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2018 Gregory Nutt. All rights reserved.
  *   Copyright (C) 2012 Jose Pablo Rojas Vargas. All rights reserved.
  *   Author: Jose Pablo Rojas Vargas <jrojas@nx-engineering.com>
  *           Gregory Nutt <gnutt@nuttx.org>
@@ -162,25 +162,25 @@ static int rpcclnt_send(FAR struct rpcclnt *rpc, int procid, int prog,
                         FAR void *call, int reqlen)
 {
   ssize_t nbytes;
-  int error = OK;
+  int ret = OK;
 
   /* Send the call message
    *
-   * On success, psock_sendto returns the number of bytes sent;
-   * On failure, it returns -1 with the specific error in errno.
+   * On success, psock_send returns the number of bytes sent;
+   * On failure, it returns a negated errno value.
    */
 
-  nbytes = psock_sendto(rpc->rc_so, call, reqlen, 0,
-                        rpc->rc_name, sizeof(struct sockaddr));
+  nbytes = psock_send(rpc->rc_so, call, reqlen, 0);
+
   if (nbytes < 0)
     {
       /* psock_sendto failed */
 
-      error = get_errno();
-      ferr("ERROR: psock_sendto failed: %d\n", error);
+      ret = (int)-nbytes;
+      ferr("ERROR: psock_sendto failed: %d\n", ret);
     }
 
-  return error;
+  return ret;
 }
 
 /****************************************************************************
@@ -203,7 +203,7 @@ static int rpcclnt_receive(FAR struct rpcclnt *rpc, FAR struct sockaddr *aname,
   nbytes = psock_recvfrom(rpc->rc_so, reply, resplen, 0, aname, &fromlen);
   if (nbytes < 0)
     {
-      error = get_errno();
+      error = (int)-nbytes;
       ferr("ERROR: psock_recvfrom failed: %d\n", error);
     }
 
@@ -403,9 +403,9 @@ int rpcclnt_connect(struct rpcclnt *rpc)
   error = psock_socket(saddr->sa_family, rpc->rc_sotype, IPPROTO_UDP, so);
   if (error < 0)
     {
-      errval = get_errno();
+      errval = -error;
       ferr("ERROR: psock_socket failed: %d", errval);
-      return error;
+      return errval;
     }
 
   so->s_crefs     = 1;
@@ -422,7 +422,7 @@ int rpcclnt_connect(struct rpcclnt *rpc)
                           (const void *)&tv, sizeof(tv));
   if (error < 0)
     {
-      errval = get_errno();
+      errval = -error;
       ferr("ERROR: psock_setsockopt failed: %d\n", errval);
       goto bad;
     }
@@ -441,10 +441,11 @@ int rpcclnt_connect(struct rpcclnt *rpc)
     {
       tport--;
       sin.sin_port = htons(tport);
+
       error = psock_bind(rpc->rc_so, (struct sockaddr *)&sin, sizeof(sin));
       if (error < 0)
         {
-          errval = get_errno();
+          errval = -error;
           ferr("ERROR: psock_bind failed: %d\n", errval);
         }
     }
@@ -456,15 +457,15 @@ int rpcclnt_connect(struct rpcclnt *rpc)
       goto bad;
     }
 
-  /* Protocols that do not require connections may be optionally left
-   * unconnected for servers that reply from a port other than
-   * NFS_PORT.
+  /* Protocols that do not require connections could be optionally left
+   * unconnected.  That would allow servers to reply from a port other than
+   * the NFS_PORT.
    */
 
   error = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
   if (error < 0)
     {
-      errval = get_errno();
+      errval = -error;
       ferr("ERROR: psock_connect to PMAP port failed: %d", errval);
       goto bad;
     }
@@ -474,7 +475,7 @@ int rpcclnt_connect(struct rpcclnt *rpc)
    */
 
   request.sdata.pmap.prog = txdr_unsigned(RPCPROG_MNT);
-  request.sdata.pmap.vers = txdr_unsigned(RPCMNT_VER1);
+  request.sdata.pmap.vers = txdr_unsigned(RPCMNT_VER3);
   request.sdata.pmap.proc = txdr_unsigned(IPPROTO_UDP);
   request.sdata.pmap.port = 0;
 
@@ -493,7 +494,7 @@ int rpcclnt_connect(struct rpcclnt *rpc)
   error = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
   if (error < 0)
     {
-      errval = get_errno();
+      errval = -error;
       ferr("ERROR: psock_connect MOUNTD port failed: %d\n", errval);
       goto bad;
     }
@@ -503,7 +504,7 @@ int rpcclnt_connect(struct rpcclnt *rpc)
   strncpy(request.mountd.mount.rpath, rpc->rc_path, 90);
   request.mountd.mount.len =  txdr_unsigned(sizeof(request.mountd.mount.rpath));
 
-  error = rpcclnt_request(rpc, RPCMNT_MOUNT, RPCPROG_MNT, RPCMNT_VER1,
+  error = rpcclnt_request(rpc, RPCMNT_MOUNT, RPCPROG_MNT, RPCMNT_VER3,
                           (FAR void *)&request.mountd, sizeof(struct call_args_mount),
                           (FAR void *)&response.mdata, sizeof(struct rpc_reply_mount));
   if (error != 0)
@@ -519,7 +520,8 @@ int rpcclnt_connect(struct rpcclnt *rpc)
       goto bad;
     }
 
-  memcpy(&rpc->rc_fh, &response.mdata.mount.fhandle, sizeof(nfsfh_t));
+  rpc->rc_fhsize = fxdr_unsigned(uint32_t, response.mdata.mount.fhandle.length);
+  memcpy(&rpc->rc_fh, &response.mdata.mount.fhandle.handle, rpc->rc_fhsize);
 
   /* Do the RPC to get a dynamic bounding with the server using PMAP.
    * NFS port in the socket.
@@ -530,7 +532,7 @@ int rpcclnt_connect(struct rpcclnt *rpc)
   error = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
   if (error < 0)
     {
-      errval = get_errno();
+      errval = -error;
       ferr("ERROR: psock_connect PMAP port failed: %d\n", errval);
       goto bad;
     }
@@ -552,8 +554,9 @@ int rpcclnt_connect(struct rpcclnt *rpc)
   sa->sin_port = htons(fxdr_unsigned(uint32_t, response.rdata.pmap.port));
 
   error = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
-  if (error)
+  if (error < 0)
     {
+      error = -error;
       ferr("ERROR: psock_connect NFS port returns %d\n", error);
       goto bad;
     }
@@ -621,14 +624,14 @@ int rpcclnt_umount(struct rpcclnt *rpc)
   ret = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
   if (ret < 0)
     {
-      error = get_errno();
+      error = -ret;
       ferr("ERROR: psock_connect failed [port=%d]: %d\n",
             ntohs(sa->sin_port), error);
       goto bad;
     }
 
   request.sdata.pmap.prog = txdr_unsigned(RPCPROG_MNT);
-  request.sdata.pmap.vers = txdr_unsigned(RPCMNT_VER1);
+  request.sdata.pmap.vers = txdr_unsigned(RPCMNT_VER3);
   request.sdata.pmap.proc = txdr_unsigned(IPPROTO_UDP);
   request.sdata.pmap.port = 0;
 
@@ -646,7 +649,7 @@ int rpcclnt_umount(struct rpcclnt *rpc)
   ret = psock_connect(rpc->rc_so, saddr, sizeof(*saddr));
   if (ret < 0)
     {
-      error = get_errno();
+      error = -ret;
       ferr("ERROR: psock_connect failed [port=%d]: %d\n",
             ntohs(sa->sin_port), error);
       goto bad;
@@ -657,7 +660,7 @@ int rpcclnt_umount(struct rpcclnt *rpc)
   strncpy(request.mountd.umount.rpath, rpc->rc_path, 92);
   request.mountd.umount.len =  txdr_unsigned(sizeof(request.mountd.umount.rpath));
 
-  error = rpcclnt_request(rpc, RPCMNT_UMOUNT, RPCPROG_MNT, RPCMNT_VER1,
+  error = rpcclnt_request(rpc, RPCMNT_UMOUNT, RPCPROG_MNT, RPCMNT_VER3,
                           (FAR void *)&request.mountd, sizeof(struct call_args_umount),
                           (FAR void *)&response.mdata, sizeof(struct rpc_reply_umount));
   if (error != 0)

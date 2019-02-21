@@ -202,7 +202,7 @@ static void up_notify(FAR struct up_dev_s *priv)
        * is no longer avaialable.
        */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   /* If there are threads waiting on poll() for touchscreen data to become availabe,
@@ -219,7 +219,7 @@ static void up_notify(FAR struct up_dev_s *priv)
         {
           fds->revents |= POLLIN;
           iinfo("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 #endif
@@ -299,7 +299,7 @@ static int up_waitsample(FAR struct up_dev_s *priv,
    * run, but they cannot run yet because pre-emption is disabled.
    */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   /* Try to get the a sample... if we cannot, then wait on the semaphore
    * that is posted when new sample data is available.
@@ -311,7 +311,7 @@ static int up_waitsample(FAR struct up_dev_s *priv,
 
       iinfo("Waiting...\n");
       priv->nwaiters++;
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
       priv->nwaiters--;
       iinfo("Awakened...\n");
 
@@ -321,8 +321,7 @@ static int up_waitsample(FAR struct up_dev_s *priv,
            * the failure now.
            */
 
-          DEBUGASSERT(errno == EINTR);
-          ret = -EINTR;
+          DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
           goto errout;
         }
     }
@@ -332,7 +331,7 @@ static int up_waitsample(FAR struct up_dev_s *priv,
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
 
 errout:
   /* Then re-enable interrupts.  We might get interrupt here and there
@@ -407,13 +406,13 @@ static ssize_t up_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
+      return ret;
     }
 
   /* Try to read sample data. */
@@ -482,12 +481,12 @@ static ssize_t up_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
 errout:
   iinfo("Returning %d\n", ret);
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
 /****************************************************************************
- * Name:up_ioctl
+ * Name: up_ioctl
  ****************************************************************************/
 
 static int up_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
@@ -505,13 +504,13 @@ static int up_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
+      return ret;
     }
 
   /* Process the IOCTL by command */
@@ -523,7 +522,7 @@ static int up_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -549,13 +548,13 @@ static int up_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Are we setting up the poll?  Or tearing it down? */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
+      return ret;
     }
 
   if (setup)
@@ -614,7 +613,7 @@ static int up_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif
@@ -657,14 +656,14 @@ int sim_tsc_initialize(int minor)
 
   /* Initialize semaphores */
 
-  sem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
-  sem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
+  nxsem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
+  nxsem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   priv->minor = minor;
 
@@ -689,8 +688,8 @@ int sim_tsc_initialize(int minor)
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->waitsem);
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->devsem);
   return ret;
 }
 
@@ -718,15 +717,15 @@ void sim_tsc_uninitialize(void)
 
   do
     {
-      ret = sem_wait(&priv->devsem);
-      if (ret < 0)
-        {
-          /* This should only happen if the wait was canceled by an signal */
+      ret = nxsem_wait(&priv->devsem);
 
-          DEBUGASSERT(errno == EINTR);
-        }
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret != OK);
+  while (ret == -EINTR);
 
   /* Stop the event loop (Hmm.. the caller must be sure that there are no
    * open references to the touchscreen driver.  This might better be
@@ -748,8 +747,8 @@ void sim_tsc_uninitialize(void)
 
   /* Clean up any resources.  Ouch!  While we are holding the semaphore? */
 
-  sem_destroy(&priv->waitsem);
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->devsem);
 }
 
 /****************************************************************************
@@ -816,4 +815,3 @@ int up_buttonevent(int x, int y, int buttons)
   up_notify(priv);
   return OK;
 }
-

@@ -57,7 +57,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sig_deliver
+ * Name: nxsig_deliver
  *
  * Description:
  *   This function is called on the thread of execution of the signal
@@ -65,7 +65,7 @@
  *
  ****************************************************************************/
 
-void sig_deliver(FAR struct tcb_s *stcb)
+void nxsig_deliver(FAR struct tcb_s *stcb)
 {
   FAR sigq_t *sigq;
   FAR sigq_t *next;
@@ -110,13 +110,26 @@ void sig_deliver(FAR struct tcb_s *stcb)
       stcb->sigprocmask = savesigprocmask | sigq->mask |
                           SIGNO2SET(sigq->info.si_signo);
 
-      /* Deliver the signal.  In the kernel build this has to be handled
-       * differently if we are dispatching to a signal handler in a user-
-       * space task or thread; we have to switch to user-mode before
-       * calling the task.
-       */
+      /* Deliver the signal. */
 
 #if defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)
+      /* In the kernel build this has to be handled differently if we are
+       * dispatching to a signal handler in a user-space task or thread; we
+       * have to switch to user-mode before calling the task.
+       */
+
+#ifdef CONFIG_SIG_DEFAULT
+      /* The default signal action handlers, however always reside in the
+       * kernel address space, regardless of configuration.
+       */
+
+      if (nxsig_isdefault(stcb, sigq->info.si_signo))
+        {
+           (*sigq->action.sighandler)(sigq->info.si_signo, &sigq->info,
+                                      NULL);
+        }
+      else
+#endif
       if ((stcb->flags & TCB_FLAG_TTYPE_MASK) != TCB_FLAG_TTYPE_KERNEL)
         {
           /* The sigq_t pointed to by sigq resides in kernel space.  So we
@@ -151,7 +164,7 @@ void sig_deliver(FAR struct tcb_s *stcb)
        * original sigprocmask will unblock the signal.
        */
 
-      sig_unmaskpendingsignal();
+      nxsig_unmask_pendingsignal();
 
       /* Remove the signal from the sigpostedq */
 
@@ -161,7 +174,7 @@ void sig_deliver(FAR struct tcb_s *stcb)
 
       /* Then deallocate it */
 
-      sig_releasependingsigaction(sigq);
+      nxsig_release_pendingsigaction(sigq);
     }
 
   stcb->pterrno = saved_errno;

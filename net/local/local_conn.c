@@ -91,16 +91,16 @@ FAR struct local_conn_s *local_alloc(void)
     {
       /* Initialize non-zero elements the new connection structure */
 
-      conn->lc_infd  = -1;
-      conn->lc_outfd = -1;
+      conn->lc_infile.f_inode  = NULL;
+      conn->lc_outfile.f_inode = NULL;
 
 #ifdef CONFIG_NET_LOCAL_STREAM
       /* This semaphore is used for signaling and, hence, should not have
        * priority inheritance enabled.
        */
 
-      sem_init(&conn->lc_waitsem, 0, 0);
-      sem_setprotocol(&conn->lc_waitsem, SEM_PRIO_NONE);
+      nxsem_init(&conn->lc_waitsem, 0, 0);
+      nxsem_setprotocol(&conn->lc_waitsem, SEM_PRIO_NONE);
 
 #ifdef HAVE_LOCAL_POLL
       memset(conn->lc_accept_fds, 0, sizeof(conn->lc_accept_fds));
@@ -126,25 +126,25 @@ void local_free(FAR struct local_conn_s *conn)
 
   /* Make sure that the read-only FIFO is closed */
 
-  if (conn->lc_infd >= 0)
+  if (conn->lc_infile.f_inode != NULL)
     {
-      close(conn->lc_infd);
-      conn->lc_infd = -1;
+      file_close(&conn->lc_infile);
+      conn->lc_infile.f_inode = NULL;
     }
 
   /* Make sure that the write-only FIFO is closed */
 
-  if (conn->lc_outfd >= 0)
+  if (conn->lc_outfile.f_inode != NULL)
     {
-      close(conn->lc_outfd);
-      conn->lc_outfd = -1;
+      file_close(&conn->lc_outfile);
+      conn->lc_outfile.f_inode = NULL;
     }
 
 #ifdef CONFIG_NET_LOCAL_STREAM
   /* Destroy all FIFOs associted with the connection */
 
   local_release_fifos(conn);
-  sem_destroy(&conn->lc_waitsem);
+  nxsem_destroy(&conn->lc_waitsem);
 #endif
 
   /* And free the connection structure */

@@ -312,7 +312,7 @@ struct mmcsd_scr_s
   uint8_t  sdversion;          /* 59:56 SD memory card physical layer version */
   uint8_t  erasestate;         /* 55:55 Data state after erase (1 or 0) */
   uint8_t  security;           /* 54:52 SD security support */
-  uint8_t  buswidth;           /* 51:48 DAT bus widthes supported */
+  uint8_t  buswidth;           /* 51:48 DAT bus widths supported */
                                /* 47:32 SD reserved space */
   uint32_t mfgdata;            /* 31:0  Reserved for manufacturing data */
 };
@@ -324,7 +324,8 @@ struct mmcsd_scr_s
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
@@ -332,7 +333,6 @@ extern "C" {
 /********************************************************************************************
  * Public Functions
  ********************************************************************************************/
-
 
 #undef EXTERN
 #if defined(__cplusplus)

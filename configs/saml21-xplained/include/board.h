@@ -44,7 +44,7 @@
 
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
-#  ifdef CONFIG_SAMDL_GPIOIRQ
+#  ifdef CONFIG_SAMD2L2_GPIOIRQ
 #    include <arch/irq.h>
 #  endif
 #endif
@@ -56,7 +56,7 @@
 /* Clocking *************************************************************************/
 /* Overview
  *
- * Since there is not high speed crystal, we will run from the OSC16M clock source.
+ * Since there is no high speed crystal, we will run from the OSC16M clock source.
  * We will use its default, POR frequency of 4MHz to avoid an additional clock
  * switch.
  *
@@ -209,12 +209,6 @@
  *   BOARD_DFLL48M_QUICKLOCK           - Boolean (defined / not defined)
  *   BOARD_DFLL48M_RUNINSTDBY          - Boolean (defined / not defined)
  *   BOARD_DFLL48M_ONDEMAND            - Boolean (defined / not defined)
- *   BOARD_DFLL48M_COARSEVALUE         - Value
- *   BOARD_DFLL48M_FINEVALUE           - Value
- *
- * Open Loop mode only:
- *   BOARD_DFLL48M_COARSEVALUE         - Value
- *   BOARD_DFLL48M_FINEVALUE           - Value
  *
  * Closed loop mode only:
  *   BOARD_DFLL48M_REFCLK_CLKGEN       - GCLK index in the range {0..8}
@@ -259,11 +253,6 @@
 
 #  undef  BOARD_DFLL48M_RUNINSTDBY
 #  undef  BOARD_DFLL48M_ONDEMAND
-
-/* DFLL open loop mode configuration */
-
-#  define BOARD_DFLL48M_COARSEVALUE        (0x1f / 4)
-#  define BOARD_DFLL48M_FINEVALUE          (0xff / 4)
 
 /* DFLL closed loop mode configuration */
 
@@ -669,41 +658,4 @@
 
 #define BUTTON_SW0_BIT               (1 << BUTTON_SW0)
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-/************************************************************************************
- * Name: sam_boardinitialize
- *
- * Description:
- *   All SAM3U architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void sam_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __CONFIGS_SAML21_XPLAINED_INCLUDE_BOARD_H */

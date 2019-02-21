@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/input/button_upper.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,9 +54,10 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/random.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/input/buttons.h>
-#include <nuttx/random.h>
 
 #include <nuttx/irq.h>
 
@@ -122,7 +123,7 @@ struct btn_open_s
 /* Semaphore helpers */
 
 static inline int btn_takesem(sem_t *sem);
-#define btn_givesem(s) sem_post(s);
+#define btn_givesem(s) nxsem_post(s);
 
 /* Sampling and Interrupt handling */
 
@@ -176,18 +177,18 @@ static const struct file_operations btn_fops =
 
 static inline int btn_takesem(sem_t *sem)
 {
+  int ret;
+
   /* Take a count from the semaphore, possibly waiting */
 
-  if (sem_wait(sem) < 0)
-    {
-      /* EINTR is the only error that we expect */
+  ret = nxsem_wait(sem);
 
-      int errcode = get_errno();
-      DEBUGASSERT(errcode == EINTR);
-      return -errcode;
-    }
+  /* The only case that an error should occur here is if the wait
+   * was awakened by a signal
+   */
 
-  return OK;
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
@@ -197,7 +198,7 @@ static inline int btn_takesem(sem_t *sem)
 #if !defined(CONFIG_DISABLE_POLL) || !defined(CONFIG_DISABLE_SIGNALS)
 static void btn_enable(FAR struct btn_upperhalf_s *priv)
 {
-  FAR const struct btn_lowerhalf_s *lower = priv->bu_lower;
+  FAR const struct btn_lowerhalf_s *lower;
   FAR struct btn_open_s *opriv;
   btn_buttonset_t press;
   btn_buttonset_t release;
@@ -279,7 +280,7 @@ static void btn_interrupt(FAR const struct btn_lowerhalf_s *lower,
 
 static void btn_sample(FAR struct btn_upperhalf_s *priv)
 {
-  FAR const struct btn_lowerhalf_s *lower = priv->bu_lower;
+  FAR const struct btn_lowerhalf_s *lower;
   FAR struct btn_open_s *opriv;
   btn_buttonset_t sample;
 #if !defined(CONFIG_DISABLE_POLL) || !defined(CONFIG_DISABLE_SIGNALS)
@@ -340,7 +341,7 @@ static void btn_sample(FAR struct btn_upperhalf_s *priv)
                   if (fds->revents != 0)
                     {
                       iinfo("Report events: %02x\n", fds->revents);
-                      sem_post(fds->sem);
+                      nxsem_post(fds->sem);
                     }
                 }
             }
@@ -358,10 +359,11 @@ static void btn_sample(FAR struct btn_upperhalf_s *priv)
 #ifdef CONFIG_CAN_PASS_STRUCTS
           union sigval value;
           value.sival_int = (int)sample;
-          (void)sigqueue(opriv->bo_pid, opriv->bo_notify.bn_signo, value);
+          (void)nxsig_queue(opriv->bo_pid, opriv->bo_notify.bn_signo,
+                            value);
 #else
-          (void)sigqueue(opriv->bo_pid, opriv->bo_notify.dn.signo,
-                         (FAR void *)sample);
+          (void)nxsig_queue(opriv->bo_pid, opriv->bo_notify.dn.signo,
+                            (FAR void *)sample);
 #endif
         }
 #endif
@@ -821,7 +823,7 @@ errout_with_dusem:
  *     minor device number.
  *   lower - An instance of the platform-specific button lower half driver.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success.  Otherwise a negated errno value is
  *   returned to indicate the nature of the failure.
  *
@@ -855,7 +857,7 @@ int btn_register(FAR const char *devname,
   /* Initialize the new button driver instance */
 
   priv->bu_lower = lower;
-  sem_init(&priv->bu_exclsem, 0, 1);
+  nxsem_init(&priv->bu_exclsem, 0, 1);
 
   DEBUGASSERT(lower->bl_buttons);
   priv->bu_sample = lower->bl_buttons(lower);
@@ -872,7 +874,7 @@ int btn_register(FAR const char *devname,
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->bu_exclsem);
+  nxsem_destroy(&priv->bu_exclsem);
   kmm_free(priv);
   return ret;
 }

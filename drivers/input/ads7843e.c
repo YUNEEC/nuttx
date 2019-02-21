@@ -1,7 +1,8 @@
 /****************************************************************************
  * drivers/input/ads7843e.c
  *
- *   Copyright (C) 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Diego Sanchez <dsanchez@nx-engineering.com>
  *
@@ -166,7 +167,7 @@ static struct ads7843e_dev_s *g_ads7843elist;
  *   to assure: (1) exclusive access to the SPI bus, and (2) to assure that
  *   the shared bus is properly configured for the touchscreen controller.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -204,7 +205,7 @@ static void ads7843e_lock(FAR struct spi_dev_s *spi)
  *   Un-lock the SPI bus after each transfer,  possibly losing the current
  *   configuration if we are sharing the bus with other devices.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -224,7 +225,7 @@ static void ads7843e_unlock(FAR struct spi_dev_s *spi)
 /****************************************************************************
  * Name: ads7843e_sendcmd
  *
- * Description.
+ * Description:
  *   The command/data sequences is as follows:
  *
  *            DCLK
@@ -305,7 +306,7 @@ static void ads7843e_notify(FAR struct ads7843e_dev_s *priv)
        * is no longer available.
        */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   /* If there are threads waiting on poll() for ADS7843E data to become available,
@@ -322,7 +323,7 @@ static void ads7843e_notify(FAR struct ads7843e_dev_s *priv)
         {
           fds->revents |= POLLIN;
           iinfo("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 #endif
@@ -408,7 +409,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
    * run, but they cannot run yet because pre-emption is disabled.
    */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   /* Try to get the a sample... if we cannot, then wait on the semaphore
    * that is posted when new sample data is available.
@@ -420,7 +421,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
 
       iinfo("Waiting..\n");
       priv->nwaiters++;
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
       priv->nwaiters--;
 
       if (ret < 0)
@@ -429,9 +430,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
            * the failure now.
            */
 
-          ierr("ERROR: sem_wait: %d\n", errno);
-          DEBUGASSERT(errno == EINTR);
-          ret = -EINTR;
+          ierr("ERROR: nxsem_wait: %d\n", ret);
           goto errout;
         }
     }
@@ -443,7 +442,7 @@ static int ads7843e_waitsample(FAR struct ads7843e_dev_s *priv,
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
 
 errout:
   /* Then re-enable interrupts.  We might get interrupt here and there
@@ -531,7 +530,7 @@ static void ads7843e_worker(FAR void *arg)
   bool                          pendown;
   int                           ret;
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 
   /* Get a pointer the callbacks for convenience (and so the code is not so
    * ugly).
@@ -554,15 +553,15 @@ static void ads7843e_worker(FAR void *arg)
 
   do
     {
-      ret = sem_wait(&priv->devsem);
+      ret = nxsem_wait(&priv->devsem);
 
       /* This should only fail if the wait was canceled by an signal
        * (and the worker thread will receive a lot of signals).
        */
 
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 
   /* Check for pen up or down by reading the PENIRQ GPIO. */
 
@@ -608,7 +607,8 @@ static void ads7843e_worker(FAR void *arg)
        * later.
        */
 
-       wd_start(priv->wdog, ADS7843E_WDOG_DELAY, ads7843e_wdog, 1, (uint32_t)priv);
+       (void)wd_start(priv->wdog, ADS7843E_WDOG_DELAY, ads7843e_wdog, 1,
+                      (uint32_t)priv);
        goto ignored;
     }
   else
@@ -698,7 +698,7 @@ ignored:
 
   /* Release our lock on the state structure and unlock the SPI bus */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   ads7843e_unlock(priv->spi);
 }
 
@@ -721,7 +721,7 @@ static int ads7843e_interrupt(int irq, FAR void *context, FAR void *arg)
        priv && priv->configs->irq != irq;
        priv = priv->flink);
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 #endif
 
   /* Get a pointer the callbacks for convenience (and so the code is not so
@@ -763,13 +763,13 @@ static int ads7843e_open(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was cancelled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Increment the reference count */
@@ -792,7 +792,7 @@ static int ads7843e_open(FAR struct file *filep)
   priv->crefs = tmp;
 
 errout_with_sem:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 #else
   iinfo("Opening\n");
@@ -820,13 +820,13 @@ static int ads7843e_close(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Decrement the reference count unless it would decrement a negative
@@ -839,7 +839,7 @@ static int ads7843e_close(FAR struct file *filep)
       priv->crefs--;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 #endif
   iinfo("Closing\n");
   return OK;
@@ -880,14 +880,14 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was cancelled by an signal */
 
-      ierr("ERROR: sem_wait: %d\n", errno);
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      ierr("ERROR: nxsem_wait: %d\n", ret);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Try to read sample data. */
@@ -969,13 +969,13 @@ static ssize_t ads7843e_read(FAR struct file *filep, FAR char *buffer, size_t le
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   iinfo("Returning: %d\n", ret);
   return ret;
 }
 
 /****************************************************************************
- * Name:ads7843e_ioctl
+ * Name: ads7843e_ioctl
  ****************************************************************************/
 
 static int ads7843e_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
@@ -993,13 +993,13 @@ static int ads7843e_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was cancelled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Process the IOCTL by command */
@@ -1027,7 +1027,7 @@ static int ads7843e_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -1053,13 +1053,13 @@ static int ads7843e_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Are we setting up the poll?  Or tearing it down? */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was cancelled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   if (setup)
@@ -1118,7 +1118,7 @@ static int ads7843e_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif
@@ -1190,14 +1190,14 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
 
   /* Initialize semaphores */
 
-  sem_init(&priv->devsem,  0, 1);    /* Initialize device structure semaphore */
-  sem_init(&priv->waitsem, 0, 0);    /* Initialize pen event wait semaphore */
+  nxsem_init(&priv->devsem,  0, 1);    /* Initialize device structure semaphore */
+  nxsem_init(&priv->waitsem, 0, 0);    /* Initialize pen event wait semaphore */
 
   /* The pen event semaphore is used for signaling and, hence, should not
    * have priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Make sure that interrupts are disabled */
 
@@ -1267,7 +1267,7 @@ int ads7843e_register(FAR struct spi_dev_s *spi,
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->devsem);
 #ifdef CONFIG_ADS7843E_MULTIPLE
   kmm_free(priv);
 #endif

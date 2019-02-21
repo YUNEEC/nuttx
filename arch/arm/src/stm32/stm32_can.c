@@ -76,7 +76,7 @@
 
 /* Bit timing ***************************************************************/
 
-#define CAN_BIT_QUANTA (CONFIG_CAN_TSEG1 + CONFIG_CAN_TSEG2 + 1)
+#define CAN_BIT_QUANTA (CONFIG_STM32_CAN_TSEG1 + CONFIG_STM32_CAN_TSEG2 + 1)
 
 #ifndef CONFIG_DEBUG_CAN_INFO
 #  undef CONFIG_STM32_CAN_REGDEBUG
@@ -205,7 +205,7 @@ static struct stm32_can_s g_can1priv =
   .filter           = 0,
   .base             = STM32_CAN1_BASE,
   .fbase            = STM32_CAN1_BASE,
-  .baud             = CONFIG_CAN1_BAUD,
+  .baud             = CONFIG_STM32_CAN1_BAUD,
 };
 
 static struct can_dev_s g_can1dev =
@@ -228,7 +228,7 @@ static struct stm32_can_s g_can2priv =
   .filter           = CAN_NFILTERS / 2,
   .base             = STM32_CAN2_BASE,
   .fbase            = STM32_CAN1_BASE,
-  .baud             = CONFIG_CAN2_BAUD,
+  .baud             = CONFIG_STM32_CAN2_BAUD,
 };
 
 static struct can_dev_s g_can2dev =
@@ -1644,7 +1644,7 @@ static int stm32can_txinterrupt(int irq, FAR void *context, FAR void *arg)
  * Where:
  *   Tpclk1 is the period of the APB1 clock (PCLK1).
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A reference to the CAN block status
  *
  * Returned Value:
@@ -1699,15 +1699,15 @@ static int stm32can_bittiming(FAR struct stm32_can_s *priv)
         }
     }
 
-  /* Otherwise, nquanta is CAN_BIT_QUANTA, ts1 is CONFIG_CAN_TSEG1, ts2 is
-   * CONFIG_CAN_TSEG2 and we calculate brp to achieve CAN_BIT_QUANTA quanta
+  /* Otherwise, nquanta is CAN_BIT_QUANTA, ts1 is CONFIG_STM32_CAN_TSEG1, ts2 is
+   * CONFIG_STM32_CAN_TSEG2 and we calculate brp to achieve CAN_BIT_QUANTA quanta
    * in the bit time
    */
 
   else
     {
-      ts1 = CONFIG_CAN_TSEG1;
-      ts2 = CONFIG_CAN_TSEG2;
+      ts1 = CONFIG_STM32_CAN_TSEG1;
+      ts2 = CONFIG_STM32_CAN_TSEG2;
       brp = (tmp + (CAN_BIT_QUANTA/2)) / CAN_BIT_QUANTA;
       DEBUGASSERT(brp >= 1 && brp <= CAN_BTR_BRP_MAX);
     }
@@ -1743,7 +1743,7 @@ static int stm32can_bittiming(FAR struct stm32_can_s *priv)
  *   peripheral, no registers are changed. The initialization mode is
  *   required to change the baud rate.
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *
  * Returned Value:
@@ -1794,7 +1794,7 @@ static int stm32can_enterinitmode(FAR struct stm32_can_s *priv)
  * Description:
  *   Put the CAN cell out of the Initialization mode (to Normal mode)
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *
  * Returned Value:
@@ -1844,7 +1844,7 @@ static int stm32can_exitinitmode(FAR struct stm32_can_s *priv)
  * Description:
  *   CAN cell initialization
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *
  * Returned Value:
@@ -1878,12 +1878,16 @@ static int stm32can_cellinit(FAR struct stm32_can_s *priv)
    *  - Automatic wake-up mode
    *  - No automatic retransmission
    *  - Receive FIFO locked mode
+   *
+   * Enable:
+   *
    *  - Transmit FIFO priority
    */
 
-  regval   = stm32can_getreg(priv, STM32_CAN_MCR_OFFSET);
-  regval &= ~(CAN_MCR_TXFP | CAN_MCR_RFLM | CAN_MCR_NART |
-              CAN_MCR_AWUM | CAN_MCR_ABOM | CAN_MCR_TTCM);
+  regval  = stm32can_getreg(priv, STM32_CAN_MCR_OFFSET);
+  regval &= ~(CAN_MCR_RFLM | CAN_MCR_NART | CAN_MCR_AWUM |
+              CAN_MCR_ABOM | CAN_MCR_TTCM);
+  regval |=  CAN_MCR_TXFP;
   stm32can_putreg(priv, STM32_CAN_MCR_OFFSET, regval);
 
   /* Configure bit timing. */
@@ -1923,7 +1927,7 @@ static int stm32can_cellinit(FAR struct stm32_can_s *priv)
  *   are set to zero thus supressing all filtering because anything masked
  *   with zero matches zero.
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *
  * Returned Value:
@@ -2010,7 +2014,7 @@ static int stm32can_filterinit(FAR struct stm32_can_s *priv)
  * Description:
  *   Add a filter for extended CAN IDs
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *   arg  - A pointer to a structure describing the filter
  *
@@ -2035,7 +2039,7 @@ static int stm32can_addextfilter(FAR struct stm32_can_s *priv,
  * Description:
  *   Remove a filter for extended CAN IDs
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *   arg  - The filter index previously returned by the
  *            CANIOC_ADD_EXTFILTER command
@@ -2060,7 +2064,7 @@ static int stm32can_delextfilter(FAR struct stm32_can_s *priv, int arg)
  * Description:
  *   Add a filter for standard CAN IDs
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *   arg  - A pointer to a structure describing the filter
  *
@@ -2083,7 +2087,7 @@ static int stm32can_addstdfilter(FAR struct stm32_can_s *priv,
  * Description:
  *   Remove a filter for standard CAN IDs
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - A pointer to the private data structure for this CAN block
  *   arg  - The filter index previously returned by the
  *            CANIOC_ADD_STDFILTER command
@@ -2103,7 +2107,7 @@ static int stm32can_delstdfilter(FAR struct stm32_can_s *priv, int arg)
 /****************************************************************************
  * Name: stm32can_txmb0empty
  *
- * Input Parameter:
+ * Input Parameters:
  *   tsr_regval - value of CAN transmit status register
  *
  * Returned Value:
@@ -2120,7 +2124,7 @@ static bool stm32can_txmb0empty(uint32_t tsr_regval)
 /****************************************************************************
  * Name: stm32can_txmb1empty
  *
- * Input Parameter:
+ * Input Parameters:
  *   tsr_regval - value of CAN transmit status register
  *
  * Returned Value:
@@ -2137,7 +2141,7 @@ static bool stm32can_txmb1empty(uint32_t tsr_regval)
 /****************************************************************************
  * Name: stm32can_txmb2empty
  *
- * Input Parameter:
+ * Input Parameters:
  *   tsr_regval - value of CAN transmit status register
  *
  * Returned Value:
@@ -2161,7 +2165,7 @@ static bool stm32can_txmb2empty(uint32_t tsr_regval)
  * Description:
  *   Initialize the selected CAN port
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple CAN interfaces)
  *
  * Returned Value:

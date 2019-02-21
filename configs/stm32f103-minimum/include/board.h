@@ -34,8 +34,8 @@
  *
  ************************************************************************************/
 
-#ifndef __CONFIGS_STM32F103_MINIMUM_BOARD_H
-#define __CONFIGS_STM32F103_MINIMUM_BOARD_H
+#ifndef __CONFIGS_STM32F103_MINIMUM_INCLUDE_BOARD_H
+#define __CONFIGS_STM32F103_MINIMUM_INCLUDE_BOARD_H
 
 /************************************************************************************
  * Included Files
@@ -44,12 +44,6 @@
 #include <nuttx/config.h>
 #ifndef __ASSEMBLY__
 #  include <stdint.h>
-#endif
-
-#ifdef __KERNEL__
-#  include "stm32_rcc.h"
-#  include "stm32_sdio.h"
-#  include "stm32.h"
 #endif
 
 /************************************************************************************
@@ -62,7 +56,7 @@
 
 #define STM32_BOARD_XTAL        8000000ul
 
-/* PLL source is HSE/1, PLL multipler is 9: PLL frequency is 8MHz (XTAL) x 9 = 72MHz */
+/* PLL source is HSE/1, PLL multiplier is 9: PLL frequency is 8MHz (XTAL) x 9 = 72MHz */
 
 #define STM32_CFGR_PLLSRC       RCC_CFGR_PLLSRC
 #define STM32_CFGR_PLLXTPRE     0
@@ -200,41 +194,4 @@
 #define RGBLED_BPWMTIMER   4
 #define RGBLED_BPWMCHANNEL 4
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-/************************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void stm32_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
-#endif  /* __CONFIGS_STM32F103_MINIMUM_BOARD_H */
+#endif  /* __CONFIGS_STM32F103_MINIMUM_INCLUDE_BOARD_H */

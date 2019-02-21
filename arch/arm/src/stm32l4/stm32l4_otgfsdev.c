@@ -71,6 +71,10 @@
  ****************************************************************************/
 /* Configuration ***************************************************************/
 
+#ifndef CONFIG_STM32L4_SYSCFG
+#  error "CONFIG_STM32L4_SYSCFG is required"
+#endif
+
 #ifndef CONFIG_USBDEV_EP0_MAXSIZE
 #  define CONFIG_USBDEV_EP0_MAXSIZE 64
 #endif
@@ -331,19 +335,6 @@
 #define STM32L4_TRACEINTID_OUTDONE            (90 + 2)
 #define STM32L4_TRACEINTID_SETUPDONE          (90 + 3)
 #define STM32L4_TRACEINTID_SETUPRECVD         (90 + 4)
-
-/* CONFIG_USB_DUMPBUFFER will dump the contents of buffers to the console. */
-
-#define CONFIG_USB_DUMPBUFFER
-
-#if !defined(CONFIG_DEBUG_INFO) || !defined(CONFIG_DEBUG_FEATURES)
-#  undef CONFIG_USB_DUMPBUFFER
-#endif
-#ifdef CONFIG_USB_DUMPBUFFER
-#  define usb_dumpbuffer(t,b,l) lib_dumpbuffer(t,b,l)
-#else
-#  define usb_dumpbuffer(t,b,l)
-#endif
 
 /* Endpoints ******************************************************************/
 
@@ -1141,8 +1132,6 @@ static void stm32l4_txfifo_write(FAR struct stm32l4_ep_s *privep,
   int nwords;
   int i;
 
-  usb_dumpbuffer(">>>",buf,nbytes);
-
   /* Convert the number of bytes to words */
 
   nwords = (nbytes + 3) >> 2;
@@ -1531,8 +1520,6 @@ static void stm32l4_rxfifo_read(FAR struct stm32l4_ep_s *privep,
       *dest++ = data.b[2];
       *dest++ = data.b[3];
     }
-
-  usb_dumpbuffer("<<<",dest-len,len);
 }
 
 /****************************************************************************
@@ -4048,7 +4035,7 @@ static int stm32l4_epin_configure(FAR struct stm32l4_ep_s *privep, uint8_t eptyp
       regval &= ~(OTGFS_DIEPCTL_MPSIZ_MASK | OTGFS_DIEPCTL_EPTYP_MASK | OTGFS_DIEPCTL_TXFNUM_MASK);
       regval |= mpsiz;
       regval |= (eptype << OTGFS_DIEPCTL_EPTYP_SHIFT);
-      regval |= (eptype << OTGFS_DIEPCTL_TXFNUM_SHIFT);
+      regval |= (privep->epphy << OTGFS_DIEPCTL_TXFNUM_SHIFT);
       regval |= (OTGFS_DIEPCTL_SD0PID | OTGFS_DIEPCTL_USBAEP);
       stm32l4_putreg(regval, regaddr);
 
@@ -4404,7 +4391,7 @@ static void stm32l4_ep_freereq(FAR struct usbdev_ep_s *ep, FAR struct usbdev_req
 #ifdef CONFIG_USBDEV_DMA
 static void *stm32l4_ep_allocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
 {
-  usbtrace(TRACE_EPALLOCBUFFER, privep->epphy);
+  usbtrace(TRACE_EPALLOCBUFFER, ((FAR struct stm32l4_ep_s *)ep)->epphy);
 
 #ifdef CONFIG_USBDEV_DMAMEMORY
   return usbdev_dma_alloc(bytes);
@@ -4425,7 +4412,7 @@ static void *stm32l4_ep_allocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
 #ifdef CONFIG_USBDEV_DMA
 static void stm32l4_ep_freebuffer(FAR struct usbdev_ep_s *ep, FAR void *buf)
 {
-  usbtrace(TRACE_EPFREEBUFFER, privep->epphy);
+  usbtrace(TRACE_EPFREEBUFFER, ((FAR struct stm32l4_ep_s *)ep)->epphy);
 
 #ifdef CONFIG_USBDEV_DMAMEMORY
   usbdev_dma_free(buf);
@@ -5357,7 +5344,7 @@ static void stm32l4_hwinitialize(FAR struct stm32l4_usbdev_s *priv)
   address = STM32L4_RXFIFO_WORDS;
   regval  = (address << OTGFS_DIEPTXF0_TX0FD_SHIFT) |
             (STM32L4_EP0_TXFIFO_WORDS << OTGFS_DIEPTXF0_TX0FSA_SHIFT);
-  stm32l4_putreg(regval, STM32L4_OTGFS_DIEPTXF(0));
+  stm32l4_putreg(regval, STM32L4_OTGFS_DIEPTXF0);
 #endif
 
 #if STM32L4_NENDPOINTS > 1
@@ -5606,12 +5593,6 @@ void up_usbinitialize(void)
   /* Enable USB controller interrupts at the NVIC */
 
   up_enable_irq(STM32L4_IRQ_OTGFS);
-
-#ifdef CONFIG_ARCH_IRQPRIO
-  /* Set the interrupt priority */
-
-  up_prioritize_irq(STM32L4_IRQ_OTGFS, CONFIG_OTGFS_PRI);
-#endif
   return;
 
 errout:

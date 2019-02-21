@@ -1,7 +1,8 @@
 /****************************************************************************
  * drivers/net/dm90x0.c
  *
- *   Copyright (C) 2007-2010, 2014-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2010, 2014-2016, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Davicom data sheets (DM9000-DS-F03-041906.pdf,
@@ -82,20 +83,20 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Work queue support is required in this configuration (CONFIG_SCHED_WORKQUEUE)
-#else
-
-  /* Use the low priority work queue if possible */
-
-#  if defined(CONFIG_DM9X_HPWORK)
-#    define ETHWORK HPWORK
-#  elif defined(CONFIG_DM9X_LPWORK)
-#    define ETHWORK LPWORK
-#  else
-#    error Neither CONFIG_DM9X_HPWORK nor CONFIG_DM9X_LPWORK defined
-#  endif
 #endif
 
-/* DM90000 and DM9010 register offets */
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
+
+#define ETHWORK LPWORK
+
+/* DM90000 and DM9010 register offsets */
 
 #define DM9X_NETC          0x00 /* Network control register */
 #define DM9X_NETS          0x01 /* Network Status register */
@@ -341,7 +342,7 @@ struct dm9x_driver_s
 
 /* A single packet buffer is used */
 
-static uint8_t g_pktbuf[MAX_NET_DEV_MTU + CONFIG_NET_GUARDSIZE];
+static uint8_t g_pktbuf[MAX_NETDEV_PKTSIZE + CONFIG_NET_GUARDSIZE];
 
 /* At present, only a single DM90x0 device is supported. */
 
@@ -404,7 +405,7 @@ static int dm9x_ifdown(struct net_driver_s *dev);
 static void dm9x_txavail_work(FAR void *arg);
 static int dm9x_txavail(struct net_driver_s *dev);
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int dm9x_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 static int dm9x_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -424,7 +425,7 @@ static void dm9x_reset(struct dm9x_driver_s *priv);
  * Description:
  *   Access to memory-mapped DM90x0 8-bit registers
  *
- * Parameters:
+ * Input Parameters:
  *   reg - Register number
  *   value - Value to write to the register (setreg only)
  *
@@ -453,7 +454,7 @@ static void putreg(int reg, uint8_t value)
  * Description:
  *   Read packet data from the DM90x0 SRAM based on its current I/O mode
  *
- * Parameters:
+ * Input Parameters:
  *   ptr - Location to write the packet data
  *   len - The number of bytes to read
  *
@@ -502,7 +503,7 @@ static void read32(FAR uint8_t *ptr, int len)
  *   Read and discard packet data in the DM90x0 SRAM based on its current
  *   I/O mode
  *
- * Parameters:
+ * Input Parameters:
  *   len - The number of bytes to discard
  *
  * Returned Value:
@@ -545,7 +546,7 @@ static void discard32(int len)
  * Description:
  *   Write packet data into the DM90x0 SRAM based on its current I/O mode
  *
- * Parameters:
+ * Input Parameters:
  *   ptr - Location to write the packet data
  *   len - The number of bytes to read
  *
@@ -596,7 +597,7 @@ static void write32(FAR const uint8_t *ptr, int len)
  * Description:
  *   Read a word from SROM
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *   offset - SROM offset to read from
  *
@@ -624,7 +625,7 @@ static uint16_t dm9x_readsrom(struct dm9x_driver_s *priv, int offset)
  * Description:
  *   Read/write data from/to the PHY
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *   reg   - PHY register offset
  *   value - The value to write to the PHY register (dm9x_write only)
@@ -677,7 +678,7 @@ static void dm9x_phywrite(struct dm9x_driver_s *priv, int reg, uint16_t value)
  * Description:
  *   Return true if the RX checksum is available
  *
- * Parameters:
+ * Input Parameters:
  *   rxbyte
  *
  * Returned Value:
@@ -706,7 +707,7 @@ static inline bool dm9x_rxchecksumready(uint8_t rxbyte)
  *   Start hardware transmission.  Called either from the txdone interrupt
  *   handling or from watchdog based polling.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -777,7 +778,7 @@ static int dm9x_transmit(struct dm9x_driver_s *priv)
  *   2. When the preceding TX packet send timesout and the DM90x0 is reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -819,19 +820,22 @@ static int dm9x_txpoll(struct net_driver_s *dev)
         }
 #endif /* CONFIG_NET_IPv6 */
 
-      /* Send the packet */
-
-      dm9x_transmit(priv);
-
-      /* Check if there is room in the DM90x0 to hold another packet.  In 100M mode,
-       * that can be 2 packets, otherwise it is a single packet.
-       */
-
-      if (priv->dm_ntxpending > 1 || !priv->dm_b100M)
+      if (!devif_loopback(&priv->dm_dev))
         {
-          /* Returning a non-zero value will terminate the poll operation */
+          /* Send the packet */
 
-          return 1;
+          dm9x_transmit(priv);
+
+          /* Check if there is room in the DM90x0 to hold another packet.  In 100M mode,
+           * that can be 2 packets, otherwise it is a single packet.
+           */
+
+          if (priv->dm_ntxpending > 1 || !priv->dm_b100M)
+            {
+              /* Returning a non-zero value will terminate the poll operation */
+
+              return 1;
+            }
         }
     }
 
@@ -848,7 +852,7 @@ static int dm9x_txpoll(struct net_driver_s *dev)
  * Description:
  *   An interrupt was received indicating the availability of a new RX packet
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -908,7 +912,7 @@ static void dm9x_receive(FAR struct dm9x_driver_s *priv)
 
       /* Also check if the packet is a valid size for the network configuration */
 
-      else if (rx.desc.rx_len < ETH_HDRLEN || rx.desc.rx_len > (CONFIG_NET_ETH_MTU + 2))
+      else if (rx.desc.rx_len < ETH_HDRLEN || rx.desc.rx_len > (CONFIG_NET_ETH_PKTSIZE + 2))
         {
           nerr("ERROR: RX length error\n");
           NETDEV_RXERRORS(&priv->dm_dev);
@@ -1046,7 +1050,7 @@ static void dm9x_receive(FAR struct dm9x_driver_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1109,7 +1113,7 @@ static void dm9x_txdone(struct dm9x_driver_s *priv)
  * Description:
  *   Perform interrupt related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() was called.
  *
  * Returned Value:
@@ -1228,7 +1232,7 @@ static void dm9x_interrupt_work(FAR void *arg)
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -1280,7 +1284,7 @@ static int dm9x_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1325,7 +1329,7 @@ static void dm9x_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1359,7 +1363,7 @@ static void dm9x_txtimeout_expiry(int argc, wdparm_t arg, ...)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1412,7 +1416,7 @@ static void dm9x_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1439,7 +1443,7 @@ static void dm9x_poll_expiry(int argc, wdparm_t arg, ...)
  * Description:
  *   Configure the PHY operating mode
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1484,7 +1488,7 @@ static inline void dm9x_phymode(struct dm9x_driver_s *priv)
  *   NuttX Callback: Bring up the DM90x0 interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1550,7 +1554,7 @@ static int dm9x_ifup(struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1596,7 +1600,7 @@ static int dm9x_ifdown(struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -1642,7 +1646,7 @@ static void dm9x_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1679,7 +1683,7 @@ static int dm9x_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -1690,7 +1694,7 @@ static int dm9x_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int dm9x_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct dm9x_driver_s *priv = (FAR struct dm9x_driver_s *)dev->d_private;
@@ -1709,7 +1713,7 @@ static int dm9x_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -1720,7 +1724,7 @@ static int dm9x_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int dm9x_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct dm9x_driver_s *priv = (FAR struct dm9x_driver_s *)dev->d_private;
@@ -1738,7 +1742,7 @@ static int dm9x_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Initialize the dm90x0 chip
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1835,7 +1839,7 @@ static void dm9x_bringup(struct dm9x_driver_s *priv)
  *   Stop, reset, re-initialize, and restart the DM90x0 chip and driver.  At
  *   present, the chip is only reset after a TX timeout.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1891,7 +1895,7 @@ static void dm9x_reset(struct dm9x_driver_s *priv)
  * Description:
  *   Initialize the DM90x0 driver
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -1942,13 +1946,13 @@ int dm9x_initialize(void)
   g_dm9x[0].dm_dev.d_ifup    = dm9x_ifup;     /* I/F down callback */
   g_dm9x[0].dm_dev.d_ifdown  = dm9x_ifdown;   /* I/F up (new IP address) callback */
   g_dm9x[0].dm_dev.d_txavail = dm9x_txavail;  /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   g_dm9x[0].dm_dev.d_addmac  = dm9x_addmac;   /* Add multicast MAC address */
   g_dm9x[0].dm_dev.d_rmmac   = dm9x_rmmac;    /* Remove multicast MAC address */
 #endif
   g_dm9x[0].dm_dev.d_private = (FAR void *)g_dm9x; /* Used to recover private state from dev */
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmissions */
 
   g_dm9x[0].dm_txpoll       = wd_create();    /* Create periodic poll timer */
   g_dm9x[0].dm_txtimeout    = wd_create();    /* Create TX timeout timer */

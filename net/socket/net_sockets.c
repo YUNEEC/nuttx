@@ -69,13 +69,13 @@ static void _net_semtake(FAR struct socketlist *list)
        * the wait was awakened by a signal.
        */
 
-      DEBUGASSERT(ret == -EINTR);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
     }
 
   UNUSED(ret);
 }
 
-#define _net_semgive(list) sem_post(&list->sl_sem)
+#define _net_semgive(list) nxsem_post(&list->sl_sem)
 
 /****************************************************************************
  * Public Functions
@@ -99,7 +99,7 @@ void net_initlist(FAR struct socketlist *list)
 {
   /* Initialize the list access mutex */
 
-  (void)sem_init(&list->sl_sem, 0, 1);
+  (void)nxsem_init(&list->sl_sem, 0, 1);
 }
 
 /****************************************************************************
@@ -135,7 +135,7 @@ void net_releaselist(FAR struct socketlist *list)
 
   /* Destroy the semaphore */
 
-  (void)sem_destroy(&list->sl_sem);
+  (void)nxsem_destroy(&list->sl_sem);
 }
 
 /****************************************************************************
@@ -190,7 +190,7 @@ int sockfd_allocate(int minsd)
 }
 
 /****************************************************************************
- * Name: sock_release
+ * Name: psock_release
  *
  * Description:
  *   Free a socket.
@@ -203,7 +203,7 @@ int sockfd_allocate(int minsd)
  *
  ****************************************************************************/
 
-void sock_release(FAR struct socket *psock)
+void psock_release(FAR struct socket *psock)
 {
   if (psock != NULL)
     {
@@ -259,7 +259,7 @@ void sockfd_release(int sockfd)
 
   if (psock)
     {
-      sock_release(psock);
+      psock_release(psock);
     }
 }
 

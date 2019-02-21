@@ -1,8 +1,9 @@
 /****************************************************************************
  * arch/arm/src/stm32f7/stm32_gpio.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *           Bob Feretich <bob.feretich@rafresearch.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -49,7 +50,6 @@
 #include <arch/stm32f7/chip.h>
 
 #include "up_arch.h"
-
 #include "chip/stm32_syscfg.h"
 #include "stm32_gpio.h"
 
@@ -57,7 +57,8 @@
  * families
  */
 
-#if defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX) \
+#if defined(CONFIG_STM32F7_STM32F72XX) || defined(CONFIG_STM32F7_STM32F73XX) \
+  || defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX) \
   || defined(CONFIG_STM32F7_STM32F76XX) || defined(CONFIG_STM32F7_STM32F77XX)
 
 /****************************************************************************
@@ -107,25 +108,6 @@ const uint32_t g_gpiobase[STM32F7_NGPIO] =
  ****************************************************************************/
 
 /****************************************************************************
- * Function:  stm32_gpioinit
- *
- * Description:
- *   Based on configuration within the .config file, it does:
- *    - Remaps positions of alternative functions.
- *
- *   Typically called from stm32_start().
- *
- * Assumptions:
- *   This function is called early in the initialization sequence so that
- *   no mutual exclusion is necessary.
- *
- ****************************************************************************/
-
-void stm32_gpioinit(void)
-{
-}
-
-/****************************************************************************
  * Name: stm32_configgpio
  *
  * Description:
@@ -134,7 +116,7 @@ void stm32_gpioinit(void)
  *   function, it must be unconfigured with stm32_unconfiggpio() with
  *   the same cfgset first before it can be set to non-alternative function.
  *
- * Returns:
+ * Returned Value:
  *   OK on success
  *   A negated errono value on invalid port, or when pin is locked as ALT
  *   function.
@@ -357,7 +339,7 @@ int stm32_configgpio(uint32_t cfgset)
  *   operate in PWM mode could produce excessive on-board currents and trigger
  *   over-current/alarm function.
  *
- * Returns:
+ * Returned Value:
  *  OK on success
  *  A negated errno value on invalid port
  *
@@ -446,4 +428,41 @@ bool stm32_gpioread(uint32_t pinset)
   return 0;
 }
 
-#endif /* CONFIG_STM32F7_STM32F74XX || CONFIG_STM32F7_STM32F75XX */
+/****************************************************************************
+ * Name: stm32_iocompensation
+ *
+ * Description:
+ *   Enable I/O compensation.
+ *
+ *   By default the I/O compensation cell is not used. However when the I/O
+ *   output buffer speed is configured in 50 MHz or 100 MHz mode, it is
+ *   recommended to use the compensation cell for slew rate control on I/O
+ *   tf(IO)out)/tr(IO)out commutation to reduce the I/O noise on power supply.
+ *
+ *   The I/O compensation cell can be used only when the supply voltage ranges
+ *   from 2.4 to 3.6 V.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void stm32_iocompensation(void)
+{
+  /* Enable I/O Compensation.  Writing '1' to the CMPCR power-down bit
+   * enables the I/O compensation cell.
+   */
+
+  putreg32(SYSCFG_CMPCR_CMPPD, STM32_SYSCFG_CMPCR);
+
+  /* Wait for compensation cell to become ready */
+
+  while ((getreg32(STM32_SYSCFG_CMPCR) & SYSCFG_CMPCR_READY) == 0)
+    {
+    }
+}
+
+#endif /* CONFIG_STM32F7_STM32F72XX || ... || CONFIG_STM32F7_STM32F77XX */

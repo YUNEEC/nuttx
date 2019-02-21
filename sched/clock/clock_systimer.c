@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/clock/clock_systimer.c
  *
- *   Copyright (C) 2011, 2014-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2014-2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,9 +50,14 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* See nuttx/clock.h */
 
 #undef clock_systimer
+
+/* 32-bit mask for 64-bit timer values */
+
+#define TIMER_MASK32 0x00000000ffffffff
 
 /****************************************************************************
  * Public Functions
@@ -62,19 +67,28 @@
  * Name: clock_systimer
  *
  * Description:
- *   Return the current value of the 32/64-bit system timer counter
+ *   Return the current value of the 32/64-bit system timer counter.
  *
- * Parameters:
+ *   Indirect access to the system timer counter is required through this
+ *   function if the execution environment does not have direct access to
+ *   kernel global data.
+ *
+ *   Use of this function is also required to assure atomic access to the
+ *   64-bit system timer.
+ *
+ *   NOTE:  This is an internal OS interface and should not be called from
+ *   application code.  Rather, the functionally equivalent, standard
+ *   interface clock() should be used.
+ *
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   The current value of the system timer counter
- *
- * Assumptions:
  *
  ****************************************************************************/
 
-systime_t clock_systimer(void)
+clock_t clock_systimer(void)
 {
 #ifdef CONFIG_SCHED_TICKLESS
 # ifdef CONFIG_SYSTEM_TIME64
@@ -83,11 +97,7 @@ systime_t clock_systimer(void)
 
   /* Get the time from the platform specific hardware */
 
-#ifndef CONFIG_CLOCK_TIMEKEEPING
-  (void)up_timer_gettime(&ts);
-#else
-  (void)clock_timekeeping_get_monotonic_time(&ts);
-#endif
+  (void)clock_systimespec(&ts);
 
   /* Convert to a 64-bit value in microseconds, then in clock tick units */
 
@@ -100,29 +110,39 @@ systime_t clock_systimer(void)
 
   /* Get the time from the platform specific hardware */
 
-#ifndef CONFIG_CLOCK_TIMEKEEPING
-  (void)up_timer_gettime(&ts);
-#else
-  (void)clock_timekeeping_get_monotonic_time(&ts);
-#endif
+  (void)clock_systimespec(&ts);
 
   /* Convert to a 64- then a 32-bit value */
 
   tmp = USEC2TICK(1000000 * (uint64_t)ts.tv_sec + (uint64_t)ts.tv_nsec / 1000);
-  return (systime_t)(tmp & 0x00000000ffffffff);
+  return (clock_t)(tmp & TIMER_MASK32);
 
 # endif /* CONFIG_SYSTEM_TIME64 */
 #else /* CONFIG_SCHED_TICKLESS */
 # ifdef CONFIG_SYSTEM_TIME64
 
-  irqstate_t flags;
-  systime_t sample;
+  clock_t sample;
+  clock_t verify;
 
-  /* 64-bit accesses are not atomic on most architectures. */
+  /* 64-bit accesses are not atomic on most architectures.  The following
+   * loop samples the 64-bit timer twice and loops in the rare event that
+   * there was 32-bit rollover between samples.
+   *
+   * If there is no 32-bit rollover, then:
+   *
+   *  - The MS 32-bits of each sample will be the same, and
+   *  - The LS 32-bits of the second sample will be greater than or equal to
+   *    the LS 32-bits for the first sample.
+   */
 
-  flags  = enter_critical_section();
-  sample = g_system_timer;
-  leave_critical_section(flags);
+  do
+    {
+      verify = g_system_timer;
+      sample = g_system_timer;
+    }
+  while ((sample &  TIMER_MASK32)  < (verify &  TIMER_MASK32) ||
+         (sample & ~TIMER_MASK32) != (verify & ~TIMER_MASK32));
+
   return sample;
 
 # else /* CONFIG_SYSTEM_TIME64 */

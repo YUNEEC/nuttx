@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/nxmu/nxmu_server.c
  *
- *   Copyright (C) 2008-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,27 +45,14 @@
 #include <semaphore.h>
 #include <mqueue.h>
 #include <fcntl.h>
+#include <assert.h>
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/mqueue.h>
 #include <nuttx/nx/nx.h>
+
 #include "nxfe.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
 
 /****************************************************************************
  * Private Functions
@@ -188,7 +175,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   if (ret < 0)
     {
       gerr("ERROR: nxbe_configure failed: %d\n", -ret);
-      errno = -ret;
+      set_errno(-ret);
       return ERROR;
     }
 
@@ -197,7 +184,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
   if (ret < 0)
     {
       gerr("ERROR: nxbe_colormap failed: %d\n", -ret);
-      errno = -ret;
+      set_errno(-ret);
       return ERROR;
     }
 #endif /* CONFIG_FB_CMAP */
@@ -283,7 +270,7 @@ static inline int nxmu_setup(FAR const char *mqname, FAR NX_DRIVERTYPE *dev,
  *   mqname - The name for the server incoming message queue
  *   dev    - Vtable "object" of the framebuffer/LCD "driver" to use
  *
- * Return:
+ * Returned Value:
  *   This function usually does not return.  If it does return, it will
  *   return ERROR and errno will be set appropriately.
  *
@@ -299,15 +286,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
   /* Initialization *********************************************************/
 
-  /* Sanity checking */
-
-#ifdef CONFIG_DEBUG_FEATURES
-  if (!mqname || !dev)
-    {
-      errno = EINVAL;
-      return ERROR;
-    }
-#endif
+  DEBUGASSERT(mqname != NULL || dev != NULL);
 
   /* Initialize and configure the server */
 
@@ -329,20 +308,22 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
     {
        /* Receive the next server message */
 
-       nbytes = mq_receive(fe.conn.crdmq, buffer, NX_MXSVRMSGLEN, 0);
+       nbytes = nxmq_receive(fe.conn.crdmq, buffer, NX_MXSVRMSGLEN, 0);
        if (nbytes < 0)
          {
-           if (errno != EINTR)
+           if (nbytes != -EINTR)
              {
-               gerr("ERROR: mq_receive failed: %d\n", errno);
-               goto errout; /* mq_receive sets errno */
+               gerr("ERROR: nxmq_receive() failed: %d\n", nbytes);
+               ret = nbytes;
+               goto errout;
              }
+
            continue;
          }
 
        /* Dispatch the message appropriately */
 
-       DEBUGASSERT(nbytes >= sizeof(struct nxsvrmsg_s));
+       DEBUGASSERT(nbytes >= sizeof(struct nxsvrmsg_releasebkgd_s));
        msg = (FAR struct nxsvrmsg_s *)buffer;
 
        ginfo("Received opcode=%d nbytes=%d\n", msg->msgid, nbytes);
@@ -454,7 +435,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
              if (getmsg->sem_done)
               {
-                sem_post(getmsg->sem_done);
+                nxsem_post(getmsg->sem_done);
               }
            }
            break;
@@ -479,7 +460,7 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
 
              if (bmpmsg->sem_done)
               {
-                sem_post(bmpmsg->sem_done);
+                nxsem_post(bmpmsg->sem_done);
               }
            }
            break;
@@ -550,7 +531,11 @@ int nx_runinstance(FAR const char *mqname, FAR NX_DRIVERTYPE *dev)
          }
     }
 
-errout:
   nxmu_shutdown(&fe);
   return OK;
+
+errout:
+  nxmu_shutdown(&fe);
+  set_errno(-ret);
+  return ERROR;
 }

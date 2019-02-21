@@ -70,7 +70,7 @@
  * Name: mod_dumploadinfo
  ****************************************************************************/
 
-#if defined(CONFIG_DEBUG_INFO) && defined(CONFIG_DEBUG_BINFMT)
+#ifdef CONFIG_DEBUG_BINFMT_INFO
 static void mod_dumploadinfo(FAR struct mod_loadinfo_s *loadinfo)
 {
   int i;
@@ -200,7 +200,7 @@ FAR void *insmod(FAR const char *filename, FAR const char *modname)
   mod_dumploadinfo(&loadinfo);
   if (ret != 0)
     {
-      serr("ERROR: Failed to initialize to load module: %d\n", ret);
+      berr("ERROR: Failed to initialize to load module: %d\n", ret);
       goto errout_with_lock;
     }
 

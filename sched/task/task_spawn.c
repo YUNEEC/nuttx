@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/task/task_spawn.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,9 @@
 #include <spawn.h>
 #include <debug.h>
 
+#include <nuttx/sched.h>
+#include <nuttx/kthread.h>
+
 #include "sched/sched.h"
 #include "group/group.h"
 #include "task/spawn.h"
@@ -66,9 +69,9 @@
  *   pidp - Upon successful completion, this will return the task ID of the
  *     child task in the variable pointed to by a non-NULL 'pid' argument.|
  *
- *   path - The 'path' argument identifies the file to execute.  If
- *     CONFIG_BINFMT_EXEPATH is defined, this may be either a relative or
- *     or an absolute path.  Otherwise, it must be an absolute path.
+ *   name - The name to assign to the child task.
+ *
+ *   entry - The child task's entry point (an address in memory)
  *
  *   attr - If the value of the 'attr' parameter is NULL, the all default
  *     values for the POSIX spawn attributes will be used.  Otherwise, the
@@ -80,7 +83,7 @@
  *     - POSIX_SPAWN_SETSCHEDULER: Set the new tasks scheduler priority to
  *       the sched_policy value.
  *
- *     NOTE: POSIX_SPAWN_SETSIGMASK is handled in ps_proxy().
+ *     NOTE: POSIX_SPAWN_SETSIGMASK is handled in task_spawn_proxy().
  *
  *   argv - argv[] is the argument list for the new task.  argv[] is an
  *     array of pointers to null-terminated strings. The list is terminated
@@ -123,9 +126,10 @@ static int task_spawn_exec(FAR pid_t *pidp, FAR const char *name,
 
       /* Set the default priority to the same priority as this task */
 
-      ret = sched_getparam(0, &param);
+      ret = nxsched_getparam(0, &param);
       if (ret < 0)
         {
+          ret = -ret;
           goto errout;
         }
 
@@ -135,11 +139,11 @@ static int task_spawn_exec(FAR pid_t *pidp, FAR const char *name,
 
   /* Start the task */
 
-  pid = task_create(name, priority, stacksize, entry, argv);
+  pid = nxtask_create(name, priority, stacksize, entry, argv);
   if (pid < 0)
     {
-      ret = get_errno();
-      serr("ERROR: task_create failed: %d\n", ret);
+      ret = -pid;
+      serr("ERROR: nxtask_create failed: %d\n", ret);
       goto errout;
     }
 
@@ -378,23 +382,23 @@ int task_spawn(FAR pid_t *pid, FAR const char *name, main_t entry,
 
   /* Get the priority of this (parent) task */
 
-  ret = sched_getparam(0, &param);
+  ret = nxsched_getparam(0, &param);
   if (ret < 0)
     {
-      int errcode = get_errno();
-
-      serr("ERROR: sched_getparam failed: %d\n", errcode);
+      serr("ERROR: nxsched_getparam failed: %d\n", ret);
       spawn_semgive(&g_spawn_parmsem);
-      return errcode;
+      return -ret;
     }
 
+#ifdef CONFIG_SCHED_WAITPID
   /* Disable pre-emption so that the proxy does not run until waitpid
    * is called.  This is probably unnecessary since the task_spawn_proxy has
    * the same priority as this thread; it should be schedule behind this
    * task in the ready-to-run list.
+   *
+   * REVISIT:  This will may not have the desired effect in SMP mode.
    */
 
-#ifdef CONFIG_SCHED_WAITPID
   sched_lock();
 #endif
 
@@ -402,15 +406,14 @@ int task_spawn(FAR pid_t *pid, FAR const char *name, main_t entry,
    * task.
    */
 
-  proxy = task_create("task_spawn_proxy", param.sched_priority,
-                      CONFIG_POSIX_SPAWN_PROXY_STACKSIZE,
-                      (main_t)task_spawn_proxy,
-                      (FAR char * const *)NULL);
+  proxy = nxtask_create("task_spawn_proxy", param.sched_priority,
+                        CONFIG_POSIX_SPAWN_PROXY_STACKSIZE,
+                        (main_t)task_spawn_proxy,
+                        (FAR char * const *)NULL);
   if (proxy < 0)
     {
-      ret = get_errno();
+      ret = -proxy;
       serr("ERROR: Failed to start task_spawn_proxy: %d\n", ret);
-
       goto errout_with_lock;
     }
 

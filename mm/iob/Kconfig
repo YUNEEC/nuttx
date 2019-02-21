@@ -16,9 +16,9 @@ if MM_IOB
 
 config IOB_NBUFFERS
 	int "Number of pre-allocated I/O buffers"
-	default 24 if (NET_TCP_WRITE_BUFFERS && !NET_TCP_READAHEAD) || (!NET_TCP_WRITE_BUFFERS && NET_TCP_READAHEAD)
-	default 36 if NET_TCP_WRITE_BUFFERS && NET_TCP_READAHEAD
-	default 8 if !NET_TCP_WRITE_BUFFERS && !NET_TCP_READAHEAD
+	default 24 if (NET_WRITE_BUFFERS && !NET_READAHEAD) || (!NET_WRITE_BUFFERS && NET_READAHEAD)
+	default 36 if NET_WRITE_BUFFERS && NET_READAHEAD
+	default 8 if !NET_WRITE_BUFFERS && !NET_READAHEAD
 	---help---
 		Each packet is represented by a series of small I/O buffers in a
 		chain.  This setting determines the number of preallocated I/O
@@ -34,8 +34,8 @@ config IOB_BUFSIZE
 
 config IOB_NCHAINS
 	int "Number of pre-allocated I/O buffer chain heads"
-	default 0 if !NET_TCP_READAHEAD && !NET_UDP_READAHEAD
-	default 8 if NET_TCP_READAHEAD || NET_UDP_READAHEAD
+	default 0 if !NET_READAHEAD && !NET_UDP_READAHEAD
+	default 8 if NET_READAHEAD || NET_UDP_READAHEAD
 	---help---
 		These tiny nodes are used as "containers" to support queueing of
 		I/O buffer chains.  This will limit the number of I/O transactions
@@ -49,8 +49,8 @@ config IOB_NCHAINS
 
 config IOB_THROTTLE
 	int "I/O buffer throttle value"
-	default 0 if !NET_TCP_WRITE_BUFFERS || !NET_TCP_READAHEAD
-	default 8 if NET_TCP_WRITE_BUFFERS && NET_TCP_READAHEAD
+	default 0 if !NET_WRITE_BUFFERS || !NET_READAHEAD
+	default 8 if NET_WRITE_BUFFERS && NET_READAHEAD
 	---help---
 		TCP write buffering and read-ahead buffer use the same pool of free
 		I/O buffers.  In order to prevent uncontrolled incoming TCP packets
@@ -58,6 +58,32 @@ config IOB_THROTTLE
 		throttling value is required.  This throttle value assures that
 		I/O buffers will be denied to the read-ahead logic before TCP writes
 		are halted.
+
+config IOB_NOTIFIER
+	bool "Support IOB notifications"
+	default n
+	depends on SCHED_HPWORK
+	select WQUEUE_NOTIFIER
+	---help---
+		Enable building of IOB notifier logic that will execute a worker
+		function on the high priority work queue when an IOB is available.
+		This is is a general purpose notifier, but was developed specifically to
+		support poll() logic where the poll must wait for an IOB to become
+		available.
+
+config IOB_NOTIFIER_DIV
+	int "Notification divider"
+	default 4
+	range 1 64
+	depends on IOB_NOTIFIER
+	---help---
+		IOBs may become available at very high rates and the resulting
+		notification processing can be substantial even if there is nothing
+		waiting for a free IOB.  This divider will reduce that rate of
+		notification.  This must be an even power of two.  Supported values
+		include:  1, 2, 4, 8, 16, 32, 64.  The default value of 4 means that
+		a notification will be sent only when there are a multiple of 4 IOBs
+		available.
 
 config IOB_DEBUG
 	bool "Force I/O buffer debug"

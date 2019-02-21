@@ -183,6 +183,9 @@ configs/avr32dev1
   Atmel website.  STATUS: This port is functional but very basic.  There
   are configurations for NSH and the OS test.
 
+configs/b-l072z-lrwan1
+  STMicro STM32L0 Discovery kit with LoRa/SigFox based on STM32L072CZ MCU.
+
 configs/bambino-200e
   Micromint Bambino board. This board is based on the LPC4330FBD144.
 
@@ -260,6 +263,23 @@ configs/fire-stm32v2
   STM32F103VET6 chip.  See http://firestm32.taobao.com .  Version 2 and 3 of
   the boards are supported but only version 2 has been tested.
 
+configs/flipnclick-pic32mz
+  Board support for the Mikroe Flip&Click PIC32MZ board.  This board is an
+  chipKit Arduino-compatible board (but can also be used with the Mikroe
+  bootloader).  It has with four Mikroe Click bus interfaces in addition to
+  standard Arduino connectors.  This board features the Microchip
+  PIC32MZ2048EFH100 MCU running at 200 MHz (252Mhz capable).
+
+configs/flipnclick-sam3x
+  Board support for the Mikroe Flip&Click STM32X board.  This board is an
+  Arduino-Due work-alike with four Mikroe Click bus interfaces.  Like the
+  Arduino DUE, this board features the Atmel ATSAM3X8E MCU running at 84
+  MHz.
+
+configs/freedom-k28f
+  This port uses the NXP/FreeScale FREEDOM-K28F development board. This
+  board uses the Kinetis K28F MK28FN2M0VMI15 Cortex-M4 MCU.
+
 configs/freedom-k64f
   This port uses the NXP/FreeScale FREEDOM-K64F development board. This board
   uses the Kinetis K64 MK64FN1M0VLL12 Cortex-M4 MCU.
@@ -314,6 +334,9 @@ configs/lpcxpresso-lpc1768
   is based on the NXP LPC1768.  The Code Red toolchain is used by default.
   STATUS:  Under development.
 
+configs/lpcxpresso-lpc54628
+  NXP LPCExpresso LPC54628.  This board is based on the NXP LPC54628.
+
 configs/lpc4330-xplorer
   NuttX port to the LPC4330-Xplorer board from NGX Technologies featuring
   the NXP LPC4330FET100 MCU
@@ -337,14 +360,30 @@ configs/maple
   are based on the STM32F103RBT6 chip for the standard version and on the
   STM32F103CBT6 for the mini version (See http://leaflabs.com/docs/hardware/maple.html)
 
+configs/max32660-evsys
+  The configurations in this directory support the Maxim Integrated
+  MAX32660-EVSYS board.
+
 configs/mbed
   The configurations in this directory support the mbed board (http://mbed.org)
   that features the NXP LPC1768 microcontroller. This OS is also built
   with the arm-nuttx-elf toolchain*.  STATUS:  Contributed.
 
+configs/mcb1700
+  Board support for the Keil MCB1700
+
+configs/metro-m4
+  Th configurations in this directory are part of the port of NuttX to the
+  Adafruit Metro M4.  The Metro M4 uses a Arduino form factor and and pinout.
+  It's powered with an ATSAMD51J19
+
 configs/mikroe-stm32f4
   This is the port of NuttX to the MikroElektronika Mikromedia for STM32F4
   development board.  Contributed by Ken Petit.
+
+configs/misoc
+  This directory holds the port to NuttX running on a Qemu LM32 system.
+  You can find the Qemu setup at https://bitbucket.org/key2/qemu
 
 configs/mcu123-lpc214x
   This port is for the NXP LPC2148 as provided on the mcu123.com
@@ -368,17 +407,16 @@ configs/moteino-mega
 configs/moxa
   Moxa NP51x0 series of 2-port advanced RS-232/422/485 serial device servers.
 
-configs/mx1ads
-  This is a port to the Motorola MX1ADS development board.  That board
-  is based on the NXP/FreeScale i.MX1 processor.  The i.MX1 is an ARM920T.
-  STATUS:  This port is nearly code complete but was never fully
-  integrated due to tool-related issues.
-
 configs/ne64badge
   Future Electronics Group NE64 /PoE Badge board based on the
   MC9S12NE64 hcs12 cpu.  This port uses the m9s12x GCC toolchain.
   STATUS:  Under development.  The port is code-complete but has
   not yet been fully tested.
+
+configs/nrf52-generic
+  NuttX port to the a generic NRF52.  Support is in place for the NRF
+  PCA10040 board from Nordic Semiconductor or for the Adafruit NRF52
+  feather, both featuring the NRF52832 MCU.
 
 configs/ntosd-dm320
   This port uses the Neuros OSD v1.0 Dev Board with a GNU arm-nuttx-elf
@@ -419,6 +457,9 @@ configs/nucleo-f410rb
 
 configs/nucleo-f303re
   STMicro ST Nucleo F303RE board.  Contributed by Paul Alexander Patience.
+
+configs/nucleo-l073rz
+  STMicro STM32L0 Discovery kit with LoRa/SigFox based on STM32L072CZ MCU.
 
 configs/nutiny-nuc120
   This is the port of NuttX to the NuvoTon NuTiny-SDK-NUC120 board.  This
@@ -471,7 +512,7 @@ configs/olimex-stm32-p407
 configs/olimexino-stm32
   This port uses the Olimexino STM32 board (STM32F103RBT6) and a GNU arm-nuttx-elf
   toolchain* under Linux or Cygwin. See the http://www.olimex.com for further\
-  information.  Contribued by David Sidrane.
+  information.  Contributed by David Sidrane.
 
 configs/olimex-strp711
   This port uses the Olimex STR-P711 board and a GNU arm-nuttx-elf toolchain* under
@@ -479,13 +520,8 @@ configs/olimex-strp711
   further information.  STATUS: Configurations for the basic OS test and NSH
   are complete and verified.
 
-configs/pcblogic-pic32mx
-  This is the port of NuttX to the PIC32MX board from PCB Logic Design Co.
-  This board features the MicroChip PIC32MX460F512L.
-  The board is a very simple -- little more than a carrier for the PIC32
-  MCU plus voltage regulation, debug interface, and an OTG connector.
-  STATUS:  Code complete but testing has been stalled due to tool related problems
-  (PICkit 2 does not work with the PIC32).
+configs/or1k
+  Generic OpenRISC board.
 
 configs/pcduino-a10
   This directory contains the port of NuttX to the pcDuino v1 board
@@ -633,10 +669,6 @@ configs/shenzhou
   This is the port of NuttX to the Shenzhou development board from
   www.armjishu.com. This board features the STMicro STM32F107VCT MCU.
 
-configs/spark
-  Board support for the Spark Core from Spark Devices http://www.sparkdevices.com).
-  This board features the STM32103CBT6 MCU from STMicro.
-
 configs/skp16c26
   Renesas M16C processor on the Renesas SKP16C26 StarterKit.  This port
   uses the GNU m32c toolchain.  STATUS:  The port is complete but untested
@@ -660,8 +692,12 @@ configs/stm32butterfly2
   Kamami stm32butterfly2 development board with optional ETH phy.  See
   https://kamami.pl/zestawy-uruchomieniowe-stm32/178507-stm32butterfly2.html
 
-configs/stm32f0discovery
-  STMicro STM32F-Discovery board based on the STMicro ARCH_CHIP_STM32F051R8
+configs/stm32f051-discovery
+  STMicro STM32F051-Discovery board based on the STMicro ARCH_CHIP_STM32F051R8
+  MCU.
+
+configs/stm32f072-discovery
+  STMicro STM32F072-Discovery board based on the STMicro ARCH_CHIP_STM32F072RB
   MCU.
 
 configs/stm32f103-minimum
@@ -750,6 +786,10 @@ configs/tm4c1294-launchpad
   platform for ARM® Cortex™-M4F-based microcontrollers from Texas
   Instruments.
 
+configs/tms570ls31x-usb-kit
+  TI Hercules TMS570LS31xx Evaluation Kit (TMDS570ls31xx USB Kit)
+  featuring the Hercules TMS570LS3137ZWT chip.
+
 configs/twr-k60n512
   Kinetis K60 Cortex-M4 MCU.  This port uses the FreeScale TWR-K60N512
   development board.
@@ -777,11 +817,6 @@ configs/viewtool-stm32f107
 
 config/xmc4500-relax
   Infineon XMC4000 Relax Lite v1
-
-configs/xtrs
-  TRS80 Model 3.  This port uses a vintage computer based on the Z80.
-  An emulator for this computer is available to run TRS80 programs on a
-  linux platform (http://www.tim-mann.org/xtrs.html).
 
 configs/z16f2800100zcog
   z16f Microcontroller.  This port use the Zilog z16f2800100zcog

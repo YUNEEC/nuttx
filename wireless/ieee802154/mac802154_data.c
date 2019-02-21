@@ -127,12 +127,12 @@ int mac802154_req_data(MACHANDLE mac,
   if (meta->destaddr.mode != IEEE802154_ADDRMODE_NONE)
     {
       IEEE802154_PANIDCOPY(&frame->io_data[mhr_len], meta->destaddr.panid);
-      mhr_len += 2;
+      mhr_len += IEEE802154_PANIDSIZE;
 
       if (meta->destaddr.mode == IEEE802154_ADDRMODE_SHORT)
         {
           IEEE802154_SADDRCOPY(&frame->io_data[mhr_len], meta->destaddr.saddr);
-          mhr_len += 2;
+          mhr_len += IEEE802154_SADDRSIZE;
         }
       else if (meta->destaddr.mode == IEEE802154_ADDRMODE_EXTENDED)
         {
@@ -185,13 +185,13 @@ int mac802154_req_data(MACHANDLE mac,
           (!(*frame_ctrl & IEEE802154_FRAMECTRL_PANIDCOMP)))
         {
           IEEE802154_PANIDCOPY(&frame->io_data[mhr_len], priv->addr.panid);
-          mhr_len += 2;
+          mhr_len += IEEE802154_PANIDSIZE;
         }
 
       if (meta->srcmode == IEEE802154_ADDRMODE_SHORT)
         {
           IEEE802154_SADDRCOPY(&frame->io_data[mhr_len], priv->addr.saddr);
-          mhr_len += 2;
+          mhr_len += IEEE802154_SADDRSIZE;
         }
       else if (meta->srcmode == IEEE802154_ADDRMODE_EXTENDED)
         {
@@ -258,6 +258,7 @@ int mac802154_req_data(MACHANDLE mac,
   txdesc->conf->handle = meta->handle;
   txdesc->frame = frame;
   txdesc->frametype = IEEE802154_FRAME_DATA;
+  txdesc->ackreq = meta->flags.ackreq;
 
   /* If the TxOptions parameter specifies that a GTS transmission is required,
    * the MAC sublayer will determine whether it has a valid GTS as described

@@ -57,10 +57,10 @@
  * Description:
  *   Return a pointer to the thread specific environ variable.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A pointer to the per-thread environ variable.
  *
  * Assumptions:

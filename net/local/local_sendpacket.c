@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/local/local_sendpacket.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,6 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && defined(CONFIG_NET_LOCAL)
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -47,7 +46,11 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/fs/fs.h>
+
 #include "local/local.h"
+
+#if defined(CONFIG_NET) && defined(CONFIG_NET_LOCAL)
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -75,33 +78,31 @@ static const uint8_t g_preamble[LOCAL_PREAMBLE_SIZE] =
  * Description:
  *   Write a data on the write-only FIFO.
  *
- * Parameters:
- *   fd       File descriptor of write-only FIFO.
+ * Input Parameters:
+ *   filep    File structure of write-only FIFO.
  *   buf      Data to send
  *   len      Length of data to send
  *
- * Return:
+ * Returned Value:
  *   Zero is returned on success; a negated errno value is returned on any
  *   failure.
  *
  ****************************************************************************/
 
-static int local_fifo_write(int fd, FAR const uint8_t *buf, size_t len)
+static int local_fifo_write(FAR struct file *filep, FAR const uint8_t *buf,
+                            size_t len)
 {
   ssize_t nwritten;
 
   while (len > 0)
     {
-      nwritten = write(fd, buf, len);
+      nwritten = file_write(filep, buf, len);
       if (nwritten < 0)
         {
-          int errcode = get_errno();
-          DEBUGASSERT(errcode > 0);
-
-          if (errcode != EINTR)
+          if (nwritten != -EINTR)
             {
-              nerr("ERROR: Write failed: %d\n", errcode);
-              return -errcode;
+              nerr("ERROR: nx_write failed: %d\n", nwritten);
+              return (int)nwritten;
             }
 
           ninfo("Ignoring signal\n");
@@ -127,36 +128,38 @@ static int local_fifo_write(int fd, FAR const uint8_t *buf, size_t len)
  * Description:
  *   Send a packet on the write-only FIFO.
  *
- * Parameters:
- *   fd       File descriptor of write-only FIFO.
+ * Input Parameters:
+ *   filep    File structure of write-only FIFO.
  *   buf      Data to send
  *   len      Length of data to send
  *
- * Return:
+ * Returned Value:
  *   Zero is returned on success; a negated errno value is returned on any
  *   failure.
  *
  ****************************************************************************/
 
-int local_send_packet(int fd, FAR const uint8_t *buf, size_t len)
+int local_send_packet(FAR struct file *filep, FAR const uint8_t *buf,
+                      size_t len)
 {
   uint16_t len16;
   int ret;
 
   /* Send the packet preamble */
 
-  ret = local_fifo_write(fd, g_preamble, LOCAL_PREAMBLE_SIZE);
+  ret = local_fifo_write(filep, g_preamble, LOCAL_PREAMBLE_SIZE);
   if (ret == OK)
     {
       /* Send the packet length */
 
       len16 = len;
-      ret = local_fifo_write(fd, (FAR const uint8_t *)&len16, sizeof(uint16_t));
+      ret = local_fifo_write(filep, (FAR const uint8_t *)&len16,
+                             sizeof(uint16_t));
       if (ret == OK)
         {
           /* Send the packet data */
 
-          ret = local_fifo_write(fd, buf, len);
+          ret = local_fifo_write(filep, buf, len);
         }
     }
 

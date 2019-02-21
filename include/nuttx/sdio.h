@@ -84,7 +84,7 @@
 
 /* Media events are used for enable/disable registered event callbacks */
 
-#define SDIOMEDIA_EJECTED       (1 << 0) /* Bit 0: Mmedia removed */
+#define SDIOMEDIA_EJECTED       (1 << 0) /* Bit 0: Media removed */
 #define SDIOMEDIA_INSERTED      (1 << 1) /* Bit 1: Media inserted */
 
 /* Commands are bit-encoded to provide as much information to the SDIO driver as
@@ -782,7 +782,7 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
 #  define SDIO_DMAPREFLIGHT(dev,buffer,len) \
     ((dev)->dmapreflight?(dev)->dmapreflight(dev,buffer,len):OK)
 #else
@@ -812,6 +812,31 @@
 #  define SDIO_DMARECVSETUP(dev,buffer,len) ((dev)->dmarecvsetup(dev,buffer,len))
 #else
 #  define SDIO_DMARECVSETUP(dev,buffer,len) (-ENOSYS)
+#endif
+
+/****************************************************************************
+ * Name: SDIO_DMADELYDINVLDT
+ *
+ * Description:
+ *   Delayed D-cache invalidation.
+ *   This function should be called after receive DMA completion to perform
+ *   D-cache invalidation. This eliminates the need for cache aligned DMA
+ *   buffers when the D-cache is in store-through mode.
+ *
+ * Input Parameters:
+ *   dev    - An instance of the SDIO device interface
+ *   buffer - The memory to DMA from
+ *   buflen - The size of the DMA transfer in bytes
+ *
+ * Returned Value:
+ *   OK on success; a negated errno on failure
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT)
+#  define SDIO_DMADELYDINVLDT(dev,buffer,len) ((dev)->dmadelydinvldt(dev,buffer,len))
+#else
+#  define SDIO_DMADELYDINVLDT(dev,buffer,len) (OK)
 #endif
 
 /****************************************************************************
@@ -941,7 +966,7 @@ struct sdio_dev_s
    */
 
 #ifdef CONFIG_SDIO_DMA
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
   int   (*dmapreflight)(FAR struct sdio_dev_s *dev,
           FAR const uint8_t *buffer, size_t buflen);
 #endif
@@ -949,7 +974,11 @@ struct sdio_dev_s
           size_t buflen);
   int   (*dmasendsetup)(FAR struct sdio_dev_s *dev,
           FAR const uint8_t *buffer, size_t buflen);
+#ifdef CONFIG_ARCH_HAVE_SDIO_DELAYED_INVLDT
+  int   (*dmadelydinvldt)(FAR struct sdio_dev_s *dev,
+          FAR const uint8_t *buffer, size_t buflen);
 #endif
+#endif /* CONFIG_SDIO_DMA */
 };
 
 /****************************************************************************

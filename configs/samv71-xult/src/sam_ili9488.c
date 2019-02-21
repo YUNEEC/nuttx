@@ -620,7 +620,7 @@ static int sam_lcd_getreg(FAR struct sam_dev_s *priv, uint8_t cmd,
 
   DEBUGASSERT(nbytes <= 4);
 
-  /* Read the request number of byes (as 16-bit values) plus a leading
+  /* Read the request number of bytes (as 16-bit values) plus a leading
    * dummy read.
    */
 
@@ -903,7 +903,7 @@ static void sam_lcd_endwait(struct sam_dev_s *priv, int result)
 
   /* Wake up the waiting thread */
 
-  sem_post(&priv->waitsem);
+  nxsem_post(&priv->waitsem);
 }
 
 /****************************************************************************
@@ -983,11 +983,11 @@ static int sam_lcd_dmawait(FAR struct sam_dev_s *priv, uint32_t timeout)
        * incremented and there will be no wait.
        */
 
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
 
       /* The only expected failure is EINTR */
 
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
 
   /* Dump the collect DMA sample data */
@@ -1545,7 +1545,7 @@ int board_lcd_initialize(void)
 
   /* Initialize the LCD state structure */
 
-  sem_init(&priv->waitsem, 0, 0);
+  nxsem_init(&priv->waitsem, 0, 0);
 
   /* Allocate a DMA channel */
 
@@ -1601,7 +1601,7 @@ errout_with_dmach:
   priv->dmach = NULL;
 
 errout_with_waitsem:
-  sem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->waitsem);
   return ret;
 }
 
@@ -1645,7 +1645,7 @@ void board_lcd_uninitialize(void)
   wd_delete(priv->dmadog);
   priv->dmadog = NULL;
 
-  sem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->waitsem);
 
   /* Put the LCD in the lowest possible power state */
 

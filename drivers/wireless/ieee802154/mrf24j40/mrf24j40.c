@@ -149,7 +149,7 @@ static int mrf24j40_energydetect(FAR struct mrf24j40_radio_s *dev,
  *   3. After a TX timeout to restart the sending process
  *      (mrf24j40_txtimeout_csma).
  *
- * Parameters:
+ * Input Parameters:
  *   radio  - Reference to the radio driver state structure
  *
  * Returned Value:
@@ -166,7 +166,9 @@ void mrf24j40_dopoll_csma(FAR void *arg)
 
   /* Get exclusive access to the driver */
 
-  while (sem_wait(&dev->exclsem) != 0) { }
+  while (nxsem_wait(&dev->exclsem) < 0)
+    {
+    }
 
   /* If this a CSMA transaction and we have room in the CSMA fifo */
 
@@ -190,7 +192,7 @@ void mrf24j40_dopoll_csma(FAR void *arg)
         }
     }
 
-  sem_post(&dev->exclsem);
+  nxsem_post(&dev->exclsem);
 }
 
 /****************************************************************************
@@ -205,7 +207,7 @@ void mrf24j40_dopoll_csma(FAR void *arg)
  *   3. After a TX timeout to restart the sending process
  *      (mrf24j40_txtimeout_gts).
  *
- * Parameters:
+ * Input Parameters:
  *   arg  - Reference to the radio driver state structure
  *
  * Returned Value:
@@ -223,7 +225,9 @@ void mrf24j40_dopoll_gts(FAR void *arg)
 
   /* Get exclusive access to the driver */
 
-  while (sem_wait(&dev->exclsem) != 0) { }
+  while (nxsem_wait(&dev->exclsem) < 0)
+    {
+    }
 
   for (gts = 0; gts < MRF24J40_GTS_SLOTS; gts++)
     {
@@ -244,7 +248,7 @@ void mrf24j40_dopoll_gts(FAR void *arg)
         }
     }
 
-  sem_post(&dev->exclsem);
+  nxsem_post(&dev->exclsem);
 }
 
 /****************************************************************************
@@ -425,8 +429,9 @@ void mrf24j40_setup_fifo(FAR struct mrf24j40_radio_s *dev, FAR const uint8_t *bu
  *
  ****************************************************************************/
 
-FAR struct ieee802154_radio_s *mrf24j40_init(FAR struct spi_dev_s *spi,
-                                      FAR const struct mrf24j40_lower_s *lower)
+FAR struct ieee802154_radio_s *
+  mrf24j40_init(FAR struct spi_dev_s *spi,
+                FAR const struct mrf24j40_lower_s *lower)
 {
   FAR struct mrf24j40_radio_s *dev;
 
@@ -448,7 +453,7 @@ FAR struct ieee802154_radio_s *mrf24j40_init(FAR struct spi_dev_s *spi,
 
   /* Allow exclusive access to the privmac struct */
 
-  sem_init(&dev->exclsem, 0, 1);
+  nxsem_init(&dev->exclsem, 0, 1);
 
   dev->radio.bind         = mrf24j40_bind;
   dev->radio.reset        = mrf24j40_reset;

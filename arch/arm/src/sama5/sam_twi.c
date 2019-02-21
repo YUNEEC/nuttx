@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_twi.c
  *
- *   Copyright (C) 2013-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -178,7 +178,7 @@ struct twi_dev_s
 /* Low-level helper functions */
 
 static void twi_takesem(sem_t *sem);
-#define     twi_givesem(sem) (sem_post(sem))
+#define     twi_givesem(sem) (nxsem_post(sem))
 
 #ifdef CONFIG_SAMA5_TWI_REGDEBUG
 static bool twi_checkreg(struct twi_dev_s *priv, bool wr,
@@ -309,16 +309,21 @@ static const struct i2c_ops_s g_twiops =
 
 static void twi_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -482,7 +487,7 @@ static int twi_wait(struct twi_dev_s *priv, unsigned int size)
    * TWI transfer stalls.
    */
 
-  wd_start(priv->timeout, timeout, twi_timeout, 1, (uint32_t)priv);
+  (void)wd_start(priv->timeout, timeout, twi_timeout, 1, (uint32_t)priv);
 
   /* Wait for either the TWI transfer or the timeout to complete */
 
@@ -868,7 +873,7 @@ static int twi_reset(FAR struct i2c_master_s *dev)
   uint32_t sdapin;
   int ret;
 
-  ASSERT(priv);
+  DEBUGASSERT(priv);
 
   /* Get exclusive access to the TWI device */
 
@@ -1268,14 +1273,14 @@ struct i2c_master_s *sam_i2cbus_initialize(int bus)
 
   /* Initialize semaphores */
 
-  (void)sem_init(&priv->exclsem, 0, 1);
-  (void)sem_init(&priv->waitsem, 0, 0);
+  (void)nxsem_init(&priv->exclsem, 0, 1);
+  (void)nxsem_init(&priv->waitsem, 0, 0);
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Perform repeatable TWI hardware initialization */
 
@@ -1312,8 +1317,8 @@ int sam_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
 
   /* Reset data structures */
 
-  sem_destroy(&priv->exclsem);
-  sem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->waitsem);
 
   /* Free the watchdog timer */
 

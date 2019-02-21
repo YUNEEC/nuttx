@@ -1,7 +1,7 @@
 /****************************************************************************
- * sched/semaphore/sem_tickdwait.c
+ * sched/semaphore/sem_tickwait.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,6 +50,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
 #include <nuttx/wdog.h>
+#include <nuttx/semaphore.h>
 
 #include "sched/sched.h"
 #include "semaphore/semaphore.h"
@@ -59,13 +60,13 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sem_tickwait
+ * Name: nxsem_tickwait
  *
  * Description:
  *   This function is a lighter weight version of sem_timedwait().  It is
  *   non-standard and intended only for use within the RTOS.
  *
- * Parameters:
+ * Input Parameters:
  *   sem     - Semaphore object
  *   start   - The system time that the delay is relative to.  If the
  *             current time is not the same as the start time, then the
@@ -73,19 +74,21 @@
  *             in any event.
  *   delay   - Ticks to wait from the start time until the semaphore is
  *             posted.  If ticks is zero, then this function is equivalent
- *             to sem_trywait().
+ *             to nxsem_trywait().
  *
- * Return Value:
- *   Zero (OK) is returned on success.  A negated errno value is returned on
- *   failure.  -ETIMEDOUT is returned on the timeout condition.
+ * Returned Value:
+ *   This is an internal OS interface, not available to applications, and
+ *   hence follows the NuttX internal error return policy:  Zero (OK) is
+ *   returned on success.  A negated errno value is returned on failure.
+ *   -ETIMEDOUT is returned on the timeout condition.
  *
  ****************************************************************************/
 
-int sem_tickwait(FAR sem_t *sem, systime_t start, uint32_t delay)
+int nxsem_tickwait(FAR sem_t *sem, clock_t start, uint32_t delay)
 {
   FAR struct tcb_s *rtcb = this_task();
   irqstate_t flags;
-  systime_t elapsed;
+  clock_t elapsed;
   int ret;
 
   DEBUGASSERT(sem != NULL && up_interrupt_context() == false &&
@@ -114,7 +117,7 @@ int sem_tickwait(FAR sem_t *sem, systime_t start, uint32_t delay)
 
   /* Try to take the semaphore without waiting. */
 
-  ret = sem_trywait(sem);
+  ret = nxsem_trywait(sem);
   if (ret == OK)
     {
       /* We got it! */
@@ -128,9 +131,8 @@ int sem_tickwait(FAR sem_t *sem, systime_t start, uint32_t delay)
 
   if (delay == 0)
     {
-      /* Return the errno from sem_trywait() */
+      /* Return the errno from nxsem_trywait() */
 
-      ret = -get_errno();
       goto errout_with_irqdisabled;
     }
 
@@ -147,16 +149,14 @@ int sem_tickwait(FAR sem_t *sem, systime_t start, uint32_t delay)
 
   /* Start the watchdog with interrupts still disabled */
 
-  (void)wd_start(rtcb->waitdog, delay, (wdentry_t)sem_timeout, 1, getpid());
+  (void)wd_start(rtcb->waitdog, delay, (wdentry_t)nxsem_timeout,
+                 1, getpid());
 
   /* Now perform the blocking wait */
 
-  ret = sem_wait(sem);
+  ret = nxsem_wait(sem);
   if (ret < 0)
     {
-      /* Return the errno from sem_wait() */
-
-      ret = -get_errno();
       goto errout_with_irqdisabled;
     }
 

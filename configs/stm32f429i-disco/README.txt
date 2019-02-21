@@ -25,7 +25,7 @@ NOTE:  Includes basic NSH command support with full 8MByte SDRAM + the
 
        The NSH configuration / testing that has been done so far was
        performed by connecting an external RS-232 line driver to pins
-       PA9 (TX) and PA10 (RX) and configuring UART1 as the NSH console.
+       PA9 (TX) and PA10 (RX) and configuring USART1 as the NSH console.
 
 Refer to the http://www.st.com website for further information about this
 board (search keyword: 429i-disco)
@@ -256,35 +256,29 @@ FPU Configuration Options
 
 There are two version of the FPU support built into the STM32 port.
 
-1. Lazy Floating Point Register Save.
+1. Non-Lazy Floating Point Register Save
 
-   This is an untested implementation that saves and restores FPU registers
-   only on context switches.  This means: (1) floating point registers are
-   not stored on each context switch and, hence, possibly better interrupt
+   In this configuration floating point register save and restore is
+   implemented on interrupt entry and return, respectively.  In this
+   case, you may use floating point operations for interrupt handling
+   logic if necessary.  This FPU behavior logic is enabled by default
+   with:
+
+     CONFIG_ARCH_FPU=y
+
+2. Lazy Floating Point Register Save.
+
+   An alternative mplementation only saves and restores FPU registers only
+   on context switches.  This means: (1) floating point registers are not
+   stored on each context switch and, hence, possibly better interrupt
    performance.  But, (2) since floating point registers are not saved,
    you cannot use floating point operations within interrupt handlers.
 
    This logic can be enabled by simply adding the following to your .config
    file:
 
-   CONFIG_ARCH_FPU=y
-
-2. Non-Lazy Floating Point Register Save
-
-   Mike Smith has contributed an extensive re-write of the ARMv7-M exception
-   handling logic. This includes verified support for the FPU.  These changes
-   have not yet been incorporated into the mainline and are still considered
-   experimental.  These FPU logic can be enabled with:
-
-   CONFIG_ARCH_FPU=y
-   CONFIG_ARMV7M_CMNVECTOR=y
-
-   You will probably also changes to the ld.script in if this option is selected.
-   This should work:
-
-   -ENTRY(_stext)
-   +ENTRY(__start)         /* Treat __start as the anchor for dead code stripping */
-   +EXTERN(_vectors)       /* Force the vectors to be included in the output */
+     CONFIG_ARCH_FPU=y
+     CONFIG_ARMV7M_LAZYFPU=y
 
 CFLAGS
 ------
@@ -460,13 +454,6 @@ STM32F429I-DISCO-specific Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     AHB1
@@ -590,10 +577,14 @@ STM32F429I-DISCO-specific Configuration Options
       Default: 4
     CONFIG_CAN_LOOPBACK - A CAN driver may or may not support a loopback
       mode for testing. The STM32 CAN driver does support loopback mode.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2 is defined.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_STM32_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN1
+      is defined.
+    CONFIG_STM32_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_STM32_CAN2
+      is defined.
+    CONFIG_STM32_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 6
+    CONFIG_STM32_CAN_TSEG2 - the number of CAN time quanta in segment 2.
+      Default: 7
     CONFIG_STM32_CAN_REGDEBUG - If CONFIG_DEBUG_FEATURES is set, this will generate an
       dump of all CAN registers.
 
@@ -647,9 +638,7 @@ Configurations
 Each STM32F429I-DISCO configuration is maintained in a sub-directory and
 can be selected as follow:
 
-    cd tools
-    ./configure.sh STM32F429I-DISCO/<subdir>
-    cd -
+    tools/configure.sh stm32f429i-disco/<subdir>
 
 Where <subdir> is one of the following:
 
@@ -667,20 +656,61 @@ Where <subdir> is one of the following:
     1. This configuration assumes an SST25VF064C 8Mbyte SPI FLASH is
        connected to SPI4 on the following Discovery board Pins:
 
-       SCK:   Port PE2   Board Connector P1, Pin 15
-       MOSI:  Port PE6   Board Connector P1, Pin 11
-       MISO:  Port PE5   Board Connector P1, Pin 14
-       CS:    Port PE4   Board Connector P1, Pin 13
+         SCK:   Port PE2   Board Connector P1, Pin 15
+         MOSI:  Port PE6   Board Connector P1, Pin 11
+         MISO:  Port PE5   Board Connector P1, Pin 14
+         CS:    Port PE4   Board Connector P1, Pin 13
 
     2. This configuration does have UART1 output enabled and set up as
        the system logging device.  To use this UART, you must add an
        external RS-232 line driver to the UART1 pins of the DISCO board
        on PA9 and PA10 of connector P1.
 
-  ltdc:
+  fb
+  --
+
+    STM32F429I-DISCO LTDC Framebuffer demo example.  This is a simple
+    configuration used for some basic (non-graphic) debug of the framebuffer
+    character drivers using apps/examples/fb.  It simply opens the framebuffer
+    device and draws concentric rectangles of different colors in the
+    framebuffer:
+
+      nsh> fb
+
+    Also included is the touchscreen test of apps/examples/touchscreen.  This
+    example will simply open the touchscreen driver then collect and display
+    touch inputs:
+
+      nsh> tc 1
+      tc_main: nsamples: 1
+      tc_main: Initializing external touchscreen device
+      tc_main: Opening /dev/input0
+      Sample     :
+         npoints : 1
+      Point 1    :
+              id : 0
+           flags : 3c
+               x : 2296
+               y : 2311
+               h : 0
+               w : 0
+        pressure : 1
+      Terminating!
+      nsh>
+
+  lgvl:
   ----
-    STM32F429I-DISCO LTDC Framebuffer demo example.  See
-    configs/stm32f429i-disco/ltdc/README.txt for additional information.
+
+    STM32F429I-DISCO LittlevGL demo example.
+
+    The ltdc is initialized during boot up.  Interaction with NSH is via
+    the serial console at 115200 8N1 baud.  From the nsh comand line
+    execute the lvgldemo example:
+
+      nsh> lvgldemo
+
+    The test will execute the calibration process and then run the
+    LittlevGL demo project.
 
   nsh:
   ---
@@ -922,76 +952,47 @@ Where <subdir> is one of the following:
        2015-04-30
           Appears to be fully functional.
 
+  nx
+  --
+
+    This a simple test using the graphic example at apps/example/nx.  This
+    configuration illustrates the use of the LCD with the lower performance
+    SPI interface.
+
   nxwm
   ----
     This is a special configuration setup for the NxWM window manager
     UnitTest.
 
     NOTES:
+
     1. The NxWM window manager can be found here:
 
-         nuttx-code/NxWidgets/nxwm
+         apps/graphics/NxWidgets/nxwm
 
        The NxWM unit test can be found at:
 
-         nuttx-code/NxWidgets/UnitTests/nxwm
-
-       Documentation for installing the NxWM unit test can be found here:
-
-         nuttx-code/NxWidgets/UnitTests/README.txt
-
-    2. Here is the quick summary of the build steps (Assuming that all of
-       the required packages are available in a directory ~/nuttx-code):
-
-       1. Install the nxwm configuration
-
-          $ cd ~/nuttx-code/nuttx/tools
-          $ ./configure.sh stm32f429i-disco/nxwm
-
-       2. Make the build context (only)
-
-          $ cd ..
-          $ make context
-          ...
-
-       3. Install the nxwm unit test
-
-          $ cd ~/nuttx-code/NxWidgets
-          $ tools/install.sh ~/nuttx-code/apps nxwm
-          Creating symbolic link
-        - To ~/nuttx-code/NxWidgets/UnitTests/nxwm
-        - At ~/nuttx-code/apps/external
-
-       4. Build the NxWidgets library
-
-          $ cd ~/nuttx-code/NxWidgets/libnxwidgets
-          $ make TOPDIR=~/nuttx-code/nuttx
-         ...
-
-       5. Build the NxWM library
-
-          $ cd ~/nuttx-code/NxWidgets/nxwm
-          $ make TOPDIR=~/nuttx-code/nuttx
-          ...
-
-       6. Built NuttX with the installed unit test as the application
-
-          $ cd ~/nuttx-code/nuttx
-          $ make
-
-    3. Performance is not so good in this example configuration because it
-       uses the slower SPI interfaces.
+         apps/graphics/NxWidgets/UnitTests/nxwm
 
     STATUS:
       17-01-08:  There are instabilities in this configuration that make it
-      not usable on this platform.  While the equivalent configuration works
-      on other platforms, this one does not:  The calculator display does
-      not form properly.  There are fails in the NxTerm display, usually around
-      the point where the display should scroll up.
+        not usable on this platform.  While the equivalent configuration works
+        on other platforms, this one does not:  The calculator display does
+        not form properly.  There are fails in the NxTerm display, usually
+        around the point where the display should scroll up.
 
-      Update:  With all optimizations disabled, the issue seems to go away.
-      So this is most likely due to using high levels of optimization with a
-      bleeding edge GCC toolchain.
+        Update:  With all optimizations disabled, the issue seems to go away.
+        So this is most likely due to using high levels of optimization with a
+        bleeding edge GCC toolchain.
+      17-11-15: The original configuration used the slower SPI LCD interface.
+        The configuration was converted to use the high performance LTDC frame
+        buffer interface.  Performance is now excellent and I see none of the
+        instabilities mentioned above even at high levels of optimization.
+
+        The difficulty that I experienced was touching the tiny icons on the
+        menus.  The touscreen controller (along with my fat fingers) does not
+        appear to have sufficient precision to work in this way.  Larger icons
+        would likely make the interface easier to use.
 
   usbnsh:
   ------

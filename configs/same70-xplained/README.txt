@@ -105,7 +105,7 @@ use either the VCOM or an external RS-232 driver.  Here are some options.
 
     EDBG VCOM Interface
     ---------------- --------- --------------------------
-    EDBG Singal      SAME70
+    EDBG Signal      SAME70
     ---------------- --------- --------------------------
     EDBG_CDC_UART_RX TXD1 PB4
     EDBG_CDC_UART_TX RXD1 PA21
@@ -163,7 +163,7 @@ the SD slots can be enabled with the following settings:
     CONFIG_MMCSD=y                        : Enable MMC/SD support
     CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
     CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
-    CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
+    CONFIG_MMCSD_HAVE_CARDDETECT=y         : Supports card-detect PIOs
     CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
     CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
     CONFIG_MMCSD_SDIO=y                   : SDIO-based MMC/SD support
@@ -390,8 +390,7 @@ Selecting the GMAC peripheral
   Networking Support
     CONFIG_NET=y                         : Enable Neworking
     CONFIG_NET_SOCKOPTS=y                : Enable socket operations
-    CONFIG_NET_ETH_MTU=562               : Maximum packet size (MTU) 1518 is more standard
-    CONFIG_NET_ETH_TCP_RECVWNDO=562      : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_ETH_PKTSIZE=562           : Maximum packet size 1518 is more standard
     CONFIG_NET_ARP=y                     : ARP support should be enabled
     CONFIG_NET_ARP_SEND=y                : Use ARP to get peer address before sending
     CONFIG_NET_TCP=y                     : Enable TCP/IP networking
@@ -401,7 +400,7 @@ Selecting the GMAC peripheral
     CONFIG_NET_UDP=y                     : Enable UDP networking
     CONFIG_NET_BROADCAST=y               : Support UDP broadcase packets
     CONFIG_NET_ICMP=y                    : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y               : Needed for NSH ping command
+    CONFIG_NET_ICMP_SOCKET=y             : Needed for NSH ping command
                                          : Defaults should be okay for other options
   Device drivers -> Network Device/PHY Support
     CONFIG_NETDEVICES=y                  : Enabled PHY selection
@@ -1233,9 +1232,7 @@ Information Common to All Configurations
 Each SAME70-XPLD configuration is maintained in a sub-directory and
 can be selected as follow:
 
-  cd tools
-  ./configure.sh same70-xplained/<subdir>
-  cd -
+  tools/configure.sh same70-xplained/<subdir>
 
 Before building, make sure that the PATH environment variable include the
 correct path to the directory than holds your toolchain binaries.
@@ -1419,7 +1416,7 @@ Configuration sub-directories
          CONFIG_NSH_TELNETD_DAEMONSTACKSIZE=2048
          CONFIG_NSH_TELNETD_CLIENTSTACKSIZE=2048
 
-    3. NSH built-in applications are supported.  There are, however, not
+    3. NSH built-in applications are supported.  There are, however, no
        enabled built-in applications.
 
        Binary Formats:

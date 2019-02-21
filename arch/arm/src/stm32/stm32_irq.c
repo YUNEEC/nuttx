@@ -45,9 +45,12 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
+#include <arch/armv7-m/nvicpri.h>
 
 #include "nvic.h"
-#include "ram_vectors.h"
+#ifdef CONFIG_ARCH_RAMVECTORS
+#  include "ram_vectors.h"
+#endif
 #include "up_arch.h"
 #include "up_internal.h"
 #include "stm32.h"
@@ -387,7 +390,7 @@ void up_irqinitialize(void)
   up_enable_irq(STM32_IRQ_MEMFAULT);
 #endif
 
-#ifdef CONFIG_RTC
+#if defined(CONFIG_RTC) && !defined(CONFIG_RTC_EXTERNAL)
   /* RTC was initialized earlier but IRQs weren't ready at that time */
 
   stm32_rtc_irqinitialize();

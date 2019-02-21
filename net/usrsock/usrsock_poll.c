@@ -43,7 +43,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <poll.h>
@@ -52,11 +51,11 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
 #include <nuttx/kmalloc.h>
 
-#include "socket/socket.h"
 #include "usrsock/usrsock.h"
 
 /****************************************************************************
@@ -145,7 +144,7 @@ static uint16_t poll_event(FAR struct net_driver_s *dev, FAR void *pvconn,
   if (eventset)
     {
       info->fds->revents |= eventset;
-      sem_post(info->fds->sem);
+      nxsem_post(info->fds->sem);
     }
 
   return flags;
@@ -195,7 +194,7 @@ static int usrsock_pollsetup(FAR struct socket *psock, FAR struct pollfd *fds)
   /* Allocate a usrsock callback structure */
 
   cb = devif_callback_alloc(NULL, &conn->list);
-  if (!cb)
+  if (cb == NULL)
     {
       ret = -EBUSY;
       kmm_free(info); /* fds->priv not set, so we need to free info here. */
@@ -290,7 +289,7 @@ static int usrsock_pollsetup(FAR struct socket *psock, FAR struct pollfd *fds)
     {
       /* Yes.. then signal the poll logic */
 
-      sem_post(fds->sem);
+      nxsem_post(fds->sem);
     }
 
 errout_unlock:

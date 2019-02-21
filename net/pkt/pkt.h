@@ -190,10 +190,10 @@ uint16_t pkt_callback(FAR struct net_driver_s *dev,
  *   packet socket logic.  All frames that are received should be provided to
  *   pkt_input() prior to other routing.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - The device driver structure containing the received packet
  *
- * Return:
+ * Returned Value:
  *   OK    The packet has been processed  and can be deleted
  *   ERROR There is a matching connection, but could not dispatch the packet
  *         yet.  Useful when a packet arrives before a recv call is in
@@ -221,7 +221,7 @@ uint16_t pkt_callback(FAR struct net_driver_s *dev,
  *   modified on return to indicate the actual size of the address stored
  *   there.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Buffer to receive data
  *   len      Length of buffer
@@ -263,11 +263,11 @@ FAR struct net_driver_s *pkt_find_device(FAR struct pkt_conn_s *conn);
  * Description:
  *   Poll a packet "connection" structure for availability of TX data
  *
- * Parameters:
+ * Input Parameters:
  *   dev - The device driver structure to use in the send operation
  *   conn - The packet "connection" to poll for TX data
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -285,53 +285,15 @@ void pkt_poll(FAR struct net_driver_s *dev, FAR struct pkt_conn_s *conn);
  *   The psock_pkt_send() call may be used only when the packet socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
  *
  * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
- *   -1 is returned, and errno is set appropriately:
- *
- *   EAGAIN or EWOULDBLOCK
- *     The socket is marked non-blocking and the requested operation
- *     would block.
- *   EBADF
- *     An invalid descriptor was specified.
- *   ECONNRESET
- *     Connection reset by peer.
- *   EDESTADDRREQ
- *     The socket is not connection-mode, and no peer address is set.
- *   EFAULT
- *      An invalid user space address was specified for a parameter.
- *   EINTR
- *      A signal occurred before any data was transmitted.
- *   EINVAL
- *      Invalid argument passed.
- *   EISCONN
- *     The connection-mode socket was connected already but a recipient
- *     was specified. (Now either this error is returned, or the recipient
- *     specification is ignored.)
- *   EMSGSIZE
- *     The socket type requires that message be sent atomically, and the
- *     size of the message to be sent made this impossible.
- *   ENOBUFS
- *     The output queue for a network interface was full. This generally
- *     indicates that the interface has stopped sending, but may be
- *     caused by transient congestion.
- *   ENOMEM
- *     No memory available.
- *   ENOTCONN
- *     The socket is not connected, and no target has been given.
- *   ENOTSOCK
- *     The argument s is not a socket.
- *   EPIPE
- *     The local end has been shut down on a connection oriented socket.
- *     In this case the process will also receive a SIGPIPE unless
- *     MSG_NOSIGNAL is set.
- *
- * Assumptions:
+ *   a negated errno value is retruend.  See send() for the complete list
+ *   of return values.
  *
  ****************************************************************************/
 

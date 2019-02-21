@@ -58,10 +58,10 @@
  * Description:
  *   Create a mutex
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -118,19 +118,19 @@ int pthread_mutex_init(FAR pthread_mutex_t *mutex,
 
       /* Initialize the mutex like a semaphore with initial count = 1 */
 
-      status = sem_init((FAR sem_t *)&mutex->sem, pshared, 1);
-      if (status != OK)
+      status = nxsem_init((FAR sem_t *)&mutex->sem, pshared, 1);
+      if (status < 0)
         {
-          ret = get_errno();
+          ret = -ret;
         }
 
 #ifdef CONFIG_PRIORITY_INHERITANCE
       /* Initialize the semaphore protocol */
 
-      status = sem_setprotocol((FAR sem_t *)&mutex->sem, proto);
-      if (status != OK)
+      status = nxsem_setprotocol((FAR sem_t *)&mutex->sem, proto);
+      if (status < 0)
         {
-          ret = get_errno();
+          ret = -status;
         }
 #endif
 

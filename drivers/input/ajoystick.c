@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/ajoystick.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,9 +58,10 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/random.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/input/ajoystick.h>
-#include <nuttx/random.h>
 
 #include <nuttx/irq.h>
 
@@ -126,7 +127,7 @@ struct ajoy_open_s
 /* Semaphore helpers */
 
 static inline int ajoy_takesem(sem_t *sem);
-#define ajoy_givesem(s) sem_post(s);
+#define ajoy_givesem(s) nxsem_post(s);
 
 /* Sampling and Interrupt handling */
 
@@ -180,18 +181,18 @@ static const struct file_operations ajoy_fops =
 
 static inline int ajoy_takesem(sem_t *sem)
 {
+  int ret;
+
   /* Take a count from the semaphore, possibly waiting */
 
-  if (sem_wait(sem) < 0)
-    {
-      /* EINTR is the only error that we expect */
+  ret = nxsem_wait(sem);
 
-      int errcode = get_errno();
-      DEBUGASSERT(errcode == EINTR);
-      return -errcode;
-    }
+  /* The only case that an error should occur here is if the wait
+   * was awakened by a signal
+   */
 
-  return OK;
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
@@ -358,7 +359,7 @@ static void ajoy_sample(FAR struct ajoy_upperhalf_s *priv)
                   if (fds->revents != 0)
                     {
                       iinfo("Report events: %02x\n", fds->revents);
-                      sem_post(fds->sem);
+                      nxsem_post(fds->sem);
                     }
                 }
             }
@@ -376,10 +377,12 @@ static void ajoy_sample(FAR struct ajoy_upperhalf_s *priv)
 #ifdef CONFIG_CAN_PASS_STRUCTS
           union sigval value;
           value.sival_int = (int)sample;
-          (void)sigqueue(opriv->ao_pid, opriv->ao_notify.an_signo, value);
+
+          (void)nxsig_queue(opriv->ao_pid, opriv->ao_notify.an_signo,
+                            value);
 #else
-          (void)sigqueue(opriv->ao_pid, opriv->ao_notify.dn.signo,
-                         (FAR void *)sample);
+          (void)nxsig_queue(opriv->ao_pid, opriv->ao_notify.dn.signo,
+                            (FAR void *)sample);
 #endif
         }
 #endif
@@ -839,7 +842,7 @@ errout_with_dusem:
  *   lower - An instance of the platform-specific analog joystick lower
  *     half driver.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success.  Otherwise a negated errno value is
  *   returned to indicate the nature of the failure.
  *
@@ -873,7 +876,7 @@ int ajoy_register(FAR const char *devname,
   /* Initialize the new ajoystick driver instance */
 
   priv->au_lower = lower;
-  sem_init(&priv->au_exclsem, 0, 1);
+  nxsem_init(&priv->au_exclsem, 0, 1);
 
   DEBUGASSERT(lower->al_buttons);
   priv->au_sample = lower->al_buttons(lower);
@@ -890,7 +893,7 @@ int ajoy_register(FAR const char *devname,
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->au_exclsem);
+  nxsem_destroy(&priv->au_exclsem);
   kmm_free(priv);
   return ret;
 }

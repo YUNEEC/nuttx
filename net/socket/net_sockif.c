@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/socket/net_sockif.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,9 @@
 
 #include "inet/inet.h"
 #include "local/local.h"
+#include "netlink/netlink.h"
 #include "pkt/pkt.h"
+#include "bluetooth/bluetooth.h"
 #include "ieee802154/ieee802154.h"
 #include "socket/socket.h"
 
@@ -61,8 +63,10 @@
  * Description:
  *   Return the socket interface associated with this address family.
  *
- * Parameters:
- *   family - Address family
+ * Input Parameters:
+ *   family   - Socket address family
+ *   type     - Socket type
+ *   protocol - Socket protocol
  *
  * Returned Value:
  *   On success, a non-NULL instance of struct sock_intf_s is returned.  NULL
@@ -70,11 +74,16 @@
  *
  ****************************************************************************/
 
-FAR const struct sock_intf_s *net_sockif(sa_family_t family)
+FAR const struct sock_intf_s *
+  net_sockif(sa_family_t family, int type, int protocol)
 {
   FAR const struct sock_intf_s *sockif = NULL;
 
-  /* Get the socket interface */
+  /* Get the socket interface.
+   *
+   * REVISIT:  Should also support PF_UNSPEC which would permit the socket
+   * to be used for anything.
+   */
 
   switch (family)
     {
@@ -85,7 +94,7 @@ FAR const struct sock_intf_s *net_sockif(sa_family_t family)
 #ifdef HAVE_PFINET6_SOCKETS
     case PF_INET6:
 #endif
-      sockif = &g_inet_sockif;
+      sockif = inet_sockif(family, type, protocol);
       break;
 #endif
 
@@ -95,9 +104,21 @@ FAR const struct sock_intf_s *net_sockif(sa_family_t family)
       break;
 #endif
 
+#ifdef CONFIG_NET_NETLINK
+    case PF_NETLINK:
+      sockif = &g_netlink_sockif;
+      break;
+#endif
+
 #ifdef CONFIG_NET_PKT
     case PF_PACKET:
       sockif = &g_pkt_sockif;
+      break;
+#endif
+
+#ifdef CONFIG_NET_BLUETOOTH
+    case PF_BLUETOOTH:
+      sockif = &g_bluetooth_sockif;
       break;
 #endif
 

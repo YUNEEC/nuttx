@@ -547,7 +547,7 @@ static uint32_t stm32_getreg32(FAR struct stm32_lowerhalf_s *priv, int offset)
 }
 
 /************************************************************************************
- * Name: stm32_putreg16
+ * Name: stm32_putreg32
  *
  * Description:
  *   Write a value to a 32-bit timer register.  This applies only for the STM32 F4
@@ -574,7 +574,7 @@ static void stm32_putreg32(FAR struct stm32_lowerhalf_s *priv, int offset, uint3
  * Description:
  *   Dump all timer registers.
  *
- * Input parameters:
+ * Input Parameters:
  *   priv - A reference to the QENCODER block status
  *
  * Returned Value:
@@ -1173,7 +1173,7 @@ static int stm32_ioctl(FAR struct qe_lowerhalf_s *lower, int cmd, unsigned long 
  *   devpath - The full path to the driver to register. E.g., "/dev/qe0"
  *   tim     - The timer number to used.  'tim' must be an element of {1,2,3,4,5,8}
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; A negated errno value is returned on failure.
  *
  ************************************************************************************/

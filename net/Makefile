@@ -1,7 +1,7 @@
 ############################################################################
 # net/Makefile
 #
-#   Copyright (C) 2007, 2008, 2011-2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007, 2008, 2011-2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -65,9 +65,12 @@ include neighbor/Make.defs
 include igmp/Make.defs
 include pkt/Make.defs
 include local/Make.defs
+include mld/Make.defs
+include netlink/Make.defs
 include tcp/Make.defs
 include udp/Make.defs
 include sixlowpan/Make.defs
+include bluetooth/Make.defs
 include ieee802154/Make.defs
 include devif/Make.defs
 include ipforward/Make.defs

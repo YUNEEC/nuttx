@@ -61,11 +61,11 @@
  *   of all name-value pairs and sets the value of the external variable
  *   environ to NULL.
  *
- * Parameters:
- *   group Identifies the task group containing the environment structure
- *     to be released.
+ * Input Parameters:
+ *   group - Identifies the task group containing the environment structure
+ *           to be released.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -75,7 +75,7 @@
 
 void env_release(FAR struct task_group_s *group)
 {
-  DEBUGASSERT(group);
+  DEBUGASSERT(group != NULL);
 
   /* Free any allocate environment strings */
 

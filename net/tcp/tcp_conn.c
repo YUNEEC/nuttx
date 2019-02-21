@@ -1,7 +1,8 @@
 /****************************************************************************
  * net/tcp/tcp_conn.c
  *
- *   Copyright (C) 2007-2011, 2013-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2011, 2013-2015, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Large parts of this file were leveraged from uIP logic:
@@ -53,6 +54,7 @@
 
 #include <arch/irq.h>
 
+#include <nuttx/clock.h>
 #include <nuttx/net/netconfig.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/netdev.h>
@@ -177,13 +179,13 @@ tcp_ipv6_listener(const net_ipv6addr_t ipaddr, uint16_t portno)
       if (conn->tcpstateflags != TCP_CLOSED && conn->lport == portno)
         {
           /* If there are multiple interface devices, then the local IP
-           * address of the connection must also match.  INADDR_ANY is a
-           * special case:  There can only be instance of a port number
-           * with INADDR_ANY.
+           * address of the connection must also match.  The IPv6
+           * unspecified address is a special case:  There can only be
+           * one instance of a port number with the unspecified address.
            */
 
           if (net_ipv6addr_cmp(conn->u.ipv6.laddr, ipaddr) ||
-              net_ipv6addr_cmp(conn->u.ipv6.laddr, g_ipv6_allzeroaddr))
+              net_ipv6addr_cmp(conn->u.ipv6.laddr, g_ipv6_unspecaddr))
             {
               /* The port number is in use, return the connection */
 
@@ -243,7 +245,7 @@ static FAR struct tcp_conn_s *
  *   portno -- the selected port number in host order. Zero means no port
  *     selected.
  *
- * Return:
+ * Returned Value:
  *   Selected or verified port number in host order on success, a negated
  *   errno on failure:
  *
@@ -379,8 +381,8 @@ static inline FAR struct tcp_conn_s *
  *   connection to be used with the provided TCP/IP header
  *
  * Assumptions:
- *   This function is called from network logic with the nework locked.
-4 *
+ *   This function is called from network logic with the network locked.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv6
@@ -406,8 +408,8 @@ static inline FAR struct tcp_conn_s *
        * - The remote port number is checked if the connection is bound
        *   to a remote port.
        * - Insist that the destination IP matches the bound address. If
-       *   a socket is bound to INADDRY_ANY, then it should receive all
-       *   packets directed to the port.
+       *   a socket is bound to the IPv6 unspecified address, then it
+       *   should receive all packets directed to the port.
        * - Finally, if the connection is bound to a remote IP address,
        *   the source IP address of the packet is checked.
        *
@@ -418,7 +420,7 @@ static inline FAR struct tcp_conn_s *
       if (conn->tcpstateflags != TCP_CLOSED &&
           tcp->destport == conn->lport &&
           tcp->srcport  == conn->rport &&
-          (net_ipv6addr_cmp(conn->u.ipv6.laddr, g_ipv6_allzeroaddr) ||
+          (net_ipv6addr_cmp(conn->u.ipv6.laddr, g_ipv6_unspecaddr) ||
            net_ipv6addr_cmp(*destipaddr, conn->u.ipv6.laddr)) &&
           net_ipv6addr_cmp(*srcipaddr, conn->u.ipv6.raddr))
         {
@@ -445,7 +447,7 @@ static inline FAR struct tcp_conn_s *
  *   This function implements the lower level parts of the standard TCP
  *   bind() operation.
  *
- * Return:
+ * Returned Value:
  *   0 on success or -EADDRINUSE on failure
  *
  * Assumptions:
@@ -510,7 +512,7 @@ static inline int tcp_ipv4_bind(FAR struct tcp_conn_s *conn,
  *   This function implements the lower level parts of the standard TCP
  *   bind() operation.
  *
- * Return:
+ * Returned Value:
  *   0 on success or -EADDRINUSE on failure
  *
  * Assumptions:
@@ -561,7 +563,7 @@ static inline int tcp_ipv6_bind(FAR struct tcp_conn_s *conn,
       /* Back out the local address setting */
 
       conn->lport = 0;
-      net_ipv6addr_copy(conn->u.ipv6.laddr, g_ipv6_allzeroaddr);
+      net_ipv6addr_copy(conn->u.ipv6.laddr, g_ipv6_unspecaddr);
       return ret;
     }
 
@@ -579,7 +581,7 @@ static inline int tcp_ipv6_bind(FAR struct tcp_conn_s *conn,
  *
  * Description:
  *   Initialize the TCP/IP connection structures.  Called only once and only
- *   from the UIP layer at start-up in normal user mode.
+ *   from the network layer at start-up.
  *
  ****************************************************************************/
 
@@ -611,7 +613,7 @@ void tcp_initialize(void)
  * Description:
  *   Find a free TCP/IP connection structure and allocate it
  *   for use.  This is normally something done by the implementation of the
- *   socket() API but is also called from the even procressing lock when a
+ *   socket() API but is also called from the event processing logic when a
  *   TCP packet is received while "listening"
  *
  ****************************************************************************/
@@ -714,6 +716,12 @@ FAR struct tcp_conn_s *tcp_alloc(uint8_t domain)
       conn->tcpstateflags = TCP_ALLOCATED;
 #if defined(CONFIG_NET_IPv4) && defined(CONFIG_NET_IPv6)
       conn->domain        = domain;
+#endif
+#ifdef CONFIG_NET_TCP_KEEPALIVE
+      conn->keeptime      = clock_systimer();
+      conn->keepidle      = 2 * DSEC_PER_HOUR;
+      conn->keepintvl     = 2 * DSEC_PER_SEC;
+      conn->keepcnt       = 3;
 #endif
     }
 
@@ -1039,7 +1047,7 @@ FAR struct tcp_conn_s *tcp_alloc_accept(FAR struct net_driver_s *dev,
  *   This function implements the lower level parts of the standard TCP
  *   bind() operation.
  *
- * Return:
+ * Returned Value:
  *   0 on success or -EADDRINUSE on failure
  *
  * Assumptions:

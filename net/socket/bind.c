@@ -68,13 +68,14 @@
  *   to a socket." When a socket is created with socket, it exists in a name
  *   space (address family) but has no name assigned.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    Socket structure of the socket to bind
  *   addr     Socket local address
  *   addrlen  Length of 'addr'
  *
  * Returned Value:
- *   0 on success; -1 on error with errno set appropriately
+ *  Returns zero (OK) on success.  On failure, it returns a negated errno
+ *  value to indicate the nature of the error.
  *
  *   EACCES
  *     The address is protected, and the user is not the superuser.
@@ -85,22 +86,18 @@
  *   ENOTSOCK
  *     psock is a descriptor for a file, not a socket.
  *
- * Assumptions:
- *
  ****************************************************************************/
 
 int psock_bind(FAR struct socket *psock, const struct sockaddr *addr,
                socklen_t addrlen)
 {
-  int errcode;
   int ret = OK;
 
   /* Verify that the psock corresponds to valid, allocated socket */
 
   if (!psock || psock->s_crefs <= 0)
     {
-      errcode = ENOTSOCK;
-      goto errout;
+      return -ENOTSOCK;
     }
 
   /* Let the address family's connect() method handle the operation */
@@ -112,15 +109,10 @@ int psock_bind(FAR struct socket *psock, const struct sockaddr *addr,
 
   if (ret < 0)
     {
-      errcode = -ret;
-      goto errout;
+      return ret;
     }
 
   return OK;
-
-errout:
-  set_errno(errcode);
-  return ERROR;
 }
 
 /****************************************************************************
@@ -132,7 +124,7 @@ errout:
  *   a socket." When a socket is created with socket, it exists in a name
  *   space (address family) but has no name assigned.
  *
- * Parameters:
+ * Input Parameters:
  *   sockfd   Socket descriptor of the socket to bind
  *   addr     Socket local address
  *   addrlen  Length of 'addr'
@@ -151,19 +143,27 @@ errout:
  *   ENOTSOCK
  *     sockfd is a descriptor for a file, not a socket.
  *
- * Assumptions:
- *
  ****************************************************************************/
 
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
-  /* Make the socket descriptor to the underlying socket structure */
+  FAR struct socket *psock;
+  int ret;
 
-  FAR struct socket *psock = sockfd_socket(sockfd);
+  /* Use the socket descriptor to get the underlying socket structure */
+
+  psock = sockfd_socket(sockfd);
 
   /* Then let psock_bind do all of the work */
 
-  return psock_bind(psock, addr, addrlen);
+  ret = psock_bind(psock, addr, addrlen);
+  if (ret < 0)
+    {
+      set_errno(-ret);
+      return ERROR;
+    }
+
+  return OK;
 }
 
 #endif /* CONFIG_NET */

@@ -81,10 +81,6 @@
 #  define CONFIG_USBDEV_SETUP_MAXDATASIZE CONFIG_USBDEV_EP0_MAXSIZE
 #endif
 
-#ifndef CONFIG_USB_PRI
-#  define CONFIG_USB_PRI NVIC_SYSH_PRIORITY_DEFAULT
-#endif
-
 /* USB Interrupts.  Should be re-mapped if CAN is used. */
 
 #ifdef CONFIG_STM32_STM32F30XX
@@ -2028,18 +2024,11 @@ static void stm32_ep0setup(struct stm32_usbdev_s *priv)
 
       {
         usbtrace(TRACE_INTDECODE(STM32_TRACEINTID_GETSETDESC), priv->ctrl.type);
-        if ((priv->ctrl.type & USB_REQ_RECIPIENT_MASK) == USB_REQ_RECIPIENT_DEVICE)
-          {
-            /* The request seems valid... let the class implementation handle it */
 
-            stm32_dispatchrequest(priv);
-            handled = true;
-          }
-        else
-          {
-            usbtrace(TRACE_DEVERROR(STM32_TRACEERR_BADGETSETDESC), 0);
-            priv->ep0state = EP0STATE_STALLED;
-          }
+        /* The request seems valid... let the class implementation handle it */
+
+        stm32_dispatchrequest(priv);
+        handled = true;
       }
       break;
 
@@ -3872,13 +3861,6 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
       up_enable_irq(STM32_IRQ_USBHP);
       up_enable_irq(STM32_IRQ_USBLP);
-
-#ifdef CONFIG_ARCH_IRQPRIO
-      /* Set the interrupt priority */
-
-      up_prioritize_irq(STM32_IRQ_USBHP, CONFIG_USB_PRI);
-      up_prioritize_irq(STM32_IRQ_USBLP, CONFIG_USB_PRI);
-#endif
 
       /* Enable pull-up to connect the device.  The host should enumerate us
        * some time after this

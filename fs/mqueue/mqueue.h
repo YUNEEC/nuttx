@@ -77,10 +77,10 @@ extern "C"
  * Description:
  *   Release a reference count on a message queue inode.
  *
- * Parameters:
+ * Input Parameters:
  *   inode - The message queue inode
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

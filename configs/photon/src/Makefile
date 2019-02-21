@@ -35,7 +35,7 @@
 -include $(TOPDIR)/Make.defs
 
 ASRCS =
-CSRCS = stm32_boot.c stm32_bringup.c
+CSRCS = stm32_boot.c stm32_bringup.c stm32_spi.c
 
 ifeq ($(CONFIG_PHOTON_DFU_BOOTLOADER),y)
 CSRCS += dfu_signature.c
@@ -66,6 +66,10 @@ endif
 
 ifeq ($(CONFIG_STM32_OTGHS),y)
 CSRCS += stm32_usb.c
+endif
+
+ifeq ($(CONFIG_RGBLED),y)
+  CSRCS += stm32_rgbled.c
 endif
 
 include $(TOPDIR)/configs/Board.mk

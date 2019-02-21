@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/socket/connect.c
  *
- *   Copyright (C) 2007-2012, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2012, 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,13 +79,14 @@
  *   the association by connecting to an address with the sa_family member of
  *   sockaddr set to AF_UNSPEC.
  *
- * Parameters:
+ * Input Parameters:
  *   psock     Pointer to a socket structure initialized by psock_socket()
  *   addr      Server address (form depends on type of socket)
  *   addrlen   Length of actual 'addr'
  *
  * Returned Value:
- *   0 on success; -1 on error with errno set appropriately
+ *  Returns zero (OK) on success.  On failure, it returns a negated errno
+ *  value to indicate the nature of the error.
  *
  *     EACCES, EPERM
  *       The user tried to connect to a broadcast address without having the
@@ -130,27 +131,20 @@
 int psock_connect(FAR struct socket *psock, FAR const struct sockaddr *addr,
                   socklen_t addrlen)
 {
-  int errcode;
   int ret;
-
-  /* Treat as a cancellation point */
-
-  (void)enter_cancellation_point();
 
   /* Verify that the psock corresponds to valid, allocated socket */
 
   if (psock == NULL || psock->s_crefs <= 0)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Make sure that an address was provided */
 
   if (addr == NULL)
     {
-      errcode = EFAULT;
-      goto errout;
+      return -EFAULT;
     }
 
   /* Let the address family's connect() method handle the operation */
@@ -159,17 +153,10 @@ int psock_connect(FAR struct socket *psock, FAR const struct sockaddr *addr,
   ret = psock->s_sockif->si_connect(psock, addr, addrlen);
   if (ret < 0)
     {
-      errcode = -ret;
-      goto errout;
+      return ret;
     }
 
-  leave_cancellation_point();
   return OK;
-
-errout:
-  set_errno(errcode);
-  leave_cancellation_point();
-  return ERROR;
 }
 
 /****************************************************************************
@@ -193,7 +180,7 @@ errout:
  *   the association by connecting to an address with the sa_family member of
  *   sockaddr set to AF_UNSPEC.
  *
- * Parameters:
+ * Input Parameters:
  *   sockfd    Socket descriptor returned by socket()
  *   addr      Server address (form depends on type of socket)
  *   addrlen   Length of actual 'addr'
@@ -243,6 +230,7 @@ errout:
 
 int connect(int sockfd, FAR const struct sockaddr *addr, socklen_t addrlen)
 {
+  FAR struct socket *psock;
   int ret;
 
   /* accept() is a cancellation point */
@@ -251,11 +239,17 @@ int connect(int sockfd, FAR const struct sockaddr *addr, socklen_t addrlen)
 
   /* Get the underlying socket structure */
 
-  FAR struct socket *psock = sockfd_socket(sockfd);
+  psock = sockfd_socket(sockfd);
 
   /* Then let psock_connect() do all of the work */
 
   ret = psock_connect(psock, addr, addrlen);
+  if (ret < 0)
+    {
+      set_errno(-ret);
+      ret = ERROR;
+    }
+
   leave_cancellation_point();
   return ret;
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/wireless/ieee80211/bcmf_core.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Simon Piriou <spiriou31@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,10 @@
 
 #include <debug.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/kmalloc.h>
 
 #include "bcmf_core.h"
 #include "bcmf_sdio.h"
@@ -55,6 +57,7 @@
  ****************************************************************************/
 
 /* Agent registers (common for every core) */
+
 #define BCMA_IOCTL           0x0408 /* IO control */
 #define BCMA_IOST            0x0500 /* IO status */
 #define BCMA_RESET_CTL       0x0800 /* Reset control */
@@ -74,8 +77,14 @@
 
 #define BCMA_RESET_CTL_RESET 0x0001
 
+/* SOCSRAM core registers */
+
+#define SOCSRAM_BANKX_INDEX  ((uint32_t) (0x18004000 + 0x10) )
+#define SOCSRAM_BANKX_PDA    ((uint32_t) (0x18004000 + 0x44) )
+
 /* Transfer size properties */
-#define BCMF_UPLOAD_TRANSFER_SIZE     (64 * 256)
+
+#define BCMF_UPLOAD_TRANSFER_SIZE  (64 * 256)
 
 /****************************************************************************
  * Private Types
@@ -87,11 +96,9 @@
 
 static int bcmf_core_set_backplane_window(FAR struct bcmf_sdio_dev_s *sbus,
                                           uint32_t address);
-
 static int bcmf_upload_binary(FAR struct bcmf_sdio_dev_s *sbusv,
-                                   uint32_t address, uint8_t *buf,
-                                   unsigned int len);
-
+                              uint32_t address, uint8_t *buf,
+                              unsigned int len);
 static int bcmf_upload_nvram(FAR struct bcmf_sdio_dev_s *sbus);
 
 /****************************************************************************
@@ -169,8 +176,99 @@ int bcmf_upload_binary(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
       address += size;
       buf += size;
     }
+
   return OK;
 }
+
+#ifdef CONFIG_IEEE80211_BROADCOM_FWFILES
+int bcmf_upload_file(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
+                     FAR const char *path)
+{
+  struct file finfo;
+  FAR uint8_t *buf;
+  size_t total_read;
+  ssize_t nread;
+  int ret;
+
+  /* Open the file in the detached state */
+
+  ret = file_open(&finfo, path, O_RDONLY | O_BINARY);
+  if (ret <0)
+    {
+       wlerr("ERROR: Failed to open the FILE MTD file %s: %d\n", path, ret);
+       return ret;
+    }
+
+  /* Allocate an I/O buffer */
+
+  buf = (FAR uint8_t *)kmm_malloc(BCMF_UPLOAD_TRANSFER_SIZE);
+  if (buf == NULL)
+    {
+       wlerr("ERROR: Failed allocate an I/O buffer\n");
+       ret = -ENOMEM;
+       goto errout_with_file;
+    }
+
+  /* Loop until the firmware has been loaded */
+
+  do
+    {
+      /* Set the backplane window to include the start address */
+
+      nread = file_read(&finfo, buf, BCMF_UPLOAD_TRANSFER_SIZE);
+      if (nread < 0)
+        {
+          ret = (int)nread;
+          wlerr("ERROR: Failed to read file: %d\n", ret);
+          goto errout_with_buf;
+        }
+
+      if (nread == 0)
+        {
+          break;
+        }
+
+      wlinfo("Read %ld bytes\n", (long)nread);
+
+      ret = bcmf_core_set_backplane_window(sbus, address);
+      if (ret < 0)
+        {
+          wlerr("ERROR: bcmf_core_set_backplane_window() failed: %d\n", ret);
+          goto errout_with_buf;
+        }
+
+      total_read = nread;
+
+      /* Transfer firmware data */
+
+      ret = bcmf_transfer_bytes(sbus, true, 1,
+                                address & SBSDIO_SB_OFT_ADDR_MASK, buf,
+                                total_read);
+      if (ret < 0)
+        {
+          wlerr("ERROR: Transfer failed address=%lx total_read=%lu: %d\n",
+                (unsigned long)address, (unsigned long)total_read, ret);
+          goto errout_with_buf;
+        }
+
+      address += total_read;
+    }
+  while (nread == BCMF_UPLOAD_TRANSFER_SIZE);
+
+  file_close(&finfo);
+  kmm_free(buf);
+
+  wlinfo("Upload complete\n");
+  return OK;
+
+errout_with_buf:
+  kmm_free(buf);
+
+errout_with_file:
+  file_close(&finfo);
+  return ret;
+}
+#endif
 
 int bcmf_upload_nvram(FAR struct bcmf_sdio_dev_s *sbus)
 {
@@ -202,7 +300,8 @@ int bcmf_upload_nvram(FAR struct bcmf_sdio_dev_s *sbus)
 
   /* Write the length token to the last word */
 
-  ret = bcmf_write_sbreg(sbus, sbus->chip->ram_size - 4, (uint8_t *)&token, 4);
+  ret = bcmf_write_sbreg(sbus, sbus->chip->ram_size - 4,
+                         (FAR uint8_t *)&token, 4);
   if (ret != OK)
     {
       return ret;
@@ -220,7 +319,7 @@ int bcmf_upload_nvram(FAR struct bcmf_sdio_dev_s *sbus)
  ****************************************************************************/
 
 int bcmf_read_sbreg(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
-                          uint8_t *reg, unsigned int len)
+                    FAR uint8_t *reg, unsigned int len)
 {
   int ret = bcmf_core_set_backplane_window(sbus, address);
   if (ret != OK)
@@ -228,8 +327,16 @@ int bcmf_read_sbreg(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
       return ret;
     }
 
-  return bcmf_transfer_bytes(sbus, false, 1,
-                             address & SBSDIO_SB_OFT_ADDR_MASK, reg, len);
+  address &= SBSDIO_SB_OFT_ADDR_MASK;
+
+  /* Map to 32-bit access if len == 4 */
+
+  if (len == 4)
+    {
+      address |= SBSDIO_SB_ACCESS_2_4B_FLAG;
+    }
+
+  return bcmf_transfer_bytes(sbus, false, 1, address, reg, len);
 }
 
 /****************************************************************************
@@ -237,7 +344,7 @@ int bcmf_read_sbreg(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
  ****************************************************************************/
 
 int bcmf_write_sbreg(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
-                          uint8_t *reg, unsigned int len)
+                     FAR uint8_t *reg, unsigned int len)
 {
 
   int ret = bcmf_core_set_backplane_window(sbus, address);
@@ -246,8 +353,16 @@ int bcmf_write_sbreg(FAR struct bcmf_sdio_dev_s *sbus, uint32_t address,
       return ret;
     }
 
-  return bcmf_transfer_bytes(sbus, true, 1, address & SBSDIO_SB_OFT_ADDR_MASK,
-                             reg, len);
+  address &= SBSDIO_SB_OFT_ADDR_MASK;
+
+  /* Map to 32-bit access if len == 4 */
+
+  if (len == 4)
+    {
+      address |= SBSDIO_SB_ACCESS_2_4B_FLAG;
+    }
+
+  return bcmf_transfer_bytes(sbus, true, 1, address, reg, len);
 }
 
 /****************************************************************************
@@ -260,34 +375,50 @@ int bcmf_core_upload_firmware(FAR struct bcmf_sdio_dev_s *sbus)
 
   wlinfo("upload firmware\n");
 
-  /* Disable ARMCM3 core and reset SOCRAM core
-   * to set device in firmware upload mode */
+  /* Disable ARMCM3 core and reset SOCRAM core to set device in firmware
+   * upload mode
+   */
 
   bcmf_core_disable(sbus, WLAN_ARMCM3_CORE_ID);
   bcmf_core_reset(sbus, SOCSRAM_CORE_ID);
+
+  /* Do chip specific initialization */
+
+  if (sbus->cur_chip_id == SDIO_DEVICE_ID_BROADCOM_43430)
+    {
+      /* Disable remap for SRAM_3. Only for 4343x */
+
+      bcmf_write_sbregw(sbus, SOCSRAM_BANKX_INDEX, 0x3);
+      bcmf_write_sbregw(sbus, SOCSRAM_BANKX_PDA, 0);
+    }
 
   up_mdelay(50);
 
   /* Flash chip firmware */
 
+#ifdef CONFIG_IEEE80211_BROADCOM_FWFILES
+  ret = bcmf_upload_file(sbus, 0, CONFIG_IEEE80211_BROADCOM_FWFILENAME);
+#else
   wlinfo("firmware size is %d bytes\n", *sbus->chip->firmware_image_size);
+
   ret = bcmf_upload_binary(sbus, 0, sbus->chip->firmware_image,
                            *sbus->chip->firmware_image_size);
+#endif
 
-  if (ret != OK)
+  if (ret < 0)
     {
-        wlerr("Failed to upload firmware\n");
-        return ret;
+      wlerr("ERROR: Failed to upload firmware\n");
+      return ret;
     }
 
   /* Flash NVRAM configuration file */
 
   wlinfo("upload nvram configuration\n");
   ret = bcmf_upload_nvram(sbus);
-  if (ret != OK)
+  if (ret < 0)
     {
-        wlerr("Failed to upload nvram\n");
-        return ret;
+      wlerr("ERROR: Failed to upload NVRAM\n");
+      return ret;
     }
 
   /* Firmware upload done, restart ARMCM3 core */

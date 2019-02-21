@@ -2,7 +2,7 @@
  * drivers/serial/uart_16550.c
  * Serial driver for 16550 UART
  *
- *   Copyright (C) 2011, 2013, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,6 +80,9 @@ struct u16550_s
   uint8_t          parity;    /* 0=none, 1=odd, 2=even */
   uint8_t          bits;      /* Number of bits (7 or 8) */
   bool             stopbits2; /* true: Configure with 2 stop bits instead of 1 */
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+  bool             flow;      /* flow control (RTS/CTS) enabled */
+#endif
 #endif
 };
 
@@ -96,6 +99,16 @@ static int  u16550_ioctl(FAR struct file *filep, int cmd, unsigned long arg);
 static int  u16550_receive(FAR struct uart_dev_s *dev, uint32_t *status);
 static void u16550_rxint(FAR struct uart_dev_s *dev, bool enable);
 static bool u16550_rxavailable(FAR struct uart_dev_s *dev);
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+static bool u16550_rxflowcontrol(struct uart_dev_s *dev, unsigned int nbuffered,
+                                 bool upper);
+#endif
+#ifdef CONFIG_SERIAL_DMA
+static void u16550_dmasend(FAR struct uart_dev_s *dev);
+static void u16550_dmareceive(FAR struct uart_dev_s *dev);
+static void u16550_dmarxfree(FAR struct uart_dev_s *dev);
+static void u16550_dmatxavail(FAR struct uart_dev_s *dev);
+#endif
 static void u16550_send(FAR struct uart_dev_s *dev, int ch);
 static void u16550_txint(FAR struct uart_dev_s *dev, bool enable);
 static bool u16550_txready(FAR struct uart_dev_s *dev);
@@ -116,7 +129,13 @@ static const struct uart_ops_s g_uart_ops =
   .rxint          = u16550_rxint,
   .rxavailable    = u16550_rxavailable,
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
-  .rxflowcontrol  = NULL,
+  .rxflowcontrol  = u16550_rxflowcontrol,
+#endif
+#ifdef CONFIG_SERIAL_DMA
+  .dmasend        = u16550_dmasend,
+  .dmareceive     = u16550_dmareceive,
+  .dmarxfree      = u16550_dmarxfree,
+  .dmatxavail     = u16550_dmatxavail,
 #endif
   .send           = u16550_send,
   .txint          = u16550_txint,
@@ -143,7 +162,7 @@ static char g_uart3rxbuffer[CONFIG_16550_UART3_RXBUFSIZE];
 static char g_uart3txbuffer[CONFIG_16550_UART3_TXBUFSIZE];
 #endif
 
-/* This describes the state of the LPC17xx uart0 port. */
+/* This describes the state of the 16550 uart0 port. */
 
 #ifdef CONFIG_16550_UART0
 static struct u16550_s g_uart0priv =
@@ -158,6 +177,9 @@ static struct u16550_s g_uart0priv =
   .parity         = CONFIG_16550_UART0_PARITY,
   .bits           = CONFIG_16550_UART0_BITS,
   .stopbits2      = CONFIG_16550_UART0_2STOP,
+#if defined(CONFIG_16550_UART0_IFLOWCONTROL) || defined(CONFIG_16550_UART0_OFLOWCONTROL)
+  .flow           = true,
+#endif
 #endif
 };
 
@@ -178,7 +200,7 @@ static uart_dev_t g_uart0port =
 };
 #endif
 
-/* This describes the state of the LPC17xx uart1 port. */
+/* This describes the state of the 16550 uart1 port. */
 
 #ifdef CONFIG_16550_UART1
 static struct u16550_s g_uart1priv =
@@ -193,6 +215,9 @@ static struct u16550_s g_uart1priv =
   .parity         = CONFIG_16550_UART1_PARITY,
   .bits           = CONFIG_16550_UART1_BITS,
   .stopbits2      = CONFIG_16550_UART1_2STOP,
+#if defined(CONFIG_16550_UART1_IFLOWCONTROL) || defined(CONFIG_16551_UART1_OFLOWCONTROL)
+  .flow           = true,
+#endif
 #endif
 };
 
@@ -213,7 +238,7 @@ static uart_dev_t g_uart1port =
 };
 #endif
 
-/* This describes the state of the LPC17xx uart1 port. */
+/* This describes the state of the 16550 uart1 port. */
 
 #ifdef CONFIG_16550_UART2
 static struct u16550_s g_uart2priv =
@@ -228,6 +253,9 @@ static struct u16550_s g_uart2priv =
   .parity         = CONFIG_16550_UART2_PARITY,
   .bits           = CONFIG_16550_UART2_BITS,
   .stopbits2      = CONFIG_16550_UART2_2STOP,
+#if defined(CONFIG_16550_UART2_IFLOWCONTROL) || defined(CONFIG_16550_UART2_OFLOWCONTROL)
+  .flow           = true,
+#endif
 #endif
 };
 
@@ -248,7 +276,7 @@ static uart_dev_t g_uart2port =
 };
 #endif
 
-/* This describes the state of the LPC17xx uart1 port. */
+/* This describes the state of the 16550 uart1 port. */
 
 #ifdef CONFIG_16550_UART3
 static struct u16550_s g_uart3priv =
@@ -263,6 +291,9 @@ static struct u16550_s g_uart3priv =
   .parity         = CONFIG_16550_UART3_PARITY,
   .bits           = CONFIG_16550_UART3_BITS,
   .stopbits2      = CONFIG_16550_UART3_2STOP,
+#if defined(CONFIG_16550_UART3_IFLOWCONTROL) || defined(CONFIG_16550_UART3_OFLOWCONTROL)
+  .flow           = true,
+#endif
 #endif
 };
 
@@ -283,170 +314,205 @@ static uart_dev_t g_uart3port =
 };
 #endif
 
+
 /* Which UART with be tty0/console and which tty1? tty2? tty3? */
 
-#if defined(CONFIG_16550_UART0_SERIAL_CONSOLE)
-#  define CONSOLE_DEV     g_uart0port    /* UART0=console */
-#  define TTYS0_DEV       g_uart0port    /* UART0=ttyS0 */
-#  ifdef CONFIG_16550_UART1
-#    define TTYS1_DEV     g_uart1port    /* UART0=ttyS0;UART1=ttyS1 */
-#    ifdef CONFIG_16550_UART2
-#      define TTYS2_DEV   g_uart2port    /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS2 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS3_DEV g_uart3port    /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS2;UART3=ttyS3 */
-#      else
-#        undef TTYS3_DEV                 /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS;No ttyS3 */
-#      endif
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART0=ttyS0;UART1=ttyS1;UART3=ttys2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART0=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  else
-#    ifdef CONFIG_16550_UART2
-#      define TTYS1_DEV   g_uart2port    /* UART0=ttyS0;UART2=ttyS1;No ttyS3 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART0=ttyS0;UART2=ttyS1;UART3=ttyS2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART0=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS1_DEV g_uart3port    /* UART0=ttyS0;UART3=ttyS1;No ttyS2;No ttyS3 */
-#      else
-#        undef TTYS1_DEV                 /* UART0=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#        undef TTYS2_DEV                 /* No ttyS2 */
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  endif
-#elif defined(CONFIG_16550_UART1_SERIAL_CONSOLE)
-#  define CONSOLE_DEV     g_uart1port    /* UART1=console */
-#  define TTYS0_DEV       g_uart1port    /* UART1=ttyS0 */
-#  ifdef CONFIG_16550_UART
-#    define TTYS1_DEV     g_uart0port    /* UART1=ttyS0;UART0=ttyS1 */
-#    ifdef CONFIG_16550_UART2
-#      define TTYS2_DEV   g_uart2port    /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS2 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS3_DEV g_uart3port    /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS2;UART3=ttyS3 */
-#      else
-#        undef TTYS3_DEV                 /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS;No ttyS3 */
-#      endif
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART1=ttyS0;UART0=ttyS1;UART3=ttys2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART1=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  else
-#    ifdef CONFIG_16550_UART2
-#      define TTYS1_DEV   g_uart2port    /* UART1=ttyS0;UART2=ttyS1 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART1=ttyS0;UART2=ttyS1;UART3=ttyS2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART1=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS1_DEV   g_uart3port  /* UART1=ttyS0;UART3=ttyS1;No ttyS2;No ttyS3 */
-#      else
-#        undef TTYS1_DEV                 /* UART1=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS2_DEV                   /* No ttyS2 */
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  endif
-#elif defined(CONFIG_16550_UART2_SERIAL_CONSOLE)
-#  define CONSOLE_DEV     g_uart2port    /* UART2=console */
-#  define TTYS0_DEV       g_uart2port    /* UART2=ttyS0 */
-#  ifdef CONFIG_16550_UART
-#    define TTYS1_DEV     g_uart0port    /* UART2=ttyS0;UART0=ttyS1 */
-#    ifdef CONFIG_16550_UART1
-#      define TTYS2_DEV   g_uart1port    /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS2 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS3_DEV g_uart3port    /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS2;UART3=ttyS3 */
-#      else
-#        undef TTYS3_DEV                 /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS;No ttyS3 */
-#      endif
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART2=ttyS0;UART0=ttyS1;UART3=ttys2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART2=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  else
-#    ifdef CONFIG_16550_UART1
-#      define TTYS1_DEV   g_uart1port    /* UART2=ttyS0;UART1=ttyS1 */
-#      ifdef CONFIG_16550_UART3
-#        define TTYS2_DEV g_uart3port    /* UART2=ttyS0;UART1=ttyS1;UART3=ttyS2 */
-#      else
-#        undef TTYS2_DEV                 /* UART2=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    else
-#      ifdef CONFIG_16550_UART3
-#        define TTYS1_DEV g_uart3port    /* UART2=ttyS0;UART3=ttyS1;No ttyS3 */
-#      else
-#        undef TTYS1_DEV                 /* UART2=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS2_DEV                   /* No ttyS2 */
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  endif
-#elif defined(CONFIG_16550_UART3_SERIAL_CONSOLE)
-#  define CONSOLE_DEV     g_uart3port    /* UART3=console */
-#  define TTYS0_DEV       g_uart3port    /* UART3=ttyS0 */
-#  ifdef CONFIG_16550_UART
-#    define TTYS1_DEV     g_uart0port    /* UART3=ttyS0;UART0=ttyS1 */
-#    ifdef CONFIG_16550_UART1
-#      define TTYS2_DEV   g_uart1port    /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS2 */
-#      ifdef CONFIG_16550_UART2
-#        define TTYS3_DEV g_uart2port    /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS2;UART2=ttyS3 */
-#      else
-#        undef TTYS3_DEV                 /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS;No ttyS3 */
-#      endif
-#    else
-#      ifdef CONFIG_16550_UART2
-#        define TTYS2_DEV g_uart2port    /* UART3=ttyS0;UART0=ttyS1;UART2=ttys2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART3=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#        undef TTYS3_DEV                 /* No ttyS3 */
-#    endif
-#  else
-#    ifdef CONFIG_16550_UART1
-#      define TTYS1_DEV   g_uart1port    /* UART3=ttyS0;UART1=ttyS1 */
-#      ifdef CONFIG_16550_UART2
-#        define TTYS2_DEV g_uart2port    /* UART3=ttyS0;UART1=ttyS1;UART2=ttyS2;No ttyS3 */
-#      else
-#        undef TTYS2_DEV                 /* UART3=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    else
-#      ifdef CONFIG_16550_UART2
-#        define TTYS1_DEV   g_uart2port  /* UART3=ttyS0;UART2=ttyS1;No ttyS3;No ttyS3 */
-#        undef TTYS3_DEV                 /* UART3=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
-#      else
-#        undef TTYS1_DEV                 /* UART3=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
-#      endif
-#      undef TTYS2_DEV                   /* No ttyS2 */
-#      undef TTYS3_DEV                   /* No ttyS3 */
-#    endif
-#  endif
-#endif
+#ifdef CONFIG_16550_SERIAL_DISABLE_REORDERING
 
-/************************************************************************************
- * Inline Functions
- ************************************************************************************/
+#  if defined(CONFIG_16550_UART0_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart0port    /* UART0=console */
+#  elif defined(CONFIG_16550_UART1_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart1port    /* UART1=console */
+#  elif defined(CONFIG_16550_UART2_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart2port    /* UART2=console */
+#  elif defined(CONFIG_16550_UART3_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart3port    /* UART3=console */
+#  endif
+
+#  ifdef CONFIG_16550_UART0
+#    define TTYS0_DEV       g_uart0port
+#  endif
+
+#  ifdef CONFIG_16550_UART1
+#    define TTYS1_DEV       g_uart1port
+#  endif
+
+#  ifdef CONFIG_16550_UART2
+#    define TTYS2_DEV       g_uart2port
+#  endif
+
+#  ifdef CONFIG_16550_UART3
+#    define TTYS3_DEV       g_uart3port
+#  endif
+
+#else  /* CONFIG_16550_SERIAL_DISABLE_REORDERING */
+
+/* Which UART with be tty0/console and which tty1? tty2? tty3? */
+
+#  if defined(CONFIG_16550_UART0_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart0port    /* UART0=console */
+#    define TTYS0_DEV       g_uart0port    /* UART0=ttyS0 */
+#    ifdef CONFIG_16550_UART1
+#      define TTYS1_DEV     g_uart1port    /* UART0=ttyS0;UART1=ttyS1 */
+#      ifdef CONFIG_16550_UART2
+#        define TTYS2_DEV   g_uart2port    /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS2 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS3_DEV g_uart3port    /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS2;UART3=ttyS3 */
+#        else
+#          undef TTYS3_DEV                 /* UART0=ttyS0;UART1=ttyS1;UART2=ttyS;No ttyS3 */
+#        endif
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART0=ttyS0;UART1=ttyS1;UART3=ttys2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART0=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    else
+#      ifdef CONFIG_16550_UART2
+#        define TTYS1_DEV   g_uart2port    /* UART0=ttyS0;UART2=ttyS1;No ttyS3 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART0=ttyS0;UART2=ttyS1;UART3=ttyS2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART0=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS1_DEV g_uart3port    /* UART0=ttyS0;UART3=ttyS1;No ttyS2;No ttyS3 */
+#        else
+#          undef TTYS1_DEV                 /* UART0=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#          undef TTYS2_DEV                 /* No ttyS2 */
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    endif
+#  elif defined(CONFIG_16550_UART1_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart1port    /* UART1=console */
+#    define TTYS0_DEV       g_uart1port    /* UART1=ttyS0 */
+#    ifdef CONFIG_16550_UART
+#      define TTYS1_DEV     g_uart0port    /* UART1=ttyS0;UART0=ttyS1 */
+#      ifdef CONFIG_16550_UART2
+#        define TTYS2_DEV   g_uart2port    /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS2 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS3_DEV g_uart3port    /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS2;UART3=ttyS3 */
+#        else
+#          undef TTYS3_DEV                 /* UART1=ttyS0;UART0=ttyS1;UART2=ttyS;No ttyS3 */
+#        endif
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART1=ttyS0;UART0=ttyS1;UART3=ttys2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART1=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    else
+#      ifdef CONFIG_16550_UART2
+#        define TTYS1_DEV   g_uart2port    /* UART1=ttyS0;UART2=ttyS1 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART1=ttyS0;UART2=ttyS1;UART3=ttyS2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART1=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS1_DEV   g_uart3port  /* UART1=ttyS0;UART3=ttyS1;No ttyS2;No ttyS3 */
+#        else
+#          undef TTYS1_DEV                 /* UART1=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS2_DEV                   /* No ttyS2 */
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    endif
+#  elif defined(CONFIG_16550_UART2_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart2port    /* UART2=console */
+#    define TTYS0_DEV       g_uart2port    /* UART2=ttyS0 */
+#    ifdef CONFIG_16550_UART
+#      define TTYS1_DEV     g_uart0port    /* UART2=ttyS0;UART0=ttyS1 */
+#      ifdef CONFIG_16550_UART1
+#        define TTYS2_DEV   g_uart1port    /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS2 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS3_DEV g_uart3port    /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS2;UART3=ttyS3 */
+#        else
+#          undef TTYS3_DEV                 /* UART2=ttyS0;UART0=ttyS1;UART1=ttyS;No ttyS3 */
+#        endif
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART2=ttyS0;UART0=ttyS1;UART3=ttys2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART2=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    else
+#      ifdef CONFIG_16550_UART1
+#        define TTYS1_DEV   g_uart1port    /* UART2=ttyS0;UART1=ttyS1 */
+#        ifdef CONFIG_16550_UART3
+#          define TTYS2_DEV g_uart3port    /* UART2=ttyS0;UART1=ttyS1;UART3=ttyS2 */
+#        else
+#          undef TTYS2_DEV                 /* UART2=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      else
+#        ifdef CONFIG_16550_UART3
+#          define TTYS1_DEV g_uart3port    /* UART2=ttyS0;UART3=ttyS1;No ttyS3 */
+#        else
+#          undef TTYS1_DEV                 /* UART2=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS2_DEV                   /* No ttyS2 */
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    endif
+#  elif defined(CONFIG_16550_UART3_SERIAL_CONSOLE)
+#    define CONSOLE_DEV     g_uart3port    /* UART3=console */
+#    define TTYS0_DEV       g_uart3port    /* UART3=ttyS0 */
+#    ifdef CONFIG_16550_UART
+#      define TTYS1_DEV     g_uart0port    /* UART3=ttyS0;UART0=ttyS1 */
+#      ifdef CONFIG_16550_UART1
+#        define TTYS2_DEV   g_uart1port    /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS2 */
+#        ifdef CONFIG_16550_UART2
+#          define TTYS3_DEV g_uart2port    /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS2;UART2=ttyS3 */
+#        else
+#          undef TTYS3_DEV                 /* UART3=ttyS0;UART0=ttyS1;UART1=ttyS;No ttyS3 */
+#        endif
+#      else
+#        ifdef CONFIG_16550_UART2
+#          define TTYS2_DEV g_uart2port    /* UART3=ttyS0;UART0=ttyS1;UART2=ttys2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART3=ttyS0;UART0=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#          undef TTYS3_DEV                 /* No ttyS3 */
+#      endif
+#    else
+#      ifdef CONFIG_16550_UART1
+#        define TTYS1_DEV   g_uart1port    /* UART3=ttyS0;UART1=ttyS1 */
+#        ifdef CONFIG_16550_UART2
+#          define TTYS2_DEV g_uart2port    /* UART3=ttyS0;UART1=ttyS1;UART2=ttyS2;No ttyS3 */
+#        else
+#          undef TTYS2_DEV                 /* UART3=ttyS0;UART1=ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      else
+#        ifdef CONFIG_16550_UART2
+#          define TTYS1_DEV   g_uart2port  /* UART3=ttyS0;UART2=ttyS1;No ttyS3;No ttyS3 */
+#          undef TTYS3_DEV                 /* UART3=ttyS0;UART2=ttyS1;No ttyS2;No ttyS3 */
+#        else
+#          undef TTYS1_DEV                 /* UART3=ttyS0;No ttyS1;No ttyS2;No ttyS3 */
+#        endif
+#        undef TTYS2_DEV                   /* No ttyS2 */
+#        undef TTYS3_DEV                   /* No ttyS3 */
+#      endif
+#    endif
+#  endif
+
+#endif /* CONFIG_16550_SERIAL_DISABLE_REORDERING */
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
 
 /****************************************************************************
  * Name: u16550_serialin
@@ -454,7 +520,11 @@ static uart_dev_t g_uart3port =
 
 static inline uart_datawidth_t u16550_serialin(FAR struct u16550_s *priv, int offset)
 {
+#ifdef CONFIG_SERIAL_UART_ARCH_MMIO
+  return *((FAR volatile uart_addrwidth_t *)priv->uartbase + offset);
+#else
   return uart_getreg(priv->uartbase, offset);
+#endif
 }
 
 /****************************************************************************
@@ -464,7 +534,11 @@ static inline uart_datawidth_t u16550_serialin(FAR struct u16550_s *priv, int of
 static inline void u16550_serialout(FAR struct u16550_s *priv, int offset,
                                     uart_datawidth_t value)
 {
+#ifdef CONFIG_SERIAL_UART_ARCH_MMIO
+  *((FAR volatile uart_addrwidth_t *)priv->uartbase + offset) = value;
+#else
   uart_putreg(priv->uartbase, offset, value);
+#endif
 }
 
 /****************************************************************************
@@ -487,7 +561,8 @@ static inline void u16550_disableuartint(FAR struct u16550_s *priv,
  * Name: u16550_restoreuartint
  ****************************************************************************/
 
-static inline void u16550_restoreuartint(FAR struct u16550_s *priv, uint32_t ier)
+static inline void u16550_restoreuartint(FAR struct u16550_s *priv,
+                                         uint32_t ier)
 {
   priv->ier |= ier & UART_IER_ALLIE;
   u16550_serialout(priv, UART_IER_OFFSET, priv->ier);
@@ -497,7 +572,8 @@ static inline void u16550_restoreuartint(FAR struct u16550_s *priv, uint32_t ier
  * Name: u16550_enablebreaks
  ****************************************************************************/
 
-static inline void u16550_enablebreaks(FAR struct u16550_s *priv, bool enable)
+static inline void u16550_enablebreaks(FAR struct u16550_s *priv,
+                                       bool enable)
 {
   uint32_t lcr = u16550_serialin(priv, UART_LCR_OFFSET);
 
@@ -513,10 +589,10 @@ static inline void u16550_enablebreaks(FAR struct u16550_s *priv, bool enable)
   u16550_serialout(priv, UART_LCR_OFFSET, lcr);
 }
 
-/************************************************************************************
+/****************************************************************************
  * Name: u16550_divisor
  *
- * Descrption:
+ * Description:
  *   Select a divider to produce the BAUD from the UART_CLK.
  *
  *     BAUD = UART_CLK / (16 * DL), or
@@ -524,7 +600,7 @@ static inline void u16550_enablebreaks(FAR struct u16550_s *priv, bool enable)
  *
  *   Ignoring the fractional divider for now.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 #ifndef CONFIG_16550_SUPRESS_CONFIG
 static inline uint32_t u16550_divisor(FAR struct u16550_s *priv)
@@ -532,10 +608,6 @@ static inline uint32_t u16550_divisor(FAR struct u16550_s *priv)
   return (priv->uartclk + (priv->baud << 3)) / (priv->baud << 4);
 }
 #endif
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
 
 /****************************************************************************
  * Name: u16550_setup
@@ -547,12 +619,15 @@ static inline uint32_t u16550_divisor(FAR struct u16550_s *priv)
  *
  ****************************************************************************/
 
-static int u16550_setup(struct uart_dev_s *dev)
+static int u16550_setup(FAR struct uart_dev_s *dev)
 {
 #ifndef CONFIG_16550_SUPRESS_CONFIG
   FAR struct u16550_s *priv = (FAR struct u16550_s *)dev->priv;
   uint16_t div;
   uint32_t lcr;
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+  uint32_t mcr;
+#endif
 
   /* Clear fifos */
 
@@ -624,6 +699,25 @@ static int u16550_setup(struct uart_dev_s *dev)
   u16550_serialout(priv, UART_FCR_OFFSET,
                    (UART_FCR_RXTRIGGER_8 | UART_FCR_TXRST | UART_FCR_RXRST |
                     UART_FCR_FIFOEN));
+
+  /* Set up the auto flow control */
+
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+  mcr = u16550_serialin(priv, UART_MCR_OFFSET);
+  if (priv->flow)
+    {
+      mcr |= UART_MCR_AFCE;
+    }
+  else
+    {
+      mcr &= ~UART_MCR_AFCE;
+    }
+
+  mcr |= UART_MCR_RTS;
+
+  u16550_serialout(priv, UART_MCR_OFFSET, mcr);
+#endif /* defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL) */
+
 #endif
   return OK;
 }
@@ -676,6 +770,7 @@ static int u16550_attach(struct uart_dev_s *dev)
       up_enable_irq(priv->irq);
     }
 #endif
+
   return ret;
 }
 
@@ -711,10 +806,10 @@ static void u16550_detach(FAR struct uart_dev_s *dev)
 
 static int u16550_interrupt(int irq, FAR void *context, FAR void *arg)
 {
-  struct uart_dev_s *dev = (struct uart_dev_s *)arg;
-  struct u16550_s   *priv;
-  uint32_t           status;
-  int                passes;
+  FAR struct uart_dev_s *dev = (struct uart_dev_s *)arg;
+  FAR struct u16550_s *priv;
+  uint32_t status;
+  int passes;
 
   DEBUGASSERT(dev != NULL && dev->priv != NULL);
   priv = (FAR struct u16550_s *)dev->priv;
@@ -791,7 +886,7 @@ static int u16550_interrupt(int irq, FAR void *context, FAR void *arg)
 
           default:
             {
-              _err("ERROR: Unexpected IIR: %02x\n", status);
+              serr("ERROR: Unexpected IIR: %02x\n", status);
               break;
             }
         }
@@ -810,9 +905,9 @@ static int u16550_interrupt(int irq, FAR void *context, FAR void *arg)
 
 static int u16550_ioctl(struct file *filep, int cmd, unsigned long arg)
 {
-  struct inode      *inode = filep->f_inode;
-  struct uart_dev_s *dev   = inode->i_private;
-  struct u16550_s   *priv  = (FAR struct u16550_s *)dev->priv;
+  FAR struct inode *inode = filep->f_inode;
+  FAR struct uart_dev_s *dev   = inode->i_private;
+  FAR struct u16550_s *priv  = (FAR struct u16550_s *)dev->priv;
   int ret;
 
 #ifdef CONFIG_SERIAL_UART_ARCH_IOCTL
@@ -822,6 +917,7 @@ static int u16550_ioctl(struct file *filep, int cmd, unsigned long arg)
     {
       return ret;
     }
+
 #else
   ret = OK;
 #endif
@@ -834,8 +930,7 @@ static int u16550_ioctl(struct file *filep, int cmd, unsigned long arg)
         FAR struct u16550_s *user = (FAR struct u16550_s *)arg;
         if (!user)
           {
-            set_errno(EINVAL);
-            ret = ERROR;
+            ret = -EINVAL;
           }
         else
           {
@@ -862,9 +957,108 @@ static int u16550_ioctl(struct file *filep, int cmd, unsigned long arg)
       }
       break;
 
+#if defined(CONFIG_SERIAL_TERMIOS) && !defined(CONFIG_16550_SUPRESS_CONFIG)
+    case TCGETS:
+      {
+        FAR struct termios *termiosp = (FAR struct termios *)arg;
+        irqstate_t flags;
+
+        if (!termiosp)
+          {
+            ret = -EINVAL;
+            break;
+          }
+
+        flags = enter_critical_section();
+
+        cfsetispeed(termiosp, priv->baud);
+        termiosp->c_cflag = ((priv->parity != 0) ? PARENB : 0) |
+                            ((priv->parity == 1) ? PARODD : 0);
+        termiosp->c_cflag |= (priv->stopbits2) ? CSTOPB : 0;
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+        termiosp->c_cflag |= priv->flow ? CRTSCTS : 0;
+#endif
+
+        switch (priv->bits)
+          {
+          case 5:
+            termiosp->c_cflag |= CS5;
+            break;
+
+          case 6:
+            termiosp->c_cflag |= CS6;
+            break;
+
+          case 7:
+            termiosp->c_cflag |= CS7;
+            break;
+
+          case 8:
+          default:
+            termiosp->c_cflag |= CS8;
+            break;
+          }
+
+        leave_critical_section(flags);
+      }
+      break;
+
+    case TCSETS:
+      {
+        FAR struct termios *termiosp = (FAR struct termios *)arg;
+        irqstate_t flags;
+
+        if (!termiosp)
+          {
+            ret = -EINVAL;
+            break;
+          }
+
+        flags = enter_critical_section();
+
+        switch (termiosp->c_cflag & CSIZE)
+          {
+          case CS5:
+            priv->bits = 5;
+            break;
+
+          case CS6:
+            priv->bits = 6;
+            break;
+
+          case CS7:
+            priv->bits = 7;
+            break;
+
+          case CS8:
+          default:
+            priv->bits = 8;
+            break;
+          }
+
+        if ((termiosp->c_cflag & PARENB) != 0)
+          {
+            priv->parity = (termiosp->c_cflag & PARODD) ? 1 : 2;
+          }
+        else
+          {
+            priv->parity = 0;
+          }
+
+        priv->baud      = cfgetispeed(termiosp);
+        priv->stopbits2 = (termiosp->c_cflag & CSTOPB) != 0;
+#if defined(CONFIG_SERIAL_IFLOWCONTROL) || defined(CONFIG_SERIAL_OFLOWCONTROL)
+        priv->flow      = (termiosp->c_cflag & CRTSCTS) != 0;
+#endif
+
+        u16550_setup(dev);
+        leave_critical_section(flags);
+      }
+      break;
+#endif
+
     default:
-      set_errno(ENOTTY);
-      ret = ERROR;
+      ret = -ENOTTY;
       break;
     }
 
@@ -902,6 +1096,7 @@ static int u16550_receive(struct uart_dev_s *dev, uint32_t *status)
 static void u16550_rxint(struct uart_dev_s *dev, bool enable)
 {
   FAR struct u16550_s *priv = (FAR struct u16550_s *)dev->priv;
+
   if (enable)
     {
       priv->ier |= UART_IER_ERBFI;
@@ -927,6 +1122,65 @@ static bool u16550_rxavailable(struct uart_dev_s *dev)
   FAR struct u16550_s *priv = (FAR struct u16550_s *)dev->priv;
   return ((u16550_serialin(priv, UART_LSR_OFFSET) & UART_LSR_DR) != 0);
 }
+
+/****************************************************************************
+ * Name: u16550_dma*
+ *
+ * Description:
+ *   Stubbed out DMA-related methods
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SERIAL_IFLOWCONTROL
+static bool u16550_rxflowcontrol(struct uart_dev_s *dev, unsigned int nbuffered,
+                                 bool upper)
+{
+#ifndef CONFIG_16550_SUPRESS_CONFIG
+  FAR struct u16550_s *priv = (FAR struct u16550_s *)dev->priv;
+
+  if (priv->flow)
+    {
+      /* Disable Rx interrupt to prevent more data being from
+       * peripheral if the RX buffer is near full. When hardware
+       * RTS is enabled, this will prevent more data from coming
+       * in. Otherwise, enable Rx interrupt to make sure that more
+       * input is received.
+       */
+
+      u16550_rxint(dev, !upper);
+      return true;
+    }
+#endif
+
+  return false;
+}
+#endif
+
+/****************************************************************************
+ * Name: u16550_dma*
+ *
+ * Description:
+ *   Stub functions used when serial DMA is enabled.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SERIAL_DMA
+static void u16550_dmasend(FAR struct uart_dev_s *dev)
+{
+}
+
+static void u16550_dmareceive(FAR struct uart_dev_s *dev)
+{
+}
+
+static void u16550_dmarxfree(FAR struct uart_dev_s *dev)
+{
+}
+
+static void u16550_dmatxavail(FAR struct uart_dev_s *dev)
+{
+}
+#endif
 
 /****************************************************************************
  * Name: u16550_send
@@ -1001,7 +1255,7 @@ static bool u16550_txready(struct uart_dev_s *dev)
 static bool u16550_txempty(struct uart_dev_s *dev)
 {
   FAR struct u16550_s *priv = (FAR struct u16550_s *)dev->priv;
-  return ((u16550_serialin(priv, UART_LSR_OFFSET) & UART_LSR_THRE) != 0);
+  return ((u16550_serialin(priv, UART_LSR_OFFSET) & UART_LSR_TEMT) != 0);
 }
 
 /****************************************************************************
@@ -1012,14 +1266,16 @@ static bool u16550_txempty(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
+#ifdef HAVE_16550_CONSOLE
 static void u16550_putc(FAR struct u16550_s *priv, int ch)
 {
   while ((u16550_serialin(priv, UART_LSR_OFFSET) & UART_LSR_THRE) == 0);
   u16550_serialout(priv, UART_THR_OFFSET, (uart_datawidth_t)ch);
 }
+#endif
 
 /****************************************************************************
- * Public Funtions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -1037,26 +1293,13 @@ static void u16550_putc(FAR struct u16550_s *priv, int ch)
 
 void up_earlyserialinit(void)
 {
-  /* Configure all UARTs (except the CONSOLE UART) and disable interrupts */
-
-#ifdef CONFIG_16550_UART0
-  u16550_disableuartint(&g_uart0priv, NULL);
-#endif
-#ifdef CONFIG_16550_UART1
-  u16550_disableuartint(&g_uart1priv, NULL);
-#endif
-#ifdef CONFIG_16550_UART2
-  u16550_disableuartint(&g_uart2priv, NULL);
-#endif
-#ifdef CONFIG_16550_UART3
-  u16550_disableuartint(&g_uart3priv, NULL);
-#endif
-
   /* Configuration whichever one is the console */
 
 #ifdef CONSOLE_DEV
   CONSOLE_DEV.isconsole = true;
+#ifndef CONFIG_16550_SUPRESS_INITIAL_CONFIG
   u16550_setup(&CONSOLE_DEV);
+#endif
 #endif
 }
 

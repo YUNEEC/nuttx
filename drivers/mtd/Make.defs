@@ -124,6 +124,10 @@ ifeq ($(CONFIG_MTD_GD5F_QSPI),y)
 CSRCS += gd5f_qspi.c
 endif
 
+ifeq ($(CONFIG_MTD_GD25),y)
+CSRCS += gd25.c
+endif
+
 ifeq ($(CONFIG_MTD_AT25),y)
 CSRCS += at25.c
 endif
@@ -134,6 +138,10 @@ endif
 
 ifeq ($(CONFIG_MTD_MX25L),y)
 CSRCS += mx25lx.c
+endif
+
+ifeq ($(CONFIG_MTD_MX35),y)
+CSRCS += mx35.c
 endif
 
 ifeq ($(CONFIG_MTD_S25FL1),y)
@@ -155,12 +163,6 @@ endif
 ifeq ($(CONFIG_MTD_SMART),y)
 ifeq ($(CONFIG_FS_SMARTFS),y)
 CSRCS += smart.c
-endif
-endif
-
-ifeq ($(CONFIG_FS_PROCFS),y)
-ifneq ($(CONFIG_FS_PROCFS_EXCLUDE_MTD),y)
-CSRCS += mtd_procfs.c
 endif
 endif
 

@@ -62,10 +62,10 @@
  *   thread-specific errno value.  It is #define'd to the symbol errno in
  *   include/errno.h.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   The current value of the thread specific errno.
  *
  * Assumptions:

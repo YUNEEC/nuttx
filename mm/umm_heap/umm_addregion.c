@@ -55,11 +55,11 @@
  *   function is exported from the user-space blob so that the kernel
  *   can initialize the user-mode allocator.
  *
- * Parameters:
+ * Input Parameters:
  *   heap_start - Address of the beginning of the memory region
  *   heap_size  - The size (in bytes) if the memory region.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

@@ -47,8 +47,9 @@
 #include <stdio.h>
 
 #include <nuttx/kmalloc.h>
-#include <nuttx/sensors/adxl345.h>
+#include <nuttx/signal.h>
 #include <nuttx/random.h>
+#include <nuttx/sensors/adxl345.h>
 
 #include "adxl345.h"
 
@@ -139,7 +140,7 @@ static ssize_t adxl345_read(FAR struct file *filep, FAR char *buffer, size_t len
 
   if (len < sizeof(struct adxl345_sample_s))
     {
-      /* We could provide logic to break up a touch report into segments and
+      /* We could provide logic to break up a sample into segments and
        * handle smaller reads... but why?
        */
 
@@ -148,13 +149,13 @@ static ssize_t adxl345_read(FAR struct file *filep, FAR char *buffer, size_t len
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Read accelerometer X Y Z axes */
@@ -173,7 +174,7 @@ static ssize_t adxl345_read(FAR struct file *filep, FAR char *buffer, size_t len
 
   buffer = (FAR char *) &sample;
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return sizeof(struct adxl345_sample_s);
 }
 
@@ -181,7 +182,7 @@ static ssize_t adxl345_read(FAR struct file *filep, FAR char *buffer, size_t len
  * Name: adxl345_register
  *
  * Description:
- *  This function will register the touchscreen driver as /dev/accelN where N
+ *  This function will register the accelerometer driver as /dev/accelN where N
  *  is the minor device number
  *
  * Input Parameters:
@@ -205,12 +206,12 @@ int adxl345_register(ADXL345_HANDLE handle, int minor)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      snerr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      snerr("ERROR: nxsem_wait failed: %d\n", ret);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Initialize the structure fields to their default values */
@@ -226,14 +227,14 @@ int adxl345_register(ADXL345_HANDLE handle, int minor)
   if (ret < 0)
     {
       snerr("ERROR: Failed to register driver %s: %d\n", devname, ret);
-      sem_post(&priv->exclsem);
+      nxsem_post(&priv->exclsem);
       return ret;
     }
 
   /* Indicate that the accelerometer was successfully initialized */
 
   priv->status |= ADXL345_STAT_INITIALIZED;  /* Accelerometer is initialized */
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return ret;
 }
 
@@ -359,7 +360,7 @@ static void adxl345_reset(FAR struct adxl345_dev_s *priv)
 
   /* Wait a bit to make the GOD of TIME happy */
 
-  usleep(20*1000);
+  nxsig_usleep(20*1000);
 }
 
 /****************************************************************************
@@ -407,7 +408,7 @@ ADXL345_HANDLE adxl345_instantiate(FAR struct i2c_master_s *dev,
 
   /* Initialize the device state structure */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   priv->config = config;
 
 #ifdef CONFIG_ADXL345_SPI

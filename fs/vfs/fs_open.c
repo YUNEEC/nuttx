@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_open.c
  *
- *   Copyright (C) 2007-2009, 2011-2012, 2016-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2012, 2016-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,9 +46,7 @@
 #include <sched.h>
 #include <errno.h>
 #include <assert.h>
-#ifdef CONFIG_FILE_MODE
 #include <stdarg.h>
-#endif
 
 #include <nuttx/cancelpt.h>
 #include <nuttx/fs/fs.h>
@@ -81,14 +80,22 @@ int inode_checkflags(FAR struct inode *inode, int oflags)
 }
 
 /****************************************************************************
- * Name: open
+ * Name: nx_vopen
  *
  * Description:
- *   Standard 'open' interface
+ *   nx_vopen() is identical to 'nx_open' except that it accepts a va_list
+ *   as an argument versus taking a variable length list of arguments.
+ *
+ *   nx_vopen() is an internal NuttX interface and should not be called from
+ *   applications.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
  *
  ****************************************************************************/
 
-int open(const char *path, int oflags, ...)
+int nx_vopen(FAR const char *path, int oflags, va_list ap)
 {
   struct inode_search_s desc;
   FAR struct file *filep;
@@ -99,20 +106,20 @@ int open(const char *path, int oflags, ...)
   int ret;
   int fd;
 
+  if (path == NULL)
+    {
+      return -EINVAL;
+    }
+
 #ifdef CONFIG_FILE_MODE
 #  ifdef CONFIG_CPP_HAVE_WARNING
 #    warning "File creation not implemented"
 #  endif
 
-  /* open() is a cancellation point */
-
-  (void)enter_cancellation_point();
-
   /* If the file is opened for creation, then get the mode bits */
 
   if ((oflags & (O_WRONLY | O_CREAT)) != 0)
     {
-      va_list ap;
       va_start(ap, oflags);
       mode = va_arg(ap, mode_t);
       va_end(ap);
@@ -131,7 +138,6 @@ int open(const char *path, int oflags, ...)
        * symbolic link."
        */
 
-      ret = -ret;
       goto errout_with_search;
     }
 
@@ -151,7 +157,7 @@ int open(const char *path, int oflags, ...)
     * NOTE: This will recurse to open the character driver proxy.
     */
 
-   if (INODE_IS_BLOCK(inode))
+   if (INODE_IS_BLOCK(inode) || INODE_IS_MTD(inode))
      {
        /* Release the inode reference */
 
@@ -162,14 +168,12 @@ int open(const char *path, int oflags, ...)
        fd = block_proxy(path, oflags);
        if (fd < 0)
          {
-           ret = fd;
            goto errout_with_search;
          }
 
        /* Return the file descriptor */
 
        RELEASE_SEARCH(&desc);
-       leave_cancellation_point();
        return fd;
      }
    else
@@ -186,7 +190,7 @@ int open(const char *path, int oflags, ...)
   if (!INODE_IS_DRIVER(inode) || !inode->u.i_ops)
 #endif
     {
-      ret = ENXIO;
+      ret = -ENXIO;
       goto errout_with_inode;
     }
 
@@ -195,7 +199,6 @@ int open(const char *path, int oflags, ...)
   ret = inode_checkflags(inode, oflags);
   if (ret < 0)
     {
-      ret = -ret;
       goto errout_with_inode;
     }
 
@@ -204,18 +207,16 @@ int open(const char *path, int oflags, ...)
   fd = files_allocate(inode, oflags, 0, 0);
   if (fd < 0)
     {
-      ret = EMFILE;
+      ret = -EMFILE;
       goto errout_with_inode;
     }
 
   /* Get the file structure corresponding to the file descriptor. */
 
-  filep = fs_getfilep(fd);
-  if (!filep)
+  ret = fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* The errno value has already been set */
-
-      goto errout;
+      goto errout_with_inode;
     }
 
   /* Perform the driver open operation.  NOTE that the open method may be
@@ -240,7 +241,6 @@ int open(const char *path, int oflags, ...)
 
   if (ret < 0)
     {
-      ret = -ret;
       goto errout_with_fd;
     }
 
@@ -276,7 +276,6 @@ int open(const char *path, int oflags, ...)
 #endif
 
   RELEASE_SEARCH(&desc);
-  leave_cancellation_point();
   return fd;
 
 errout_with_fd:
@@ -287,9 +286,74 @@ errout_with_inode:
 
 errout_with_search:
   RELEASE_SEARCH(&desc);
-  set_errno(ret);
+  return ret;
+}
 
-errout:
+/****************************************************************************
+ * Name: nx_open
+ *
+ * Description:
+ *   nx_open() is similar to the standard 'open' interface except that is is
+ *   not a cancellation point and it does not modify the errno variable.
+ *
+ *   nx_open() is an internal NuttX interface and should not be called from
+ *   applications.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
+ *
+ ****************************************************************************/
+
+int nx_open(FAR const char *path, int oflags, ...)
+{
+  va_list ap;
+  int fd;
+
+  /* Let nx_vopen() do all of the work */
+
+  va_start(ap, oflags);
+  fd = nx_vopen(path, oflags, ap);
+  va_end(ap);
+
+  return fd;
+}
+
+/****************************************************************************
+ * Name: open
+ *
+ * Description:
+ *   Standard 'open' interface
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; -1 (ERROR) is returned on any failure
+ *   the the errno value set appropriately.
+ *
+ ****************************************************************************/
+
+int open(FAR const char *path, int oflags, ...)
+{
+  va_list ap;
+  int fd;
+
+  /* open() is a cancellation point */
+
+  (void)enter_cancellation_point();
+
+  /* Let nx_vopen() do most of the work */
+
+  va_start(ap, oflags);
+  fd = nx_vopen(path, oflags, ap);
+  va_end(ap);
+
+  /* Set the errno value if any errors were reported by nx_open() */
+
+  if (fd < 0)
+    {
+      set_errno(-fd);
+      fd = ERROR;
+    }
+
   leave_cancellation_point();
-  return ERROR;
+  return fd;
 }

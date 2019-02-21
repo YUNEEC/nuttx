@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/local/local_accept.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
 #include <queue.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 
 #include "socket/socket.h"
@@ -69,12 +70,11 @@ static int local_waitlisten(FAR struct local_conn_s *server)
     {
       /* No.. wait for a connection or a signal */
 
-      ret = sem_wait(&server->lc_waitsem);
+      ret = nxsem_wait(&server->lc_waitsem);
       if (ret < 0)
         {
-          int errval = get_errno();
-          DEBUGASSERT(errval == EINTR);
-          return -errval;
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+          return ret;
         }
     }
 
@@ -94,7 +94,7 @@ static int local_waitlisten(FAR struct local_conn_s *server)
  *   This function implements accept() for Unix domain sockets.  See the
  *   description of accept() for further information.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    The listening Unix domain socket structure
  *   addr     Receives the address of the connecting client
  *   addrlen  Input: allocated size of 'addr', Return: returned size of 'addr'
@@ -201,7 +201,7 @@ int local_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
 
           if (ret == OK)
             {
-              DEBUGASSERT(conn->lc_outfd >= 0);
+              DEBUGASSERT(conn->lc_outfile.f_inode != NULL);
 
               /* Open the server-side read-only FIFO.  This should not
                * block because the client side has already opening it
@@ -221,7 +221,7 @@ int local_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
 
           if (ret == OK)
             {
-              DEBUGASSERT(conn->lc_infd >= 0);
+              DEBUGASSERT(conn->lc_infile.f_inode != NULL);
 
               /* Return the address family */
 
@@ -244,7 +244,7 @@ int local_accept(FAR struct socket *psock, FAR struct sockaddr *addr,
           /* Signal the client with the result of the connection */
 
           client->u.client.lc_result = ret;
-          sem_post(&client->lc_waitsem);
+          nxsem_post(&client->lc_waitsem);
           return ret;
         }
 

@@ -1,7 +1,8 @@
 ############################################################################
 # arch/arm/src/Makefile
 #
-#   Copyright (C) 2007-2009, 2011-2012, 2014-2016 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007-2009, 2011-2012, 2014-2016 Gregory Nutt. All rights
+#     reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -138,7 +139,7 @@ LINKLIBS ?=
 
 ifeq ($(CONFIG_WINDOWS_NATIVE),y)
   BOARDMAKE = $(if $(wildcard .\board\Makefile),y,)
-  LIBPATHS += -L"$(TOPDIR)\lib"
+  LIBPATHS += -L"$(TOPDIR)\staging"
 ifeq ($(BOARDMAKE),y)
   LIBPATHS += -L"$(TOPDIR)\arch\$(CONFIG_ARCH)\src\board"
 endif
@@ -147,13 +148,13 @@ else
   BOARDMAKE = $(if $(wildcard ./board/Makefile),y,)
 
 ifeq ($(WINTOOL),y)
-  LIBPATHS += -L"${shell cygpath -w "$(TOPDIR)/lib"}"
+  LIBPATHS += -L"${shell cygpath -w "$(TOPDIR)/staging"}"
 ifeq ($(BOARDMAKE),y)
   LIBPATHS += -L"${shell cygpath -w "$(TOPDIR)/arch/$(CONFIG_ARCH)/src/board"}"
 endif
 
 else
-  LIBPATHS += -L"$(TOPDIR)/lib"
+  LIBPATHS += -L"$(TOPDIR)/staging"
 ifeq ($(BOARDMAKE),y)
   LIBPATHS += -L"$(TOPDIR)/arch/$(CONFIG_ARCH)/src/board"
 endif
@@ -173,10 +174,8 @@ VPATH += common
 VPATH += $(ARCH_SUBDIR)
 
 ifeq ($(CONFIG_ARCH_TOOLCHAIN_IAR),y)
-  VPATH += chip$(DELIM)iar
   VPATH += $(ARCH_SUBDIR)$(DELIM)iar
 else # ifeq ($(CONFIG_ARCH_TOOLCHAIN_GNU),y)
-  VPATH += chip$(DELIM)gnu
   VPATH += $(ARCH_SUBDIR)$(DELIM)gnu
 endif
 

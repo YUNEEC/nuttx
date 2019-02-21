@@ -1,7 +1,8 @@
 /****************************************************************************
  * drivers/can/can.c
  *
- *   Copyright (C) 2008-2009, 2011-2012, 2014-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2011-2012, 2014-2015, 2017 Gregory Nutt. All
+ *     rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  *   Copyright (C) 2016 Omni Hoverboards Inc. All rights reserved.
@@ -55,6 +56,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/can/can.h>
@@ -179,29 +181,25 @@ static const struct file_operations g_canops =
 
 static int can_takesem(FAR sem_t *sem)
 {
-  int errcode;
+  int ret;
 
   /* Take a count from the semaphore, possibly waiting */
 
-  if (sem_wait(sem) < 0)
-    {
-      /* The only case that an error should occur here is if the wait
-       * was awakened by a signal
-       */
+  ret = nxsem_wait(sem);
 
-      errcode = get_errno();
-      DEBUGASSERT(errcode == EINTR);
-      return -errcode;
-    }
+  /* The only case that an error should occur here is if the wait
+   * was awakened by a signal
+   */
 
-  return OK;
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
  * Name: can_givesem
  ****************************************************************************/
 
-#define can_givesem(sem) sem_post(sem)
+#define can_givesem(sem) nxsem_post(sem)
 
 /****************************************************************************
  * Name: can_pollnotify
@@ -222,7 +220,7 @@ static void can_pollnotify(FAR struct can_dev_s *dev, pollevent_t eventset)
           if (fds->revents != 0)
             {
               caninfo("Report events: %02x\n", fds->revents);
-              sem_post(fds->sem);
+              nxsem_post(fds->sem);
             }
         }
     }
@@ -241,7 +239,7 @@ static void can_pollnotify(FAR struct can_dev_s *dev, pollevent_t eventset)
  *   standard CAN.  In CAN FD mode, the values 9 to 15 are encoded to values
  *   in the range 12 to 64.
  *
- * Input Parameter:
+ * Input Parameters:
  *   dlc    - the DLC value to convert to a byte count
  *
  * Returned Value:
@@ -290,7 +288,7 @@ static uint8_t can_dlc2bytes(uint8_t dlc)
  *   standard CAN.  In CAN FD mode, the values 9 to 15 are encoded to values
  *   in the range 12 to 64.
  *
- * Input Parameter:
+ * Input Parameters:
  *   nbytes - the byte count to convert to a DLC value
  *
  * Returned Value:
@@ -523,7 +521,7 @@ static int can_close(FAR struct file *filep)
   while (dev->cd_xmit.tx_head != dev->cd_xmit.tx_tail)
     {
 #ifndef CONFIG_DISABLE_SIGNALS
-       usleep(HALF_SECOND_USEC);
+       nxsig_usleep(HALF_SECOND_USEC);
 #else
        up_mdelay(HALF_SECOND_MSEC);
 #endif
@@ -534,7 +532,7 @@ static int can_close(FAR struct file *filep)
   while (!dev_txempty(dev))
     {
 #ifndef CONFIG_DISABLE_SIGNALS
-      usleep(HALF_SECOND_USEC);
+      nxsig_usleep(HALF_SECOND_USEC);
 #else
       up_mdelay(HALF_SECOND_MSEC);
 #endif
@@ -1169,11 +1167,11 @@ int can_register(FAR const char *path, FAR struct can_dev_s *dev)
 
   /* Initialize semaphores */
 
-  sem_init(&dev->cd_xmit.tx_sem, 0, 1);
-  sem_init(&dev->cd_recv.rx_sem, 0, 1);
-  sem_init(&dev->cd_closesem,    0, 1);
+  nxsem_init(&dev->cd_xmit.tx_sem, 0, 1);
+  nxsem_init(&dev->cd_recv.rx_sem, 0, 1);
+  nxsem_init(&dev->cd_closesem,    0, 1);
 #ifndef CONFIG_DISABLE_POLL
-  sem_init(&dev->cd_pollsem,     0, 1);
+  nxsem_init(&dev->cd_pollsem,     0, 1);
 #endif
 
   for (i = 0; i < CONFIG_CAN_NPENDINGRTR; i++)
@@ -1182,8 +1180,8 @@ int can_register(FAR const char *path, FAR struct can_dev_s *dev)
        * and should not have priority inheritance enabled.
        */
 
-      sem_init(&dev->cd_rtr[i].cr_sem, 0, 0);
-      sem_setprotocol(&dev->cd_rtr[i].cr_sem, SEM_PRIO_NONE);
+      nxsem_init(&dev->cd_rtr[i].cr_sem, 0, 0);
+      nxsem_setprotocol(&dev->cd_rtr[i].cr_sem, SEM_PRIO_NONE);
       dev->cd_rtr[i].cr_msg = NULL;
     }
 

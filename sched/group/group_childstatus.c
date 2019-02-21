@@ -97,10 +97,10 @@ static struct child_pool_s g_child_pool;
  * Description:
  *   Dump all of the children when the part TCB list is modified.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The task group containing the child status.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -137,10 +137,10 @@ static void group_dumpchildren(FAR struct task_group_s *group,
  *   Initialize task related status.  At present, this includes only the
  *   initialize of the child status pool.
  *
- * Parameters:
+ * Input Parameters:
  *   None.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -173,10 +173,10 @@ void task_initialize(void)
  *   Allocate a child status structure by removing the next entry from a
  *   free list.
  *
- * Parameters:
+ * Input Parameters:
  *   None.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a non-NULL pointer to a child status structure.  NULL is
  *   returned if there are no remaining, pre-allocated child status structures.
  *
@@ -208,10 +208,10 @@ FAR struct child_status_s *group_allocchild(void)
  * Description:
  *   Release a child status structure by returning it to a free list.
  *
- * Parameters:
+ * Input Parameters:
  *   status - The child status structure to be freed.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -237,11 +237,11 @@ void group_freechild(FAR struct child_status_s *child)
  * Description:
  *   Add a child status structure in the given TCB.
  *
- * Parameters:
+ * Input Parameters:
  *   group  - The task group for the child status.
  *   child  - The structure to be added
  *
- * Return Value:
+ * Returned Value:
  *   N
  *
  * Assumptions:
@@ -269,11 +269,11 @@ void group_addchild(FAR struct task_group_s *group,
  *   the child structure is returned, but the child remains in the group's
  *   list of children.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The ID of the parent task group to containing the child status.
  *   pid - The ID of the child to find.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a non-NULL pointer to a child status structure.  NULL is
  *   returned if there is child status structure for that pid in the TCB.
  *
@@ -309,10 +309,10 @@ FAR struct child_status_s *group_findchild(FAR struct task_group_s *group,
  * Description:
  *   Search for any child that has exitted.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - The TCB of the parent task to containing the child status.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a non-NULL pointer to a child status structure for the
  *   exited child.  NULL is returned if not child has exited.
  *
@@ -347,11 +347,11 @@ FAR struct child_status_s *group_exitchild(FAR struct task_group_s *group)
  *   is not yet freed.  group_freechild must be called in order to free the
  *   child status structure.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The task group containing the child status.
  *   pid - The ID of the child to find.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a non-NULL pointer to a child status structure.  NULL is
  *   returned if there is child status structure for that pid in the TCB.
  *
@@ -409,10 +409,10 @@ FAR struct child_status_s *group_removechild(FAR struct task_group_s *group,
  * Description:
  *   Remove and free all child structure from the task group.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The task group containing the child status.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:

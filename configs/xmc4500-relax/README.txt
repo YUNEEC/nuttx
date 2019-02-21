@@ -11,7 +11,7 @@ Status
 ======
 
   2017-03-21:   The XMC4500 Relax boots into NSH, provides the NSH prompt,
-    and the LEDs are working.  But there is a problem with sserial input.
+    and the LEDs are working.  But there is a problem with serial input.
     The most likely reason for this is there are no serial RX interripts.
 
 Serial Console
@@ -81,9 +81,10 @@ Configurations
   Each XMC4500 Relax configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh xmc5400-relax/<subdir>
-    cd -
+    .tools/configure.sh xmc5400-relax/<subdir>
+
+  See '.tools/configure.sh -h' for a list of all options.  The most typical
+  are -l to select the Linux host or -c to select the Windows Cygwin host.
 
   Before starting the build, make sure that your PATH environment variable
   includes the correct path to your toolchain.
@@ -91,7 +92,6 @@ Configurations
   And then build NuttX by simply typing the following.  At the conclusion of
   the make, the nuttx binary will reside in an ELF file called, simply, nuttx.
 
-    make oldconfig
     make
 
   The <subdir> that is provided above as an argument to the tools/configure.sh
@@ -128,21 +128,21 @@ Configurations
          CONFIG_UART0_2STOP=0
 
 
-  3. All of these configurations are set up to build under Windows using the
-     "GNU Tools for ARM Embedded Processors" that is maintained by ARM
-     (unless stated otherwise in the description of the configuration).
+    3. All of these configurations are set up to build under Windows using
+       the  "GNU Tools for ARM Embedded Processors" that is maintained by
+       ARM (unless stated otherwise in the description of the configuration).
 
-       https://developer.arm.com/open-source/gnu-toolchain/gnu-rm
+         https://developer.arm.com/open-source/gnu-toolchain/gnu-rm
 
-     That toolchain selection can easily be reconfigured using
-     'make menuconfig'.  Here are the relevant current settings:
+       That toolchain selection can easily be reconfigured using
+       'make menuconfig'.  Here are the relevant current settings:
 
-     Build Setup:
-       CONFIG_HOST_WINDOWS=y               : Window environment
-       CONFIG_WINDOWS_CYGWIN=y             : Cywin under Windows
+       Build Setup:
+         CONFIG_HOST_WINDOWS=y               : Window environment
+         CONFIG_WINDOWS_CYGWIN=y             : Cywin under Windows
 
-     System Type -> Toolchain:
-       CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIW=y : GNU ARM EABI toolchain
+       System Type -> Toolchain:
+         CONFIG_ARMV7M_TOOLCHAIN_GNU_EABIW=y : GNU ARM EABI toolchain
 
   Configuration sub-directories
   -----------------------------
@@ -162,3 +162,24 @@ Configurations
 
        Application Configuration:
          CONFIG_NSH_BUILTIN_APPS=y  : Enable starting apps from NSH command line
+
+SPI
+===
+
+  Using MAX6675 Thermocouple
+  --------------------------
+
+  There is a board support to use a MAX6675 connected to SPI2. In other to use
+  it you need to enable these options:
+
+    CONFIG_XMC4_USIC=y
+    CONFIG_XMC4_USCI_UART=y
+    CONFIG_XMC4_USCI_SPI=y
+    CONFIG_XMC4_SPI2=y
+    CONFIG_XMC4_USIC1=y
+    CONFIG_XMC4_USIC1_CHAN0_ISSPI=y
+    CONFIG_XMC4_USIC1_CHAN1_ISUART=y
+    CONFIG_UART3_SERIAL_CONSOLE=y
+    CONFIG_SENSORS_MAX6675=y
+
+  These are the used SPI pins: SCLK = P0.11, MISO = P0.4 and CS = P0.2

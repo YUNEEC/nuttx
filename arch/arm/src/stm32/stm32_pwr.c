@@ -144,7 +144,6 @@ void stm32_pwr_enablesdadc(uint8_t sdadc)
     }
 
   stm32_pwr_modifyreg32(STM32_PWR_CR_OFFSET, 0, setbits);
-
 }
 #endif
 
@@ -264,7 +263,7 @@ void stm32_pwr_enablebkp(bool writable)
  *   wupin - Selects the WKUP pin to enable/disable
  *   wupon - state to set it to
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned on any
  *   failure.  The only cause of failure is if the selected MCU does not support
  *   the requested wakeup pin.
@@ -321,6 +320,32 @@ int stm32_pwr_enablewkup(enum stm32_pwr_wupin_e wupin, bool wupon)
 }
 
 /************************************************************************************
+ * Name: stm32_pwr_getsbf
+ *
+ * Description:
+ *   Return the standby flag.
+ *
+ ************************************************************************************/
+
+bool stm32_pwr_getsbf(void)
+{
+  return (stm32_pwr_getreg32(STM32_PWR_CSR_OFFSET) & PWR_CSR_SBF) != 0;
+}
+
+/************************************************************************************
+ * Name: stm32_pwr_getwuf
+ *
+ * Description:
+ *   Return the wakeup flag.
+ *
+ ************************************************************************************/
+
+bool stm32_pwr_getwuf(void)
+{
+  return (stm32_pwr_getreg32(STM32_PWR_CSR_OFFSET) & PWR_CSR_WUF) != 0;
+}
+
+/************************************************************************************
  * Name: stm32_pwr_enablebreg
  *
  * Description:
@@ -334,7 +359,7 @@ int stm32_pwr_enablewkup(enum stm32_pwr_wupin_e wupin, bool wupon)
  * Input Parameters:
  *   regon - state to set it to
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ************************************************************************************/
@@ -365,7 +390,7 @@ void stm32_pwr_enablebreg(bool regon)
  * Input Parameters:
  *   vos - Properly aligned voltage scaling select bits for the PWR_CR register.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -407,7 +432,7 @@ void stm32_pwr_setvos(uint16_t vos)
  * Input Parameters:
  *   pls - PVD level
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:

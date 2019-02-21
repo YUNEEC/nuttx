@@ -42,7 +42,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
@@ -50,11 +49,10 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
-#include <nuttx/kmalloc.h>
 
-#include "socket/socket.h"
 #include "usrsock/usrsock.h"
 
 /****************************************************************************
@@ -81,7 +79,7 @@ static uint16_t sendto_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
   else if (flags & USRSOCK_EVENT_REQ_COMPLETE)
     {
@@ -105,7 +103,7 @@ static uint16_t sendto_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
   else if (flags & USRSOCK_EVENT_REMOTE_CLOSED)
     {
@@ -121,7 +119,7 @@ static uint16_t sendto_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
   else if (flags & USRSOCK_EVENT_SENDTO_READY)
     {
@@ -139,7 +137,7 @@ static uint16_t sendto_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
 
   return flags;
@@ -197,7 +195,7 @@ static int do_sendto_request(FAR struct usrsock_conn_s *conn,
  *   may be returned when they are not NULL and 0), and the error ENOTCONN is
  *   returned when the socket was not actually connected.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Data to send
  *   len      Length of data to send
@@ -402,7 +400,7 @@ ssize_t usrsock_sendto(FAR struct socket *psock, FAR const void *buf,
 
           while ((ret = net_lockedwait(&state.recvsem)) < 0)
             {
-              DEBUGASSERT(ret == -EINTR);
+              DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
             }
 
           ret = state.result;

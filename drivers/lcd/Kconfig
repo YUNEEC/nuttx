@@ -19,12 +19,21 @@ menuconfig LCD
 
 if LCD
 
+config LCD_PACKEDMSFIRST
+	bool
+	default n
+
+config LCD_UPDATE
+	bool
+	default n
+	select NX_UPDATE if NX
+
 comment "Common Graphic LCD Settings"
 
 config LCD_FRAMEBUFFER
 	bool "LCD framebuffer front end"
 	default n
-	select NX_UPDATE if NX
+	select LCD_UPDATE
 	---help---
 		Enable a "front end" that converts an sequential LCD driver into a
 		standard, NuttX frame buffer driver.
@@ -33,21 +42,21 @@ config LCD_FRAMEBUFFER
 		effeciency reasons but do not export a framebuffer interface.  So
 		those LCD cannot be used as framebuffer drivers.  If the option is
 		available, then such internal framebuffer support should be
-		disabled because this external commone framebuffer interface will
+		disabled because this external common framebuffer interface will
 		provide the necessary buffering.
 
-menu "LCD driver selection"
-
-config LCD_CONSOLE
-	bool "LCD console output"
+config LCD_EXTERNINIT
+	bool "External LCD Initialization"
 	default n
+	depends on LCD_FRAMEBUFFER
 	---help---
-		It is possible to use an SLCD to provide console output.  This option
-		enables that possibility.
+		Define to support external LCD initialization by platform-specific
+		code.  This this option is defined, then the LCD framebuffer
+		emulation will call board_graphics_setup() to initialize the
+		graphics device.  This option is necessary if display is used that
+		cannot be initialized using the standard LCD interfaces.
 
-		At present, only one architecture supports this option (M16C).
-		However, this feature could be provided by other architectures in
-		the future.
+menu "LCD driver selection"
 
 config LCD_NOGETRUN
 	bool "Write-only LCD"
@@ -66,8 +75,7 @@ config LCD_NOGETRUN
 config LCD_MAXCONTRAST
 	int "LCD maximum contrast"
 	default 31 if AQM_1248A
-	default 63 if NOKIA6100_S1D15G10 || LCD_SHARP_MEMLCD
-	default 127 if NOKIA6100_PCF8833
+	default 63 if LCD_SHARP_MEMLCD
 	default 255 if LCD_P14201 || LCD_LCD1602
 	default 63
 	range 1 255
@@ -136,115 +144,47 @@ config P14201_FRAMEBUFFER
 		The latter limitation effectively reduces the 128x96 disply to 64x96.
 
 		NOTE: This option should not be used if CONFIG_LCD_FRAMBEBUFFER is
-		enabled.  That options provides for a more geneneralized, external
+		enabled.  That options provides for a more generalized, external
 		LCD framebuffer.  This internal framebuffer support should not be
-		enabled with CONFIG_LCD_FRAMBEBUFFER because this external commone
+		enabled with CONFIG_LCD_FRAMBEBUFFER because this external common
 		framebuffer interface will provide the necessary buffering.
 endif
 
-config LCD_NOKIA6100
-	bool "Nokia 6100 display support"
+config LCD_MAX7219
+	bool "Matrix of 8x8 LEDs controlled by MAX7219"
 	default n
 	---help---
-		nokia6100.c.  Supports the Nokia 6100 display with either the Philips
-		PCF883 or the Epson S1D15G10 display controller.  This LCD is used
-		with the Olimex LPC1766-STK (but has not been fully integrated).
+		Matrix of LEDs (8x8) controlled by MAX7219.
+		You can use cluster of 8x8 chained together.
 
-if LCD_NOKIA6100
+if LCD_MAX7219
 
-config NOKIA6100_NINTERFACES
-	int "Number of physical NOKIA6100 devices"
+config MAX7219_NHORIZONTALBLKS
+	int "Number of 8x8 LEDs matrices in the horizontal (width)!"
 	default 1
-	range 1 1
 	---help---
-		Specifies the number of physical Nokia
-		6100 devices that will be supported.
+		Specifies the number of physical 8x8 LED matrices that are
+		connected together in the horizontal. In fact we have only
+		a single strip, but it can be arranged in blocks creating
+		physically horizontal/vertical columns/rows.
 
-choice NOKIA6100_CONTROLLER
-	prompt "Controller Setup"
-	default NOKIA6100_S1D15G10
-
-config NOKIA6100_S1D15G10
-	bool "S1D15G10 controller"
-	---help---
-		Selects the Epson S1D15G10 display controller
-
-config NOKIA6100_PCF8833
-	bool "PCF8833 controller"
-	---help---
-		Selects the Phillips PCF8833 display controller
-
-endchoice
-
-config NOKIA6100_SPIMODE
-	int "SPI mode"
-	default 0
-	range 0 3
-	---help---
-		Controls the SPI mode
-
-config NOKIA6100_FREQUENCY
-	int "SPI frequency"
-	default 1000000
-	---help---
-		Define to use a different bus frequency
-
-config NOKIA6100_BPP
-	int "Display bits per pixel"
-	default 8
-	---help---
-		Device supports 8, 12, and 16 bits per pixel.
-
-config NOKIA6100_BLINIT
-	int "Back light initial"
-	default 40
-	---help---
-		Initial backlight setting
-
-config NOKIA6100_INVERT
-	int "Display inversion"
+config MAX7219_NVERTICALBLKS
+	int "Number of 8x8 LEDs matrices in the vertical (height)!"
 	default 1
-	range 0 1
 	---help---
-		Display inversion, 0 or 1, Default: 1
+		Specifies the number of physical 8x8 LED matrices that are
+		connected together in the vertical. In fact we have only
+		a single strip, but it can be arranged in blocks creating
+		physically horizontal/vertical columns/rows.
 
-config NOKIA6100_MY
-	int "Display row direction"
-	default 0
-	range 0 1
+config MAX7219_INTENSITY
+	int "Default LED Matrix bright intensity"
+	default 10
+        range 0 15
 	---help---
-		Display row direction, 0 or 1, Default: 0
+		Specifies the default LEDs bright intensity to use.
 
-config NOKIA6100_MX
-	int "Display column direction"
-	default 1
-	range 0 1
-	---help---
-		Display column direction, 0 or 1, Default: 1
-
-config NOKIA6100_V
-	int "Display address direction"
-	default 0
-	range 0 1
-	---help---
-		Display address direction, 0 or 1, Default: 0
-
-config NOKIA6100_ML
-	int "Display scan direction"
-	default 0
-	range 0 1
-	---help---
-		Display scan direction, 0 or 1, Default: 0
-
-config NOKIA6100_RGBORD
-	int "Display RGB order"
-	default 0
-	range 0 1
-	---help---
-		Display RGB order, 0 or 1, Default: 0
-		Required LCD driver settings:
-
-endif
+endif # LCD_MAX7219
 
 config LCD_MIO283QT2
 	bool "MIO283QT-2 TFT LCD Display Module"
@@ -339,7 +279,6 @@ config LCD_UG2864HSWEG01
 config LCD_UG2832HSWEG04
 	bool "UG-2832HSWEG04 OLED Display Module (SSD1306)"
 	default n
-	depends on !LCD_UG2864HSWEG01
 	select LCD_SSD1306
 	---help---
 		OLED Display Module, UG-UG2832HSWEG04, Univision Technology Inc
@@ -356,7 +295,6 @@ config LCD_UG2832HSWEG04
 config LCD_DD12864WO4A
 	bool "DD-12864WO-4A OLED Display Module"
 	default n
-	depends on !LCD_UG2864HSWEG01 && !LCD_UG2832HSWEG04
 	select LCD_SSD1306
 	select SPI_CMDDATA
 	---help---
@@ -370,6 +308,18 @@ config LCD_DD12864WO4A
 
 		Required SPI driver settings:
 		SPI_CMDDATA - Include support for cmd/data selection.
+
+config LCD_HILETGO
+	bool "HiletGO 128x64 OLED"
+	default n
+	select LCD_SSD1306
+	select SPI_CMDDATA
+	---help---
+		HiletGo 129x64 OLED Display Module, featuring an SSD1306.
+
+		Required LCD driver settings:
+		LCD_MAXCONTRAST should be 255, but any value >0 and <=255 will be accepted.
+		LCD_MAXPOWER should be 1:  0=off, 1=on
 
 config LCD_SSD1306
 	bool
@@ -426,9 +376,11 @@ if LCD_SSD1306_I2C
 
 config SSD1306_I2CADDR
 	int "SSD1306 I2C Address"
-	default 120
+	default 60
 	---help---
-		I2C Address of SSD1306
+		7-bit I2C Address of SSD1306.  Typical addresses are 0x3c (60) or
+		0x3d (61).  NOTE that these correspond to the 8-bit addresses
+		0x78 or 0x7a that you may see in documentation.
 
 config SSD1306_I2CFREQ
 	int "SSD1306 I2C Frequency"
@@ -853,8 +805,8 @@ config LCD_SHARP_MEMLCD
 
 if LCD_SHARP_MEMLCD
 
-choice MEMLCD_MODEL
-	prompt "Choose Model"
+choice
+	prompt "Memory LCD Model"
 	default MEMLCD_LS013B7DH03
 
 config MEMLCD_LS013B7DH01
@@ -882,7 +834,7 @@ config MEMLCD_EXTCOMIN_MODE_HW
 	default n
 	---help---
 		If use hardware mode to toggle VCOM, we need to send specific
-		command at a constant frequency to trigger the LCD intenal
+		command at a constant frequency to trigger the LCD internal
 		hardware logic.  While use software mode, we set up a timer to
 		toggle EXTCOMIN connected IO, basically, it is a hardware
 		timer to ensure a constant frequency.
@@ -1105,8 +1057,97 @@ config LCD_RA8875_EXTENDED
 		driver anyway.
 
 endif # LCD_RA8875
+
+config LCD_FT80X
+	bool "FTDI FT80x GUI Controller"
+	default n
+	select SCHED_HPWORK
+	---help---
+		Integrated LCD, Audio, Touchscreen controller driver for the FTDI
+		FT80x "EVE" series.
+
+if LCD_FT80X
+
+choice
+	prompt "FTDI FT80x part"
+	default LCD_FT800
+
+config LCD_FT800
+	bool "FT800"
+
+config LCD_FT801
+	bool "FT801"
+
+endchoice # FTDI FT80x part
+
+choice
+	prompt "FTDI FT80x Interface"
+	default LCD_FT80X_SPI
+
+config LCD_FT80X_SPI
+	bool "SPI"
+	select SPI
+
+config LCD_FT80X_I2C
+	bool "I2C"
+	select I2C
+
+endchoice # FTDI FT80x Interface
+
+config LCD_FT801_MULTITOUCH
+	bool "FT801 Multi-touch"
+	default n
+	depends on LCD_FT801
+
+choice
+	prompt "Display size"
+	default LCD_FT80X_WQVGA
+
+config LCD_FT80X_WQVGA
+	bool "WQVGA 480x272"
+
+config LCD_FT80X_QVGA
+	bool "QVGA 320x240"
+
+endchoice # Display size
+
+choice
+	prompt "Audio Shutdown Options"
+	default LCD_FT80X_AUDIO_NOSHUTDOWN
+
+config LCD_FT80X_AUDIO_NOSHUTDOWN
+	bool "No amplifier shutdown control"
+	---help---
+		There is no audio amplifier or the audio amplifier is not under
+		software control.
+
+config LCD_FT80X_AUDIO_MCUSHUTDOWN
+	bool "MCU controls audio shutdown"
+	---help---
+		The audio amplifier is controlled via an MCU GPIO output pin.
+
+config LCD_FT80X_AUDIO_GPIOSHUTDOWN
+	bool "FT80X controls audio shutdown"
+	---help---
+		The audio amplifier is controlled via an FT80x GPIO output pin.
+
+endchoice # Audio Shutdown Option
+
+config LCD_FT80X_AUDIO_GPIO
+	int "FT80x audio shutdown GPIO"
+	default 0
+	range 0 1
+	depends on LCD_FT80X_AUDIO_GPIOSHUTDOWN
+	---help---
+		Identifies the GPIO pin used to control the amplifier shutdown
+		output.
+
+endif # LCD_FT80X
+
 endmenu # LCD Driver selection
 endif # LCD
+
+comment "Character/Segment LCD Devices"
 
 menuconfig SLCD
 	bool "Alphanumeric/Segment LCD Devices"
@@ -1121,6 +1162,17 @@ menuconfig SLCD
 		subdirectories.
 
 if SLCD
+
+config SLCD_CONSOLE
+	bool "SLCD console output"
+	default n
+	---help---
+		It is possible to use an SLCD to provide console output.  This option
+		enables that possibility.
+
+		At present, only one architecture supports this option (M16C).
+		However, this feature could be provided by other architectures in
+		the future.
 
 config LCD_LCD1602
 	bool "LCD 1602"
@@ -1148,5 +1200,39 @@ config LCD_BACKPACK
 
 		See pcf8574_lcd_backpack_readme.txt
 
+config LCD_ST7032
+	bool "ST7032 over I2C (i.e. JLX1602G-390)"
+	default n
+	depends on I2C
+	---help---
+		Enable support for ST7032i on I2C. This driver was tested with
+		JLX1602G-390 that has 10 pins: CAP1N, CAP1P, VOUT, VCC, SHLS,
+		SHLC, GND, SDA, SCL, XRESET. The XRESET pin is connected to a
+		pull-up resistor, then the module automatically executes power-on
+		reset when power is supplied to the module. The pin SHLS is also
+		connected to a pull-up resistor and the pin SHLC is connected to
+		the ground. So only I2C pins SDA and SCL are used by NuttX.
+
 endif # SLCD
+
+comment "Other LCD-related Devices"
+
+config LCD_OTHER
+	bool
+	default n
+
+config LCD_TDA19988
+	bool "TDA19988 HDMI Encoder"
+	default n
+	select LCD_OTHER
+	depends on I2C && EXPERIMENTAL
+	---help---
+		Enable support for the TI TDA19988 HDMI Encoder.  The TDA19988 is a
+		very low power and very small size High-Definition Multimedia
+		Interface (HDMI) 1.4a transmitter.  This device is primarily
+		intended for mobile applications like Digital Video Camera (DVC),
+		Digital Still Camera (DSC), Portable Multimedia Player (PMP), Mobile
+		Phone and Ultra-Mobile Personal Computer (UM PC), new PC tablet and
+		MID where size and power are key for battery autonomy.
+
 endmenu # LCD Driver Support

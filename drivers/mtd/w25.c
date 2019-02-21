@@ -52,6 +52,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/mtd/mtd.h>
@@ -778,9 +779,7 @@ static ssize_t w25_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 
 #ifdef CONFIG_W25_SYNC_WRITE
     if (status & W25_ERR_PROGRAM) {
-      if (!spare) {
-        spi_mark_badblock(priv, address >> priv->block_shift);
-      }
+      spi_mark_badblock(priv, address >> priv->block_shift);
 #ifdef CONFIG_W25_DEBUG
       ferr("program error block = %08x\n", address >> priv->block_shift);
 #endif

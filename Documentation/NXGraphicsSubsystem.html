@@ -12,7 +12,7 @@
       <h1><big><font color="#3c34ec">
         <i>NX Graphics Subsystem</i>
       </font></big></h1>
-      <p>Last Updated: July 14, 2015</p>
+      <p>Last Updated: April 15, 2018</p>
     </td>
   </tr>
 </table>
@@ -90,42 +90,47 @@
      <ul>
         <i>2.3.1 <a href="#nxppdefs">Pre-Processor Definitions</a></i><br>
         <i>2.3.2 <a href="#nxtypes">NX Types</a></i><br>
-        <i>2.3.3 <a href="#nxtypes">NX Server Callbacks</a></i>
+        <i>2.3.3 <a href="#startingnx">Starting the NX Server</a></i>
         <p>
           <ul>
-            <i>2.3.3.1 <a href="#nxcbredraw"><code>redraw()</code></a></i><br>
-            <i>2.3.3.2 <a href="#nxcbposition"><code>position()</code></a></i><br>
-            <i>2.3.3.3 <a href="#nxcbmousein"><code>mousein()</code></a></i><br>
-            <i>2.3.3.4 <a href="#nxcbkbdin"><code>kbdin()</code></a></i>
+            <i>2.3.3.1 <a href="#nxstart"><code>nx_start()</code></a></i><br>
+            <i>2.3.3.2 <a href="#boardctl"><code>boardctl()</code></a></i><br>
           </ul>
         <p>
-        <i>2.3.4 <a href="#nxruninstance"><code>nx_runinstance()</code> (and <code>nx_run()<code> macro)</a></i><br>
-        <i>2.3.5 <a href="#nxconnectinstance"><code>nx_connectinstance()</code> (and <code>nx_connect()</code> macro)</a></i><br>
-        <i>2.3.6 <a href="#nxopen"><code>nx_open()</code></a></i><br>
+        <i>2.3.4 <a href="#nxcallbacks">NX Server Callbacks</a></i>
+        <p>
+          <ul>
+            <i>2.3.4.1 <a href="#nxcbredraw"><code>redraw()</code></a></i><br>
+            <i>2.3.4.2 <a href="#nxcbposition"><code>position()</code></a></i><br>
+            <i>2.3.4.3 <a href="#nxcbmousein"><code>mousein()</code></a></i><br>
+            <i>2.3.4.4 <a href="#nxcbkbdin"><code>kbdin()</code></a></i>
+          </ul>
+        <p>
+        <i>2.3.5 <a href="#nxruninstance"><code>nx_runinstance()</code> (and <code>nx_run()<code> macro)</a></i><br>
+        <i>2.3.6 <a href="#nxconnectinstance"><code>nx_connectinstance()</code> (and <code>nx_connect()</code> macro)</a></i><br>
         <i>2.3.7 <a href="#nxdisconnect"><code>nx_disconnect()</code></a></i><br>
-        <i>2.3.8 <a href="#nxclose"><code>nx_close()</code></a></i><br>
-        <i>2.3.9 <a href="#nxeventhandler"><code>nx_eventhandler()</code></a></i><br>
-        <i>2.3.10 <a href="#nxeventnotify"><code>nx_eventnotify()</code></a></i><br>
-        <i>2.3.11 <a href="#nxopenwindow"><code>nx_openwindow()</code></a></i><br>
-        <i>2.3.12 <a href="#nxclosewindow"><code>nx_closewindow()</code></a></i><br>
-        <i>2.3.13 <a href="#nxrequestbkgd"><code>nx_requestbkgd()</code></a></i><br>
-        <i>2.3.14 <a href="#nxreleasebkgd"><code>nx_releasebkgd()</code></a></i><br>
-        <i>2.3.15 <a href="#nxgetposition"><code>nx_getposition()</code></a></i><br>
-        <i>2.3.16 <a href="#nxsetposition"><code>nx_setposition()</code></a></i><br>
-        <i>2.3.17 <a href="#nxsetsize"><code>nx_setsize()</code></a></i><br>
-        <i>2.3.18 <a href="#nxraise"><code>nx_raise()</code></a></i><br>
-        <i>2.3.19 <a href="#nxlower"><code>nx_lower()</code></a></i><br>
-        <i>2.3.20 <a href="#nxfill"><code>nx_fill()</code></a></i><br>
-        <i>2.3.21 <a href="#nxgetrectangle"><code>nx_getrectangle()</code></a></i><br>
-        <i>2.3.22 <a href="#nxfilltrapezoid"><code>nx_filltrapezoid()</code></a></i><br>
-        <i>2.3.23 <a href="#nxdrawline"><code>nx_drawline()</code></a></i><br>
-        <i>2.3.24 <a href="#nxdrawcircle"><code>nx_drawcircle()</code></a></i><br>
-        <i>2.3.25 <a href="#nxfillcircle"><code>nx_fillcircle()</code></a></i><br>
-        <i>2.3.26 <a href="#nxglrgb2yuv"><code>nx_setbgcolor()</code></a></i><br>
-        <i>2.3.27 <a href="#nxmove"><code>nx_move()</code></a></i><br>
-        <i>2.3.28 <a href="#nxbitmap"><code>nx_bitmap()</code></a></i><br>
-        <i>2.3.29 <a href="#nxkbdin"><code>nx_kbdin()</code></a></i><br>
-        <i>2.3.30 <a href="#nxmousein"><code>nx_mousein()</code></a></i><br>
+        <i>2.3.8 <a href="#nxeventhandler"><code>nx_eventhandler()</code></a></i><br>
+        <i>2.3.9 <a href="#nxeventnotify"><code>nx_eventnotify()</code></a></i><br>
+        <i>2.3.10 <a href="#nxopenwindow"><code>nx_openwindow()</code></a></i><br>
+        <i>2.3.11 <a href="#nxclosewindow"><code>nx_closewindow()</code></a></i><br>
+        <i>2.3.12 <a href="#nxrequestbkgd"><code>nx_requestbkgd()</code></a></i><br>
+        <i>2.3.13 <a href="#nxreleasebkgd"><code>nx_releasebkgd()</code></a></i><br>
+        <i>2.3.14 <a href="#nxgetposition"><code>nx_getposition()</code></a></i><br>
+        <i>2.3.15 <a href="#nxsetposition"><code>nx_setposition()</code></a></i><br>
+        <i>2.3.16 <a href="#nxsetsize"><code>nx_setsize()</code></a></i><br>
+        <i>2.3.17 <a href="#nxraise"><code>nx_raise()</code></a></i><br>
+        <i>2.3.18 <a href="#nxlower"><code>nx_lower()</code></a></i><br>
+        <i>2.3.19 <a href="#nxfill"><code>nx_fill()</code></a></i><br>
+        <i>2.3.20 <a href="#nxgetrectangle"><code>nx_getrectangle()</code></a></i><br>
+        <i>2.3.21 <a href="#nxfilltrapezoid"><code>nx_filltrapezoid()</code></a></i><br>
+        <i>2.3.22 <a href="#nxdrawline"><code>nx_drawline()</code></a></i><br>
+        <i>2.3.23 <a href="#nxdrawcircle"><code>nx_drawcircle()</code></a></i><br>
+        <i>2.3.24 <a href="#nxfillcircle"><code>nx_fillcircle()</code></a></i><br>
+        <i>2.3.25 <a href="#nxglrgb2yuv"><code>nx_setbgcolor()</code></a></i><br>
+        <i>2.3.26 <a href="#nxmove"><code>nx_move()</code></a></i><br>
+        <i>2.3.27 <a href="#nxbitmap"><code>nx_bitmap()</code></a></i><br>
+        <i>2.3.28 <a href="#nxkbdin"><code>nx_kbdin()</code></a></i><br>
+        <i>2.3.29 <a href="#nxmousein"><code>nx_mousein()</code></a></i><br>
      </ul>
    </p>
   </td>
@@ -188,7 +193,7 @@
       <i><b>B.1</b> <a href="#nxgenconfig">General Configuration Settings</a></i><br>
       <i><b>B.2</b> <a href="#nxglconfig">NXGL Configuration Settings</a></i><br>
       <i><b>B.3</b> <a href="#nxconfig">NX Configuration Settings</a></i><br>
-      <i><b>B.4</b> <a href="#nxmuconfig">NX Multi-User (Only) Configuration Settings</a></i><br>
+      <i><b>B.4</b> <a href="#nxmuconfig">NX Server Configuration Settings</a></i><br>
       <i><b>B.5</b> <a href="#nxtkconfig">NXTK Configuration Settings</a></i><br>
       <i><b>B.6</b> <a href="#nxfpmtsconfig">NXFONTS Configuration Settings</a></i><br>
       <i><b>B.7</b> <a href="#nxtermconfig">NxTerm Configuration Settings</a></i>
@@ -262,15 +267,11 @@
     A standard client server/model was adopted.  NX may be considered a server
     and other logic that presents the windows are NX clients.
   </li>
-  <li><b>Single- and Multi-User Support</b>.
-    NX includes <i>front-end</i> logic to either a simple single-thread/single-user
-    architecture or a separate NX server thread that can serve multiple NX client threads.
-    In the single-user case, the NX <i>server</i> is simply a set of library
-    calls;  in the multi-user case, NX is a server thread/daemon the serializes
-    graphics operations from multiple clients.
-    Other some unique start-up/connection logic, the APIs supported by the single-user
-    and multi-user front-ends are identical.
-    Providing both front-ends is consistent with the NuttX commitment to scalability.
+  <li><b>Multi-User Support</b>.
+    NX includes <i>front-end</i> logic to support a separate NX server thread
+    that can serve multiple NX client threads.
+    The NX is a server thread/daemon the serializes graphics operations from
+    multiple clients.
   </li>
   <li><b>Minimal Graphics Toolset</b>.
     The actual implementation of the graphics operations is performed by common,
@@ -347,10 +348,7 @@
 <p>
   NX is the tiny NuttX windowing system for raw windows (i.e., simple regions of
   graphics memory).
-  NX includes both a small-footprint, single user implementaton (NXSU) and a somewhat
-  larger multi-user implentation (NXMU as described below).
-  Both conform to the same APIs as defined in <code>include/nuttx/nx/nx.h</code> and, hence,
-  are interchangable<sup>1</sup>.
+  NX includes a small-footprint, multi-user implentation (NXMU as described below).
   NX can be used without NxWidgets and without NXTOOLKIT for raw window displays.
 </p>
 
@@ -399,8 +397,8 @@
 
 <p>
   <a href="NxWidgets.html">NxWidgets</a> is a higher level, C++, object-oriented library for object-oriented access to graphical &quot;widgets.&quot;
-  NxWidgets is provided as a separate package.
-  NxWidgets is built on top of the core NuttX graphics subsystem, but is not a part of the core graphics subystems.
+  NxWidgets is provided as a separate library in the <code>apps/</code> repository
+  NxWidgets is built on top of the core NuttX graphics subsystem, but is part of the application space rather than part of the core OS graphics subystems.
 </p>
 
 <h3>1.3.6 <a name="nxterm1">NX Terminal Driver (<code>NxTerm</code>)</a></h3>
@@ -408,7 +406,7 @@
 <p>
   NxTerm is a write-only character device (not shown) that is built on top of an NX window.
   This character device can be used to provide <code>stdout</code> and <code>stderr</code> and, hence, can provide the output side of NuttX console.
-  NxTerm is only available when the multi-user NX implementation is selected (<code>CONFIG_NX_MULTIUSER</code>).
+</code>).
 </p>
 
 <table width ="100%">
@@ -544,7 +542,7 @@ void nxgl_yuv2rgb(uint8_t y, uint8_t u, uint8_t v, uint8_t *r, uint8_t *g, uint8
 </pre></ul>
 <p>
   <b>Description:</b>
-  Convert 8-bit RGB triplet to 8-bit YUV triplet.
+  Convert 8-bit YUV triplet to 8-bit RGB triplet.
 </p>
 
 <h3>2.2.3 <a name="nxglrectcopy"><code>nxgl_rectcopy()</code></a></h3>
@@ -908,11 +906,8 @@ typedef FAR void *NXWINDOW;
 </pre></ul>
 
 <p>
-  These define callbacks that must be provided to
-  <a href="#nxopenwindow"><code>nx_openwindow()</code></a>.
-  In the multi-user model, these callbacks will be invoked as part of the
-  processing performed by
-  <a href="#nxeventhandler"><code>nx_eventhandler()</code></a>.
+  These define callbacks that must be provided to <a href="#nxopenwindow"><code>nx_openwindow()</code></a>.
+  These callbacks will be invoked as part of the processing performed by <a href="#nxeventhandler"><code>nx_eventhandler()</code></a>.
 </p>
 <ul><pre>
 struct nx_callback_s
@@ -933,9 +928,94 @@ struct nx_callback_s
 };
 </pre></ul>
 
-<h3>2.3.3 <a name="nxtypes">NX Server Callbacks</a></h3>
+<h3>2.3.3 <a name="startingnx">Starting the NX Server</a></h3>
+<p>
+  The <i>NX Server</i> is a kernel daemon that receives and serializes graphic commands.
+  Before you can use the NX graphics system, you must first start this daemon.
+  There are two ways that this can be done:
+</p>
+<ol>
+  <li>
+    <p>
+      The NX server may be started in your board startup logic by simply calling the function <code> nx_start()</code>.
+      The board startup logic usually resides the the <code>configs/<i>board</i>/src</code> directory.
+      The boar board startup logic can run automatically during the early system if <code>CONFIG_BOARD_INITIALIZE</code> is defined in the configuration.
+      Or, the board startup logic can execute under control of the application by calling the <code>boardctl(BOARDIOC_INIT, arg)</code> OS interface.
+    </p>
+    <p>
+      The board initialization logic will run in either case and the simple call to <code>nx_start()</code> will start the NX server.
+    </p>
+  </li>
+  <li>
+    The NX server may also be started later by the application via the <code>boardctl(BOARDIOC_NX_START, arg)</code>
+  </li>
+</ol>
 
-<h4>2.3.3.1 <a name="nxcbredraw"><code>redraw()</code></a></h4>
+<h4>2.3.3.1 <a name="nxstart"><code>nx_start()</code></a></h4>
+<p><b>Function Prototype:</b></p>
+<ul><pre>
+#include &lt;nuttx/nx/nx.h&gt;
+
+int nx_start(void);
+</pre></ul>
+<p>
+  <b>Description:</b>
+  <code>nx_start()</code> provides a wrapper function to simplify and standardize the starting of the NX server.
+</p>
+<p>
+  <b>Input Parameters:</b>
+  None
+</p>
+<p>
+  <b>Returned Value:</b>
+  Zero (<code>OK</code>) is returned on success.
+  This indicates that the NX server has been successfully started, is running, and waiting to accept connections from NX clients.
+</p>
+<p>
+  A negated <code>errno</code> value is returned on failure.
+  The <code>errno</code> value indicates the nature of the failure.
+</p>
+
+<h4>2.3.3.1 <a name="boardctl"><code>boardctl()</code></a></h4>
+<p><b>Function Prototype:</b></p>
+<ul><pre>
+#include &lt;sys/boardctl.h&gt;
+
+</pre></ul>
+<p>
+  <b>Description:</b>
+  <code>boardctl()</code> is a generic NuttX interface that among many of it functions, may also be used to start the NX server.
+</p>
+  In a small embedded system, there will typically be a much greater interaction between application and low-level board features.
+  The canonically correct to implement such interactions is by implementing a character driver and performing the interactions via low level <code>ioctl()</code> calls.
+  This, however, may not be practical in many cases and will lead to &quot;correct&quot; but awkward implementations.
+</p>
+<p>
+  <code>boardctl()</code> is non-standard OS interface to alleviate the problem.
+  It basically circumvents the normal device driver ioctl interlace and allows the application to perform direction IOCTL-like calls to the board-specific logic.
+  In it is especially useful for setting up board operational and test configurations.
+</p>
+<p>
+ When called with the <code>cmd</code> of <code>BOARDIOC_NX_START</code>, then the  <code>boardctl()</code> will call <code>nx_start</code> indirectly on behalf of the appication.
+ In this case the <code>arg</code> parameter is ignored.
+</p>
+<p>
+  <b>Input Parameters:</b>
+  <ul><dl>
+    <dt><code>cmd</code>
+    <dd> Identifies the board command to be executed
+    <dt><code>arg</code>
+    <dd>The argument that accompanies the command.  The nature of the argument is determined by the specific command.
+  </dl></ul>
+</p>
+<p>
+  <b>Returned Value:</b>
+  On success zero (<code>OK</code) is returned; -1 (<code>ERROR</code>) is returned on failure with the <code>errno</code> variable to to indicate the nature of the failure.
+</p>
+
+<h3>2.3.4 <a name="nxcallbacks">NX Server Callbacks</a></h3>
+
+<h4>2.3.4.1 <a name="nxcbredraw"><code>redraw()</code></a></h4>
 <p><b>Callback Function Prototype:</b></p>
 <ul><pre>
 void redraw(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
@@ -964,7 +1044,7 @@ void redraw(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
   <b>Returned Value:</b> None
 </p>
 
-<h4>2.3.3.2 <a name="nxcbposition"><code>position()</code></a></h4>
+<h4>2.3.4.2 <a name="nxcbposition"><code>position()</code></a></h4>
 <p><b>Callback Function Prototype:</b></p>
 <ul><pre>
 void position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
@@ -998,7 +1078,7 @@ void position(NXWINDOW hwnd, FAR const struct nxgl_size_s *size,
   <b>Returned Value:</b> None
 </p>
 
-<h4>2.3.3.3 <a name="nxcbmousein"><code>mousein()</code></a></h4>
+<h4>2.3.4.3 <a name="nxcbmousein"><code>mousein()</code></a></h4>
 <p><b>Callback Function Prototype:</b></p>
 <ul><pre>
 #ifdef CONFIG_NX_XYINPUT
@@ -1028,7 +1108,7 @@ void mousein(NXWINDOW hwnd, FAR const struct nxgl_point_s *pos,
   <b>Returned Value:</b> None
 </p>
 
-<h4>2.3.3.4 <a name="nxcbkbdin"><code>kbdin()</code></a></h4>
+<h4>2.3.4.4 <a name="nxcbkbdin"><code>kbdin()</code></a></h4>
 <p><b>Callback Function Prototype:</b></p>
 <ul><pre>
 #ifdef CONFIG_NX_KBD
@@ -1057,16 +1137,14 @@ void (*kbdin)(NXWINDOW hwnd, uint8_t nch, FAR const uint8_t *ch, FAR void *arg);
   <b>Returned Value:</b> None
 </p>
 
-<h3>2.3.4 <a name="nxruninstance"><code>nx_runinstance()</code> (and <code>nx_run()</code> macro)</a></h3>
+<h3>2.3.5 <a name="nxruninstance"><code>nx_runinstance()</code> (and <code>nx_run()</code> macro)</a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
 #include &lt;nuttx/nx/nx.h&gt;
 
-#ifdef CONFIG_NX_MULTIUSER
 int nx_runinstance(FAR const char *mqname, FAR struct fb_vtable_s *fb);
 #define nx_run(fb) nx_runinstance(NX_DEFAULT_SERVER_MQNAME, dev)
-#endif
 </pre></ul>
 <p>
   <b>Description:</b>
@@ -1075,12 +1153,10 @@ int nx_runinstance(FAR const char *mqname, FAR struct fb_vtable_s *fb);
 </p>
 <p>
   NOTE that multiple instances of the NX server may run at the same time,
-  with different callback and message queue names.  <code>nx_run()</code> is simply
-  a macro that can be used when only one server instance is required.  In
-  that case, a default server name is used.
-</p>
-<p>
-  Multiple user mode only!
+  with different callback and message queue names.
+  <code>nx_run()</code> is simply a macro that can be used when only one
+  server instance is required.
+  In that case, a default server name is used.
 </p>
 <p>
   <b>Input Parameters:</b>
@@ -1098,16 +1174,14 @@ int nx_runinstance(FAR const char *mqname, FAR struct fb_vtable_s *fb);
   return <code>ERROR</code> and <code>errno</code> will be set appropriately.
 </p>
 
-<h3>2.3.5 <a name="nxconnectinstance"><code>nx_connectinstance()</code> (and <code>nx_connect()</code> macro)</a></h3>
+<h3>2.3.6 <a name="nxconnectinstance"><code>nx_connectinstance()</code> (and <code>nx_connect()</code> macro)</a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
 #include &lt;nuttx/nx/nx.h&gt;
 
-#ifdef CONFIG_NX_MULTIUSER
 NXHANDLE nx_connectinstance(FAR const char *svrmqname);
 #define nx_connect(cb) nx_connectinstance(NX_DEFAULT_SERVER_MQNAME)
-#endif
 </pre></ul>
 <p>
   <b>Description:</b>
@@ -1135,50 +1209,10 @@ NXHANDLE nx_connectinstance(FAR const char *svrmqname);
   </li>
 </ul>
 <p>
-  Multiple user mode only!
-</p>
-<p>
   <b>Input Parameters:</b>
   <ul><dl>
     <dt><code>svrmqname</code>
     <dd>The name for the server incoming message queue
-  </dl></ul>
-</p>
-<p>
-  <b>Returned Value:</b>
-</p>
-<ul>
-    Success: A non-NULL handle used with subsequent NX accesses<br>
-    Failure:  NULL is returned and <code>errno</code> is set appropriately.
-</ul>
-
-<h3>2.3.6 <a name="nxopen"><code>nx_open()</code></a></h3>
-<p><b>Function Prototype:</b></p>
-<ul><pre>
-#include &lt;nuttx/nx/nxglib.h&gt;
-#include &lt;nuttx/nx/nx.h&gt;
-
-#ifndef CONFIG_NX_MULTIUSER
-NXHANDLE nx_open(FAR struct fb_vtable_s *dev);
-#endif
-</pre></ul>
-<p>
-  <b>Description:</b>
-    Create, initialize and return an NX handle for use in subsequent
-    NX API calls.  <code>nx_open()</code> is the single user equivalent of
-    <a href="#nxconnectinstance"><code>nx_connect()</code></a> plus
-    <a href="#nxruninstance"><code>nx_run()</code></a>.
-</p>
-<p>
-    Single user mode only!
-</p>
-<p>
-  <b>Input Parameters:</b>
-  <ul><dl>
-    <dt><code>dev</code>
-    <dd>Frame buffer or LCD driver &quot;object&quot; to be used.
-    <dt><code>cb</code>
-    <dd>Callbacks used to process received NX server messages
   </dl></ul>
 </p>
 <p>
@@ -1195,19 +1229,12 @@ NXHANDLE nx_open(FAR struct fb_vtable_s *dev);
 #include &lt;nuttx/nx/nxglib.h&gt;
 #include &lt;nuttx/nx/nx.h&gt;
 
-#ifdef CONFIG_NX_MULTIUSER
 void nx_disconnect(NXHANDLE handle);
-#endif
 </pre></ul>
 <p>
   <b>Description:</b>
   Disconnect a client from the NX server and/or free resources reserved
   by <a href="#nxconnectinstance"><code>nx_connect()</code>/<code>nx_connectinstance()</code></a>.
-  <code>nx_disconnect()</code> is muliti-user equivalent of
-  <a href="#nxclose"><code>nx_close()</code></a>.
-</p>
-<p>
-  Multiple user mode only!
 </p>
 <p>
   <b>Input Parameters:</b>
@@ -1220,46 +1247,13 @@ void nx_disconnect(NXHANDLE handle);
   <b>Returned Value:</b> None.
 </p>
 
-<h3>2.3.8 <a name="nxclose"><code>nx_close()</code></a></h3>
+<h3>2.3.8 <a name="nxeventhandler"><code>nx_eventhandler()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
 #include &lt;nuttx/nx/nx.h&gt;
 
-#ifndef CONFIG_NX_MULTIUSER
-void nx_close(NXHANDLE handle);
-#endif
-</pre></ul>
-<p>
-  <b>Description:</b>
-  Close the single user NX interface.  nx_close is single-user equivalent
-  of <a href="#nxdisconnect"><code>nx_disconnect()</code></a>.
-</p>
-<p>
-  Single user mode only!
-</p>
-<p>
-  <b>Input Parameters:</b>
-  <ul><dl>
-    <dt><code>handle</code>
-    <dd>The handle returned by <a href="#nxopen"><code>nx_open()</code></a>.
-  </dl></ul>
-</p>
-<p>
-  <b>Returned Value:</b> None
-</p>
-
-<h3>2.3.9 <a name="nxeventhandler"><code>nx_eventhandler()</code></a></h3>
-<p><b>Function Prototype:</b></p>
-<ul><pre>
-#include &lt;nuttx/nx/nxglib.h&gt;
-#include &lt;nuttx/nx/nx.h&gt;
-
-#ifdef CONFIG_NX_MULTIUSER
 int nx_eventhandler(NXHANDLE handle);
-#else
-#  define nx_eventhandler(handle) (OK)
-#endif
 </pre></ul>
 <p>
   <b>Description:</b>
@@ -1297,13 +1291,13 @@ int nx_eventhandler(NXHANDLE handle);
   </li>
 </ul>
 
-<h3>2.3.10 <a name="nxeventnotify"><code>nx_eventnotify()</code></a></h3>
+<h3>2.3.9 <a name="nxeventnotify"><code>nx_eventnotify()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
 #include &lt;nuttx/nx/nx.h&gt;
 
-#if defined(CONFIG_NX_MULTIUSER) && !defined(CONFIG_DISABLE_SIGNALS)
+#ifndef CONFIG_DISABLE_SIGNALS
 int nx_eventnotify(NXHANDLE handle, int signo);
 #else
 #  define nx_eventnotify(handle, signo) (OK)
@@ -1343,7 +1337,7 @@ int nx_eventnotify(NXHANDLE handle, int signo);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.11 <a name="nxopenwindow"><code>nx_openwindow()</code></a></h3>
+<h3>2.3.10 <a name="nxopenwindow"><code>nx_openwindow()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1360,8 +1354,7 @@ NXWINDOW nx_openwindow(NXHANDLE handle,
   <b>Input Parameters:</b>
   <ul><dl>
     <dt><code>handle</code>
-    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>
-       or <a href="#nxopen"><code>nx_open()</code></a>.
+    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>.
     <dt><code>cb</code>
     <dd>Callbacks used to process window events
     <dt><code>arg</code>
@@ -1376,7 +1369,7 @@ NXWINDOW nx_openwindow(NXHANDLE handle,
     Failure:  NULL is returned and <code>errno</code> is set appropriately.
 </ul>
 
-<h3>2.3.12 <a name="nxclosewindow"><code>nx_closewindow()</code></a></h3>
+<h3>2.3.11 <a name="nxclosewindow"><code>nx_closewindow()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1404,7 +1397,7 @@ int nx_closewindow(NXWINDOW hwnd);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.13 <a name="nxrequestbkgd"><code>nx_requestbkgd()</code></a></h3>
+<h3>2.3.12 <a name="nxrequestbkgd"><code>nx_requestbkgd()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1425,8 +1418,7 @@ int nx_requestbkgd(NXHANDLE handle,
 <ul>
   <li>
     If you want to implement a windowless solution.  The single screen
-    can be used to create a truly simple graphic environment.  In this
-    case, you should probably also de-select <code>CONFIG_NX_MULTIUSER</code> as well.
+    can be used to create a truly simple graphic environment.
   </li>
   <li>
     When you want more on the background than a solid color.  For
@@ -1462,8 +1454,7 @@ int nx_requestbkgd(NXHANDLE handle,
   <b>Input Parameters:</b>
   <ul><dl>
     <dt><code>handle</code>
-    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>
-       or <a href="#nxopen"><code>nx_open()</code></a>.
+    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>.
     <dt><code>cb</code>
     <dd>Callbacks to use for processing background window events
     <dt><code>arg</code>
@@ -1476,7 +1467,7 @@ int nx_requestbkgd(NXHANDLE handle,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.14 <a name="nxreleasebkgd"><code>nx_releasebkgd()</code></a></h3>
+<h3>2.3.13 <a name="nxreleasebkgd"><code>nx_releasebkgd()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1506,7 +1497,7 @@ int nx_releasebkgd(NXWINDOW hwnd);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.15 <a name="nxgetposition"><code>nx_getposition()</code></a></h3>
+<h3>2.3.14 <a name="nxgetposition"><code>nx_getposition()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1534,7 +1525,7 @@ int nx_getposition(NXWINDOW hwnd);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.16 <a name="nxsetposition"><code>nx_setposition()</code></a></h3>
+<h3>2.3.15 <a name="nxsetposition"><code>nx_setposition()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1563,7 +1554,7 @@ int nx_setposition(NXWINDOW hwnd, FAR struct nxgl_point_s *pos);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.17 <a name="nxsetsize"><code>nx_setsize()</code></a></h3>
+<h3>2.3.16 <a name="nxsetsize"><code>nx_setsize()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1591,7 +1582,7 @@ int nx_setsize(NXWINDOW hwnd, FAR struct nxgl_size_s *size);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.18 <a name="nxraise"><code>nx_raise()</code></a></h3>
+<h3>2.3.17 <a name="nxraise"><code>nx_raise()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1619,7 +1610,7 @@ int nx_raise(NXWINDOW hwnd);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.19 <a name="nxlower"><code>nx_lower()</code></a></h3>
+<h3>2.3.18 <a name="nxlower"><code>nx_lower()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1647,7 +1638,7 @@ int nx_lower(NXWINDOW hwnd);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.20 <a name="nxfill"><code>nx_fill()</code></a></h3>
+<h3>2.3.19 <a name="nxfill"><code>nx_fill()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1678,7 +1669,7 @@ int nx_fill(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.21 <a name="nxgetrectangle"><code>nx_getrectangle()</code></a></h3>
+<h3>2.3.20 <a name="nxgetrectangle"><code>nx_getrectangle()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1718,7 +1709,7 @@ void nx_getrectangle(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.22 <a name="nxfilltrapezoid"><code>nx_filltrapezoid()</code></a></h3>
+<h3>2.3.21 <a name="nxfilltrapezoid"><code>nx_filltrapezoid()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1752,7 +1743,7 @@ int nx_filltrapezoid(NXWINDOW hwnd, FAR const struct nxgl_rect_s *clip,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.23 <a name="nxdrawline"><code>nx_drawline()</code></a></h3>
+<h3>2.3.22 <a name="nxdrawline"><code>nx_drawline()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1800,7 +1791,7 @@ int nx_drawline(NXWINDOW hwnd, FAR struct nxgl_vector_s *vector,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.24 <a name="nxdrawcircle"><code>nx_drawcircle()</code></a></h3>
+<h3>2.3.23 <a name="nxdrawcircle"><code>nx_drawcircle()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1836,7 +1827,7 @@ int nx_drawcircle(NXWINDOW hwnd, FAR const struct nxgl_point_s *center,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.25 <a name="nxfillcircle"><code>nx_fillcircle()</code></a></h3>
+<h3>2.3.24 <a name="nxfillcircle"><code>nx_fillcircle()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1869,7 +1860,7 @@ int nx_fillcircle(NXWINDOW hwnd, FAR const struct nxgl_point_s *center,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.26 <a name="nxglrgb2yuv"><code>nx_setbgcolor()</code></a></h3>
+<h3>2.3.25 <a name="nxglrgb2yuv"><code>nx_setbgcolor()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1897,7 +1888,7 @@ int nx_setbgcolor(NXHANDLE handle,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.27 <a name="nxmove"><code>nx_move()</code></a></h3>
+<h3>2.3.26 <a name="nxmove"><code>nx_move()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1928,7 +1919,7 @@ int nx_move(NXWINDOW hwnd, FAR const struct nxgl_rect_s *rect,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.28 <a name="nxbitmap"><code>nx_bitmap()</code></a></h3>
+<h3>2.3.27 <a name="nxbitmap"><code>nx_bitmap()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1970,7 +1961,7 @@ int nx_bitmap(NXWINDOW hwnd, FAR const struct nxgl_rect_s *dest,
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.29 <a name="nxkbdin"><code>nx_kbdin()</code></a></h3>
+<h3>2.3.28 <a name="nxkbdin"><code>nx_kbdin()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -1993,7 +1984,7 @@ int nx_kbdin(NXHANDLE handle, uint8_t nch, FAR const uint8_t *ch);
   <code>ERROR</code> on failure with <code>errno</code> set appropriately
 </p>
 
-<h3>2.3.30 <a name="nxmousein"><code>nx_mousein()</code></a></h3>
+<h3>2.3.29 <a name="nxmousein"><code>nx_mousein()</code></a></h3>
 <p><b>Function Prototype:</b></p>
 <ul><pre>
 #include &lt;nuttx/nx/nxglib.h&gt;
@@ -2088,8 +2079,7 @@ NXTKWINDOW nxtk_openwindow(NXHANDLE handle,
   <b>Input Parameters:</b>
   <dl>
     <dt><code>handle</code>
-    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>
-       or <a href="#nxopen"><code>nx_open()</code></a>.
+    <dd>The handle returned by <a href="#nxconnectinstance"><code>nx_connect()</code></a>.
     <dt><code>cb</code>
     <dd>Callbacks used to process window events
     <dt><code>arg</code>
@@ -3206,15 +3196,6 @@ int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
       It contains most of the important window management logic:  clipping, window controls,
       window drawing, etc.
 
-    <dt><code>graphics/nxsu</code><sup>1</sup>
-      <dd>This is the NX single user <i>front end</i>.
-      When combined with the generic <i>back-end</i> (<code>nxbe</code>), it implements a
-      single threaded, single user windowing system.
-      The files in this directory present the window APIs described in
-      <code>include/nuttx/nx/nx.h</code>.
-      The single user front-end is selected when <code>CONFIG_NX_MULTIUSER</code> is not
-      defined in the NuttX configuration file.
-
     <dt><code>graphics/nxmu</code> and <code>libnx/nxmu</code>
       <dd>This is the NX multi user <i>front end</i>.
       When combined with the generic <i>back-end</i> (<code>nxbe</code>), it implements a
@@ -3224,8 +3205,6 @@ int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
       The multi-user front end includes a graphics server that executes on its own thread;
       multiple graphics clients then communicate with the server via a POSIX message
       queue to serialize window operations from many threads.
-      The multi-user front-end is selected when <code>CONFIG_NX_MULTIUSER</code> is defined
-      in the NuttX configuration file.
 
     <dt><code>libnx/nxfonts</code>
       <dd>This is where the NXFONTS implementation resides.
@@ -3234,20 +3213,16 @@ int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
 
     <dt><code>libnx/nxtk</code>
       <dd>This is where the NXTOOLKIT implementation resides.
-      This toolkit is built on top of NX and works with either the single-user or multi-user NX version.
+      This toolkit is built on top of NX and works with the multi-user NX front-end.
       See <code>include/nuttx/nx/nxtk.h</code>.
 
-    <dt><code>nuttx/../nxwidgets</code>
-      <dd>The <a href="NxWidgets.html">NxWidgets</a> code is provided as a separate package located outside of the NuttX source tree (probably at this location).
+    <dt><code>apps/graphics/NxWidgets</code>
+      <dd>The <a href="NxWidgets.html">NxWidgets</a> code is provided as a separate package provided in the <code>apps/</code> repository.
 
     <dt><code>graphics/nxterm</code>
-      <dd>The NxTerm driver is built on top of NX and works with either the single-user or multi-user NX version.
+      <dd>The NxTerm driver is built on top of NX and works with the multi-user NX front-end.
       See <code>include/nuttx/nx/nxterm.h</code>.
   </dl>
-  <p><small>
-    <sup>1<up>There is no nxsu sub-directory in nuttx/libnx.
-    That is because this separation of interfaces is only required in the kernel build mode and only the multi-user interfaces can be used with the kernel build.
-  </small></p>
 </ul>
 
 <table width ="100%">
@@ -3288,7 +3263,7 @@ int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
       <dd>By default, NX builds to use a framebuffer driver (see <code>include/nuttx/video/fb.h</code>).
       If this option is defined, NX will build to use an LCD driver (see <code>include/nuttx/lcd/lcd.h</code>).
     <dt><code>CONFIG_NX_ANTIALIASING</code>:
-      <dd>Enable support for ant-aliasing when rendering lines as various
+      <dd>Enable support for anti-aliasing when rendering lines as various
       orientations.
       This option is only available for use with frame buffer drivers and
       only with 16-, 24-, or 32-bit RGB color formats.
@@ -3311,12 +3286,10 @@ int nxf_convert_32bpp(FAR uint32_t *dest, uint16_t height,
   </dl>
 </ul>
 
-<h2>B.4 <a name="nxmuconfig">NX Multi-User (Only) Configuration Settings</a></h2>
+<h2>B.4 <a name="nxmuconfig">NX Server Configuration Settings</a></h2>
 
 <ul>
   <dl>
-    <dt><code>CONFIG_NX_MULTIUSER</code>:
-      <dd>Configures NX in multi-user mode.
     <dt><code>CONFIG_NX_BLOCKING</code>
       <dd>Open the client message queues in blocking mode.  In this case,
       <code>nx_eventhandler()</code>  will not return until a message is received and processed.
@@ -3746,8 +3719,8 @@ sudo ln -s libXext.so.6.4.0 libXext.so
         <p><small>
           <b>NOTE</b>: There is a workaround in this case:
           You can build for 32-bit execution on a 64-bit machine by adding <code>-m3</code> to the <code>CFLAGS</code> and <code>-m32 -m elf_i386</code> to the <code>LDFLAGS</code>.
-          See the patch file <code>0001-Quick-hacks-to-build-sim-nsh-ostest-on-x86_64-as-32-.patch</code>
-          that can be found in NuttX <a href="https://groups.yahoo.com/neo/groups/nuttx/files">files</a>.
+          The configuration/build system will do this for you;
+          you simply need to select <code>CONFIG_SIM_M32=y</code> in your configuration file.
         </small></p>
         </li>
         <li><p>
@@ -3933,36 +3906,22 @@ sudo ln -s libXext.so.6.4.0 libXext.so
 </tr>
 <tr>
   <td align="left" valign="top"><a href="#nxruninstance"><code>nx_runinstance()</code></a></td>
-  <td>Change to <code>CONFIG_NX_MULTIUSER=y</code> in the
-     <code>&lt;NuttX-Directory&gt;/.config</code> file </td>
+  <td><br></td>
   <td align="center" bgcolor="skyblue">YES</td>
 </tr>
 <tr>
   <td align="left" valign="top"><a href="#nxconnectinstance"><code>nx_connectinstance()</code></a></td>
-  <td>Change to <code>CONFIG_NX_MULTIUSER=y</code> in the
-     <code>&lt;NuttX-Directory&gt;/.config</code> file </td>
-  <td align="center" bgcolor="skyblue">YES</td>
-</tr>
-<tr>
-  <td align="left" valign="top"><a href="#nxopen"><code>nx_open()</code></a></td>
   <td><br></td>
   <td align="center" bgcolor="skyblue">YES</td>
 </tr>
 <tr>
   <td align="left" valign="top"><a href="#nxdisconnect"><code>nx_disconnect()</code></a></td>
-  <td>Change to <code>CONFIG_NX_MULTIUSER=y</code> in the
-     <code>&lt;NuttX-Directory&gt;/.config</code> file </td>
-  <td align="center" bgcolor="skyblue">YES</td>
-</tr>
-<tr>
-  <td align="left" valign="top"><a href="#nxclose"><code>nx_close()</code></a></td>
   <td><br></td>
   <td align="center" bgcolor="skyblue">YES</td>
 </tr>
 <tr>
   <td align="left" valign="top"><a href="#nxeventhandler"><code>nx_eventhandler()</code></a></td>
-  <td>Change to <code>CONFIG_NX_MULTIUSER=y</code> in the
-     <code>&lt;NuttX-Directory&gt;/.config</code> file</td>
+  <td><br></td>
   <td align="center" bgcolor="skyblue">YES</td>
 </tr>
 <tr>

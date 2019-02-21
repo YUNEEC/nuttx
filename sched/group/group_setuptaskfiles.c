@@ -79,7 +79,7 @@
  * Input Parameters:
  *   tcb - tcb of the new task.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -137,7 +137,7 @@ static inline void sched_dupfiles(FAR struct task_tcb_s *tcb)
  * Input Parameters:
  *   tcb - tcb of the new task.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -195,10 +195,10 @@ static inline void sched_dupsockets(FAR struct task_tcb_s *tcb)
  *   Configure a newly allocated TCB so that it will inherit
  *   file descriptors and streams from the parent task.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - tcb of the new task.
  *
- * Return Value:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned on
  *   failure.
  *

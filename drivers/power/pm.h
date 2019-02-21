@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/power/pm
  *
- *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,9 +45,10 @@
 #include <semaphore.h>
 #include <queue.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/clock.h>
-#include <nuttx/wqueue.h>
 #include <nuttx/power/pm.h>
+#include <nuttx/wdog.h>
 
 #ifdef CONFIG_PM
 
@@ -55,10 +56,6 @@
  * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
-
-#ifndef CONFIG_SCHED_WORKQUEUE
-#  warning "Worker thread support is required (CONFIG_SCHED_WORKQUEUE)"
-#endif
 
 /* Convert the time slice interval into system clock ticks.
  *
@@ -71,31 +68,31 @@
 
 #define TIME_SLICE_TICKS ((CONFIG_PM_SLICEMS * CLOCKS_PER_SEC) /  1000)
 
-/* Function-like macros *****************************************************/
 /****************************************************************************
  * Name: pm_lock
  *
- * Descripton:
+ * Description:
  *   Lock the power management registry.  NOTE: This function may return
  *   an error if a signal is received while what (errno == EINTR).
  *
  ****************************************************************************/
 
-#define pm_lock() sem_wait(&g_pmglobals.regsem);
+#define pm_lock() nxsem_wait(&g_pmglobals.regsem);
 
 /****************************************************************************
  * Name: pm_unlock
  *
- * Descripton:
+ * Description:
  *   Unlock the power management registry.
  *
  ****************************************************************************/
 
-#define pm_unlock() sem_post(&g_pmglobals.regsem);
+#define pm_unlock() nxsem_post(&g_pmglobals.regsem);
 
 /****************************************************************************
  * Public Types
  ****************************************************************************/
+
 /* This describes the activity and state for one domain */
 
 struct pm_domain_s
@@ -115,13 +112,11 @@ struct pm_domain_s
   uint8_t mndx;
   uint8_t mcnt;
 
-  /* accum - The accumulated counts in this time interval
-   * thrcnt - The number of below threshold counts seen.
-   */
+  /* accum - The accumulated counts in this time interval */
 
   int16_t accum;
-  uint16_t thrcnt;
 
+#if CONFIG_PM_MEMORY > 1
   /* This is the averaging "memory."  The averaging algorithm is simply:
    * Y = (An*X + SUM(Ai*Yi))/SUM(Aj), where i = 1..n-1 and j= 1..n, n is the
    * length of the "memory", Ai is the weight applied to each value, and X is
@@ -131,39 +126,46 @@ struct pm_domain_s
    * CONFIG_PM_COEFn provides weight for each sample.  Default: 1
    */
 
-#if CONFIG_PM_MEMORY > 1
   int16_t memory[CONFIG_PM_MEMORY-1];
 #endif
 
   /* stime - The time (in ticks) at the start of the current time slice */
 
-  systime_t stime;
+  clock_t stime;
+
+  /* btime - The time (in ticks) at the start of the current state */
+
+  clock_t btime;
+
+  /* The power state lock count */
+
+  uint16_t stay[PM_COUNT];
+
+  /* Timer to decrease state */
+
+  WDOG_ID wdog;
 };
 
 /* This structure encapsulates all of the global data used by the PM module */
 
 struct pm_global_s
 {
-  /* The activity/state information for each PM domain */
-
-  struct pm_domain_s domain[CONFIG_PM_NDOMAINS];
-
   /* This semaphore manages mutually exclusive access to the power management
    * registry.  It must be initialized to the value 1.
    */
 
   sem_t regsem;
 
-  /* For work that has been deferred to the worker thread */
-
-  struct work_s work;
-
-  /* registry is a singly-linked list of registered power management
+  /* registry is a doubly-linked list of registered power management
    * callback structures.  To ensure mutually exclusive access, this list
    * must be locked by calling pm_lock() before it is accessed.
    */
 
-  sq_queue_t registry;
+  dq_queue_t registry;
+
+  /* The activity/state information for each PM domain */
+
+  struct pm_domain_s domain[CONFIG_PM_NDOMAINS];
 };
 
 /****************************************************************************
@@ -205,8 +207,7 @@ EXTERN struct pm_global_s g_pmglobals;
  * Assumptions:
  *   This function may be called from a driver, perhaps even at the interrupt
  *   level.  It may also be called from the IDLE loop at the lowest possible
- *   priority level.  To reconcile these various conditions, all work is
- *   performed on the worker thread at a user-selectable priority.
+ *   priority level.
  *
  ****************************************************************************/
 

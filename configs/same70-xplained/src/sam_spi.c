@@ -146,7 +146,7 @@ void sam_spidev_initialize(void)
  *   devid - Identifies the (logical) device
  *   selected - TRUE:Select the device, FALSE:De-select the device
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -165,6 +165,18 @@ void sam_spi0select(uint32_t devid, bool selected)
 #if defined(CONFIG_SAME70XPLAINED_MB1_BEE)
         sam_gpiowrite(CLICK_MB1_CS, !selected);
 #elif defined(CONFIG_SAME70XPLAINED_MB2_BEE)
+        sam_gpiowrite(CLICK_MB2_CS, !selected);
+#endif
+        break;
+#endif
+
+#ifdef CONFIG_IEEE802154_XBEE
+      case SPIDEV_IEEE802154(0):
+        /* Set the GPIO low to select and high to de-select */
+
+#if defined(CONFIG_SAME70XPLAINED_MB1_XBEE)
+        sam_gpiowrite(CLICK_MB1_CS, !selected);
+#elif defined(CONFIG_SAME70XPLAINED_MB2_XBEE)
         sam_gpiowrite(CLICK_MB2_CS, !selected);
 #endif
         break;
@@ -192,7 +204,7 @@ void sam_spi1select(uint32_t devid, bool selected)
  * Input Parameters:
  *   devid - Identifies the (logical) device
  *
- * Returned Values:
+ * Returned Value:
  *   Bit-encoded SPI status (see include/nuttx/spi/spi.h.
  *
  ****************************************************************************/

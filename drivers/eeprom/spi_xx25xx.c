@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/eeprom/spi_xx25xx.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Sebastien Lorquet <sebastien@lorquet.fr>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -122,6 +122,7 @@
 #include <nuttx/fs/fs.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/spi/spi.h>
 
 /****************************************************************************
@@ -382,7 +383,7 @@ static void ee25xx_waitwritecomplete(struct ee25xx_dev_s *priv)
       if ((status & EE25XX_SR_WIP) != 0)
         {
           ee25xx_unlock(priv->spi);
-          usleep(1000);
+          nxsig_usleep(1000);
           ee25xx_lock(priv->spi);
         }
     }
@@ -440,16 +441,21 @@ static void ee25xx_writepage(FAR struct ee25xx_dev_s *eedev, uint32_t devaddr,
 
 static void ee25xx_semtake(FAR struct ee25xx_dev_s *eedev)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&eedev->sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&eedev->sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -461,7 +467,7 @@ static void ee25xx_semtake(FAR struct ee25xx_dev_s *eedev)
 
 static inline void ee25xx_semgive(FAR struct ee25xx_dev_s *eedev)
 {
-  sem_post(&eedev->sem);
+  nxsem_post(&eedev->sem);
 }
 
 /****************************************************************************
@@ -800,7 +806,7 @@ int ee25xx_initialize(FAR struct spi_dev_s *dev, FAR char *devname,
       return -ENOMEM;
     }
 
-  sem_init(&eedev->sem, 0, 1);
+  nxsem_init(&eedev->sem, 0, 1);
 
   eedev->spi      = dev;
   eedev->size     = 128 << g_ee25xx_devices[devtype].bytes;

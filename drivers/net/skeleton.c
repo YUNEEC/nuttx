@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/net/skeleton.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,6 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && defined(CONFIG_NET_skeleton)
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -61,6 +60,8 @@
 #  include <nuttx/net/pkt.h>
 #endif
 
+#ifdef CONFIG_NET_skeleton
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -71,16 +72,16 @@
 #  error Work queue support is required in this configuration (CONFIG_SCHED_WORKQUEUE)
 #else
 
-   /* Use the selected work queue */
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
 
-#  if defined(CONFIG_skeleton_HPWORK)
-#    define ETHWORK HPWORK
-#  elif defined(CONFIG_skeleton_LPWORK)
-#    define ETHWORK LPWORK
-#  else
-#    error Neither CONFIG_skeleton_HPWORK nor CONFIG_skeleton_LPWORK defined
-#  endif
-#endif
+#define ETHWORK LPWORK
 
 /* CONFIG_skeleton_NINTERFACES determines the number of physical interfaces
  * that will be supported.
@@ -115,7 +116,7 @@ struct skel_driver_s
   bool sk_bifup;               /* true:ifup false:ifdown */
   WDOG_ID sk_txpoll;           /* TX poll timer */
   WDOG_ID sk_txtimeout;        /* TX timeout timer */
-  struct work_s sk_irqwork;    /* For deferring interupt work to the work queue */
+  struct work_s sk_irqwork;    /* For deferring interrupt work to the work queue */
   struct work_s sk_pollwork;   /* For deferring poll work to the work queue */
 
   /* This holds the information visible to the NuttX network */
@@ -127,20 +128,23 @@ struct skel_driver_s
  * Private Data
  ****************************************************************************/
 
-/* These statically allocated structur would mean that only a single
+/* These statically allocated structures would mean that only a single
  * instance of the device could be supported.  In order to support multiple
  * devices instances, this data would have to be allocated dynamically.
  */
 
-/* A single packet buffer per device is used here.  There might be multiple
- * packet buffers in a more complex, pipelined design.
+/* A single packet buffer per device is used in this example.  There might
+ * be multiple packet buffers in a more complex, pipelined design.  Many
+ * contemporary Ethernet interfaces, for example,  use multiple, linked DMA
+ * descriptors in rings to implement such a pipeline.  This example assumes
+ * much simpler hardware that simply handles one packet at a time.
  *
  * NOTE that if CONFIG_skeleton_NINTERFACES were greater than 1, you would
- * need a minimum on one packetbuffer per instance.  Much better to be
- * allocated dynamically.
+ * need a minimum on one packet buffer per instance.  Much better to be
+ * allocated dynamically in cases where more than one are needed.
  */
 
-static uint8_t g_pktbuf[MAX_NET_DEV_MTU + CONFIG_NET_GUARDSIZE];
+static uint8_t g_pktbuf[MAX_NETDEV_PKTSIZE + CONFIG_NET_GUARDSIZE];
 
 /* Driver state structure */
 
@@ -157,6 +161,7 @@ static int  skel_txpoll(FAR struct net_driver_s *dev);
 
 /* Interrupt handling */
 
+static void skel_reply(struct skel_driver_s *priv)
 static void skel_receive(FAR struct skel_driver_s *priv);
 static void skel_txdone(FAR struct skel_driver_s *priv);
 
@@ -179,10 +184,10 @@ static int  skel_ifdown(FAR struct net_driver_s *dev);
 static void skel_txavail_work(FAR void *arg);
 static int  skel_txavail(FAR struct net_driver_s *dev);
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int  skel_addmac(FAR struct net_driver_s *dev,
               FAR const uint8_t *mac);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int  skel_rmmac(FAR struct net_driver_s *dev,
               FAR const uint8_t *mac);
 #endif
@@ -192,7 +197,7 @@ static void skel_ipv6multicast(FAR struct skel_driver_s *priv);
 #endif
 #ifdef CONFIG_NETDEV_IOCTL
 static int  skel_ioctl(FAR struct net_driver_s *dev, int cmd,
-            unsigned long arg);
+              unsigned long arg);
 #endif
 
 /****************************************************************************
@@ -206,15 +211,14 @@ static int  skel_ioctl(FAR struct net_driver_s *dev, int cmd,
  *   Start hardware transmission.  Called either from the txdone interrupt
  *   handling or from watchdog based polling.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
  *   OK on success; a negated errno on failure
  *
  * Assumptions:
- *   May or may not be called from an interrupt handler.  In either case,
- *   the network is locked.
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -252,15 +256,14 @@ static int skel_transmit(FAR struct skel_driver_s *priv)
  *   2. When the preceding TX packet send timesout and the interface is reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
  *   OK on success; a negated errno on failure
  *
  * Assumptions:
- *   May or may not be called from an interrupt handler.  In either case,
- *   the network is locked.
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -296,13 +299,21 @@ static int skel_txpoll(FAR struct net_driver_s *dev)
         }
 #endif /* CONFIG_NET_IPv6 */
 
-      /* Send the packet */
-
-      skel_transmit(priv);
-
-      /* Check if there is room in the device to hold another packet. If not,
-       * return a non-zero value to terminate the poll.
+      /* Check if the network is sending this packet to the IP address of
+       * this device.  If so, just loop the packet back into the network but
+       * don't attmpt to put it on the wire.
        */
+
+      if (!devif_loopback(&priv->sk_dev))
+        {
+          /* Send the packet */
+
+          skel_transmit(priv);
+
+          /* Check if there is room in the device to hold another packet. If not,
+           * return a non-zero value to terminate the poll.
+           */
+        }
     }
 
   /* If zero is returned, the polling will continue until all connections have
@@ -313,12 +324,69 @@ static int skel_txpoll(FAR struct net_driver_s *dev)
 }
 
 /****************************************************************************
+ * Name: skel_reply
+ *
+ * Description:
+ *   After a packet has been received and dispatched to the network, it
+ *   may return return with an outgoing packet.  This function checks for
+ *   that case and performs the transmission if necessary.
+ *
+ * Input Parameters:
+ *   priv - Reference to the driver state structure
+ *
+ * Returned Value:
+ *   None
+ *
+ * Assumptions:
+ *   The network is locked.
+ *
+ ****************************************************************************/
+
+static void skel_reply(struct skel_driver_s *priv)
+{
+  /* If the packet dispatch resulted in data that should be sent out on the
+   * network, the field d_len will set to a value > 0.
+   */
+
+  if (priv->sk_dev.d_len > 0)
+    {
+      /* Update the Ethernet header with the correct MAC address */
+
+#ifdef CONFIG_NET_IPv4
+#ifdef CONFIG_NET_IPv6
+      /* Check for an outgoing IPv4 packet */
+
+      if (IFF_IS_IPv4(priv->sk_dev.d_flags))
+#endif
+        {
+          arp_out(&priv->sk_dev);
+        }
+#endif
+
+#ifdef CONFIG_NET_IPv6
+#ifdef CONFIG_NET_IPv4
+      /* Otherwise, it must be an outgoing IPv6 packet */
+
+      else
+#endif
+        {
+          neighbor_out(&skel->sk_dev);
+        }
+#endif
+
+      /* And send the packet */
+
+      skel_transmit(priv);
+    }
+}
+
+/****************************************************************************
  * Name: skel_receive
  *
  * Description:
  *   An interrupt was received indicating the availability of a new RX packet
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -349,90 +417,52 @@ static void skel_receive(FAR struct skel_driver_s *priv)
        pkt_input(&priv->sk_dev);
 #endif
 
-      /* We only accept IP packets of the configured type and ARP packets */
-
 #ifdef CONFIG_NET_IPv4
+      /* Check for an IPv4 packet */
+
       if (BUF->type == HTONS(ETHTYPE_IP))
         {
           ninfo("IPv4 frame\n");
           NETDEV_RXIPV4(&priv->sk_dev);
 
-          /* Handle ARP on input then give the IPv4 packet to the network
-           * layer
+          /* Handle ARP on input, then dispatch IPv4 packet to the network
+           * layer.
            */
 
           arp_ipin(&priv->sk_dev);
           ipv4_input(&priv->sk_dev);
 
-          /* If the above function invocation resulted in data that should be
-           * sent out on the network, the field  d_len will set to a value > 0.
-           */
+          /* Check for a reply to the IPv4 packet */
 
-          if (priv->sk_dev.d_len > 0)
-            {
-              /* Update the Ethernet header with the correct MAC address */
-
-#ifdef CONFIG_NET_IPv6
-              if (IFF_IS_IPv4(priv->sk_dev.d_flags))
-#endif
-                {
-                  arp_out(&priv->sk_dev);
-                }
-#ifdef CONFIG_NET_IPv6
-              else
-                {
-                  neighbor_out(&kel->sk_dev);
-                }
-#endif
-
-              /* And send the packet */
-
-              skel_transmit(priv);
-            }
+          skel_reply(priv);
         }
       else
 #endif
 #ifdef CONFIG_NET_IPv6
+      /* Check for an IPv6 packet */
+
       if (BUF->type == HTONS(ETHTYPE_IP6))
         {
           ninfo("Iv6 frame\n");
           NETDEV_RXIPV6(&priv->sk_dev);
 
-          /* Give the IPv6 packet to the network layer */
+          /* Dispatch IPv6 packet to the network layer */
 
           ipv6_input(&priv->sk_dev);
 
-          /* If the above function invocation resulted in data that should be
-           * sent out on the network, the field  d_len will set to a value > 0.
-           */
+          /* Check for a reply to the IPv6 packet */
 
-          if (priv->sk_dev.d_len > 0)
-           {
-              /* Update the Ethernet header with the correct MAC address */
-
-#ifdef CONFIG_NET_IPv4
-              if (IFF_IS_IPv4(priv->sk_dev.d_flags))
-                {
-                  arp_out(&priv->sk_dev);
-                }
-              else
-#endif
-#ifdef CONFIG_NET_IPv6
-                {
-                  neighbor_out(&priv->sk_dev);
-                }
-#endif
-
-              /* And send the packet */
-
-              skel_transmit(priv);
-            }
+          skel_reply(priv);
         }
       else
 #endif
 #ifdef CONFIG_NET_ARP
+      /* Check for an ARP packet */
+
       if (BUF->type == htons(ETHTYPE_ARP))
         {
+          /* Dispatch ARP packet to the network layer */
+
           arp_arpin(&priv->sk_dev);
           NETDEV_RXARP(&priv->sk_dev);
 
@@ -460,7 +490,7 @@ static void skel_receive(FAR struct skel_driver_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -500,14 +530,14 @@ static void skel_txdone(FAR struct skel_driver_s *priv)
  * Description:
  *   Perform interrupt related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() was called.
  *
  * Returned Value:
  *   OK on success
  *
  * Assumptions:
- *   The network is locked.
+ *   Runs on a worker thread.
  *
  ****************************************************************************/
 
@@ -552,7 +582,7 @@ static void skel_interrupt_work(FAR void *arg)
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -560,6 +590,8 @@ static void skel_interrupt_work(FAR void *arg)
  *   OK on success
  *
  * Assumptions:
+ *   Runs in the context of a the Ethernet interrupt handler.  Local
+ *   interrupts are disabled by the interrupt logic.
  *
  ****************************************************************************/
 
@@ -599,14 +631,11 @@ static int skel_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
  *   OK on success
- *
- * Assumptions:
- *   The network is locked.
  *
  ****************************************************************************/
 
@@ -641,7 +670,7 @@ static void skel_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -649,7 +678,8 @@ static void skel_txtimeout_work(FAR void *arg)
  *   None
  *
  * Assumptions:
- *   Global interrupts are disabled by the watchdog logic.
+ *   Runs in the context of a the timer interrupt handler.  Local
+ *   interrupts are disabled by the interrupt logic.
  *
  ****************************************************************************/
 
@@ -670,40 +700,19 @@ static void skel_txtimeout_expiry(int argc, wdparm_t arg, ...)
 }
 
 /****************************************************************************
- * Name: skel_poll_process
- *
- * Description:
- *   Perform the periodic poll.  This may be called either from watchdog
- *   timer logic or from the worker thread, depending upon the configuration.
- *
- * Parameters:
- *   priv - Reference to the driver state structure
- *
- * Returned Value:
- *   None
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-static inline void skel_poll_process(FAR struct skel_driver_s *priv)
-{
-}
-
-/****************************************************************************
  * Name: skel_poll_work
  *
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
  *   OK on success
  *
  * Assumptions:
- *   The network is locked.
+ *   Run on a work queue thread.
  *
  ****************************************************************************/
 
@@ -745,7 +754,7 @@ static void skel_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -753,7 +762,8 @@ static void skel_poll_work(FAR void *arg)
  *   None
  *
  * Assumptions:
- *   Global interrupts are disabled by the watchdog logic.
+ *   Runs in the context of a the timer interrupt handler.  Local
+ *   interrupts are disabled by the interrupt logic.
  *
  ****************************************************************************/
 
@@ -773,13 +783,14 @@ static void skel_poll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
  *   None
  *
  * Assumptions:
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -827,13 +838,14 @@ static int skel_ifup(FAR struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
  *   None
  *
  * Assumptions:
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -870,14 +882,14 @@ static int skel_ifdown(FAR struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
  *   None
  *
  * Assumptions:
- *   Called on the higher priority worker thread.
+ *   Runs on a work queue thread.
  *
  ****************************************************************************/
 
@@ -915,14 +927,14 @@ static void skel_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
  *   None
  *
  * Assumptions:
- *   Called in normal user mode
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -952,7 +964,7 @@ static int skel_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -961,7 +973,7 @@ static int skel_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int skel_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct skel_driver_s *priv = (FAR struct skel_driver_s *)dev->d_private;
@@ -979,7 +991,7 @@ static int skel_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -988,7 +1000,7 @@ static int skel_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int skel_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct skel_driver_s *priv = (FAR struct skel_driver_s *)dev->d_private;
@@ -1005,7 +1017,7 @@ static int skel_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Configure the IPv6 multicast MAC address.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -1077,7 +1089,7 @@ static void skel_ipv6multicast(FAR struct skel_driver_s *priv)
  * Description:
  *   Handle network IOCTL commands directed to this device.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *   cmd - The IOCTL command
  *   arg - The argument for the IOCTL command
@@ -1086,6 +1098,7 @@ static void skel_ipv6multicast(FAR struct skel_driver_s *priv)
  *   OK on success; Negated errno on failure.
  *
  * Assumptions:
+ *   The network is locked.
  *
  ****************************************************************************/
 
@@ -1121,7 +1134,7 @@ static int skel_ioctl(FAR struct net_driver_s *dev, int cmd,
  * Description:
  *   Initialize the Ethernet controller and driver
  *
- * Parameters:
+ * Input Parameters:
  *   intf - In the case where there are multiple EMACs, this value
  *          identifies which EMAC is to be initialized.
  *
@@ -1129,6 +1142,7 @@ static int skel_ioctl(FAR struct net_driver_s *dev, int cmd,
  *   OK on success; Negated errno on failure.
  *
  * Assumptions:
+ *   Called early in initialization before multi-tasking is initiated.
  *
  ****************************************************************************/
 
@@ -1159,7 +1173,7 @@ int skel_initialize(int intf)
   priv->sk_dev.d_ifup    = skel_ifup;     /* I/F up (new IP address) callback */
   priv->sk_dev.d_ifdown  = skel_ifdown;   /* I/F down callback */
   priv->sk_dev.d_txavail = skel_txavail;  /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   priv->sk_dev.d_addmac  = skel_addmac;   /* Add multicast MAC address */
   priv->sk_dev.d_rmmac   = skel_rmmac;    /* Remove multicast MAC address */
 #endif
@@ -1168,7 +1182,7 @@ int skel_initialize(int intf)
 #endif
   priv->sk_dev.d_private = (FAR void *)g_skel; /* Used to recover private state from dev */
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmissions */
 
   priv->sk_txpoll        = wd_create();   /* Create periodic poll timer */
   priv->sk_txtimeout     = wd_create();   /* Create TX timeout timer */
@@ -1179,7 +1193,9 @@ int skel_initialize(int intf)
    * the device and/or calling skel_ifdown().
    */
 
-  /* Read the MAC address from the hardware into priv->sk_dev.d_mac.ether.ether_addr_octet */
+  /* Read the MAC address from the hardware into priv->sk_dev.d_mac.ether.ether_addr_octet
+   * Applies only if the Ethernet MAC has its own internal address.
+   */
 
   /* Register the device with the OS so that socket IOCTLs can be performed */
 
@@ -1187,4 +1203,4 @@ int skel_initialize(int intf)
   return OK;
 }
 
-#endif /* CONFIG_NET && CONFIG_NET_skeleton */
+#endif /* CONFIG_NET_skeleton */

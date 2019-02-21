@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/nxffs/nxffs_stat.c
  *
- *   Copyright (C) 2011, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -50,6 +50,7 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mtd/mtd.h>
 
@@ -80,8 +81,8 @@ int nxffs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
   /* Get the mountpoint private data from the NuttX inode structure */
 
   volume = mountpt->i_private;
-  ret = sem_wait(&volume->exclsem);
-  if (ret != OK)
+  ret = nxsem_wait(&volume->exclsem);
+  if (ret < 0)
     {
       goto errout;
     }
@@ -98,7 +99,8 @@ int nxffs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
   buf->f_namelen = volume->geo.blocksize - SIZEOF_NXFFS_BLOCK_HDR - SIZEOF_NXFFS_INODE_HDR;
   ret            = OK;
 
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
+
 errout:
   return ret;
 }
@@ -126,7 +128,7 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
   /* Get the mountpoint private data from the NuttX inode structure */
 
   volume = mountpt->i_private;
-  ret = sem_wait(&volume->exclsem);
+  ret = nxsem_wait(&volume->exclsem);
   if (ret != OK)
     {
       goto errout;
@@ -174,7 +176,8 @@ int nxffs_stat(FAR struct inode *mountpt, FAR const char *relpath,
   ret = OK;
 
 errout_with_semaphore:
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
+
 errout:
   return ret;
 }
@@ -212,12 +215,11 @@ int nxffs_fstat(FAR const struct file *filep, FAR struct stat *buf)
    * protects the open file list.
    */
 
-  ret = sem_wait(&volume->exclsem);
+  ret = nxsem_wait(&volume->exclsem);
   if (ret != OK)
     {
-      int errcode = get_errno();
-      ferr("ERROR: sem_wait failed: %d\n", errcode);
-      return -errcode;
+      ferr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Return status information based on the directory entry */
@@ -230,6 +232,6 @@ int nxffs_fstat(FAR const struct file *filep, FAR struct stat *buf)
   buf->st_mtime  = ofile->entry.utc;
   buf->st_ctime  = ofile->entry.utc;
 
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
   return OK;
 }

@@ -51,6 +51,7 @@
 #include "up_arch.h"
 
 #include "chip/stm32_flash.h"
+#include "stm32_gpio.h"
 #include "stm32_rcc.h"
 #include "stm32_pwr.h"
 
@@ -75,7 +76,9 @@
 
 /* Include chip-specific clocking initialization logic */
 
-#if defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX)
+#if defined(CONFIG_STM32F7_STM32F72XX) || defined(CONFIG_STM32F7_STM32F73XX)
+#  include "chip/stm32f72xx73xx_rcc.c"
+#elif defined(CONFIG_STM32F7_STM32F74XX) || defined(CONFIG_STM32F7_STM32F75XX)
 #  include "stm32f74xx75xx_rcc.c"
 #elif defined(CONFIG_STM32F7_STM32F76XX) || defined(CONFIG_STM32F7_STM32F77XX)
 #  include "stm32f76xx77xx_rcc.c"
@@ -133,6 +136,12 @@ void stm32_clockconfig(void)
 
   stm32_stdclockconfig();
 
+#endif
+
+#ifdef CONFIG_STM32F7_SYSCFG_IOCOMPENSATION
+  /* Enable I/O Compensation */
+
+  stm32_iocompensation();
 #endif
 
   /* Enable peripheral clocking */

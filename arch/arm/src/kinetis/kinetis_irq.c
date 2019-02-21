@@ -45,6 +45,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
+#include <arch/armv7-m/nvicpri.h>
 
 #include "nvic.h"
 #include "ram_vectors.h"
@@ -147,7 +148,7 @@ static void kinetis_dumpnvic(const char *msg, int irq)
   irqinfo("              %08x %08x %08x %08x\n",
           getreg32(NVIC_IRQ96_99_PRIORITY), getreg32(NVIC_IRQ100_103_PRIORITY),
           getreg32(NVIC_IRQ104_107_PRIORITY), getreg32(NVIC_IRQ108_111_PRIORITY));
-#if NR_VECTORS > 111
+#if KINETIS_IRQ_NVECTORS > 111
   irqinfo("              %08x %08x\n",
           getreg32(NVIC_IRQ112_115_PRIORITY), getreg32(NVIC_IRQ116_119_PRIORITY));
 #endif
@@ -347,11 +348,11 @@ void up_irqinitialize(void)
    * registers.
    */
 
-  for (i = nintlines, regaddr = NVIC_IRQ0_31_ENABLE;
+  for (i = nintlines, regaddr = NVIC_IRQ0_31_CLEAR;
        i > 0;
        i--, regaddr += 4)
     {
-      putreg32(0, regaddr);
+      putreg32(0xffffffff, regaddr);
     }
 
   /* Make sure that we are using the correct vector table.  The default
@@ -403,9 +404,6 @@ void up_irqinitialize(void)
 
   /* Set the priority of the SVCall interrupt */
 
-#ifdef CONFIG_ARCH_IRQPRIO
-  /* up_prioritize_irq(KINETIS_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
-#endif
 #ifdef CONFIG_ARMV7M_USEBASEPRI
   kinetis_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
 #endif

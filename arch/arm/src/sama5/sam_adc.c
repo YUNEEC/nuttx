@@ -1,7 +1,7 @@
 /************************************************************************************
  * arch/arm/src/sama5/sam_adc.c
  *
- *   Copyright (C) 2013, 2014, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2014, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -591,7 +591,7 @@ static bool sam_adc_checkreg(struct sam_adc_s *priv, bool wr,
  *       thread sets ready when it has completed processing the last sample
  *       data.
  *
- * Input Parameters
+ * Input Parameters:
  *   arg - The ADC private data structure cast to (void *)
  *
  * Returned Value:
@@ -610,7 +610,7 @@ static void sam_adc_dmadone(void *arg)
   int i;
 
   ainfo("ready=%d enabled=%d\n", priv->enabled, priv->ready);
-  ASSERT(priv != NULL && !priv->ready);
+  DEBUGASSERT(priv != NULL && !priv->ready);
 
   /* If the DMA transfer is not enabled, just ignore the data (and do not start
    * the next DMA transfer).
@@ -838,7 +838,7 @@ static int sam_adc_dmasetup(FAR struct sam_adc_s *priv, FAR uint8_t *buffer,
  *   sam_adc_endconversion will re-enable EOC interrupts when it completes
  *   processing all pending EOC events.
  *
- * Input Parameters
+ * Input Parameters:
  *   arg - The ADC private data structure cast to (void *)
  *
  * Returned Value:
@@ -853,7 +853,7 @@ static void sam_adc_endconversion(void *arg)
   uint32_t pending;
   int chan;
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
   ainfo("pending=%08x\n", priv->pending);
 
   /* Get the set of unmasked, pending ADC interrupts */
@@ -972,11 +972,11 @@ static int sam_adc_interrupt(int irq, void *context, FAR void *arg)
   /* Make sure that all interrupts were handled */
 
   DEBUGASSERT(pending == 0);
+  UNUSED(priv);  /* Not used in all configurations */
   return OK;
 }
 
 #ifdef SAMA5_ADC_HAVE_CHANNELS
-
 /****************************************************************************
  * ADC methods
  ****************************************************************************/
@@ -2025,7 +2025,7 @@ struct adc_dev_s *sam_adc_initialize(void)
 
       /* Initialize the private ADC device data structure */
 
-      sem_init(&priv->exclsem,  0, 1);
+      nxsem_init(&priv->exclsem,  0, 1);
       priv->cb  = NULL;
       priv->dev = &g_adcdev;
 
@@ -2152,15 +2152,15 @@ void sam_adc_lock(FAR struct sam_adc_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->exclsem);
+      ret = nxsem_wait(&priv->exclsem);
 
       /* This should only fail if the wait was canceled by an signal
        * (and the worker thread will receive a lot of signals).
        */
 
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -2174,7 +2174,7 @@ void sam_adc_lock(FAR struct sam_adc_s *priv)
 void sam_adc_unlock(FAR struct sam_adc_s *priv)
 {
   ainfo("Unlocking\n");
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
 }
 
 /****************************************************************************

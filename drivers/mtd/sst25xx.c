@@ -56,6 +56,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/mtd/mtd.h>
@@ -348,7 +349,7 @@ static void sst25xx_waitwritecomplete(struct sst25xx_dev_s *priv)
       if ((status & SST25_SR_WIP) != 0)
         {
           sst25xx_unlock(priv->dev);
-          usleep(1000);
+          nxsig_usleep(1000);
           sst25xx_lock(priv->dev);
         }
     }
@@ -949,6 +950,7 @@ FAR struct mtd_dev_s *sst25xx_initialize(FAR struct spi_dev_s *dev)
       priv->mtd.write  = sst25xx_write;
 #endif
       priv->mtd.ioctl  = sst25xx_ioctl;
+      priv->mtd.name   = "sst25xx";
       priv->dev        = dev;
       priv->lastwaswrite = false;
 
@@ -974,12 +976,6 @@ FAR struct mtd_dev_s *sst25xx_initialize(FAR struct spi_dev_s *dev)
           sst25xx_unprotect(priv);
         }
     }
-
-  /* Register the MTD with the procfs system if enabled */
-
-#ifdef CONFIG_MTD_REGISTRATION
-  mtd_register(&priv->mtd, "sst25xx");
-#endif
 
   /* Return the implementation-specific state structure as the MTD device */
 

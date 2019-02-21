@@ -1,7 +1,7 @@
 /****************************************************************************
  * common/up_internal.h
  *
- *   Copyright (C) 2007-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,21 +51,6 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-/* Bring-up debug configurations.  These are here (vs defconfig)
- * because these should only be controlled during low level
- * board bring-up and not part of normal platform configuration.
- */
-
-#undef  CONFIG_SUPPRESS_INTERRUPTS    /* DEFINED: Do not enable interrupts */
-#undef  CONFIG_SUPPRESS_TIMER_INTS    /* DEFINED: No timer */
-#undef  CONFIG_SUPPRESS_SERIAL_INTS   /* DEFINED: Console will poll */
-#undef  CONFIG_SUPPRESS_UART_CONFIG   /* DEFINED: Do not reconfig UART */
-#undef  CONFIG_DUMP_ON_EXIT           /* DEFINED: Dump task state on exit */
-
-#ifndef CONFIG_DEBUG_SCHED_INFO
-#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
-#endif
 
 /* Determine which (if any) console driver to use.  If a console is enabled
  * and no other console device is specified, then a serial console is
@@ -121,11 +106,9 @@
   /* If the floating point unit is present and enabled, then save the
    * floating point registers as well as normal ARM registers.  This only
    * applies if "lazy" floating point register save/restore is used
-   * (i.e., not CONFIG_ARMV7M_CMNVECTOR=y with CONFIG_ARMV7M_LAZYFPU=n).
    */
 
-#  if defined(CONFIG_ARCH_FPU) && (!defined(CONFIG_ARMV7M_CMNVECTOR) || \
-      defined(CONFIG_ARMV7M_LAZYFPU))
+#  if defined(CONFIG_ARCH_FPU) && defined(CONFIG_ARMV7M_LAZYFPU)
 #    define up_savestate(regs)  up_copyarmstate(regs, (uint32_t*)CURRENT_REGS)
 #  else
 #    define up_savestate(regs)  up_copyfullstate(regs, (uint32_t*)CURRENT_REGS)
@@ -493,7 +476,7 @@ void lowconsole_init(void);
 /* DMA **********************************************************************/
 
 #ifdef CONFIG_ARCH_DMA
-void weak_function up_dmainitialize(void);
+void weak_function up_dma_initialize(void);
 #endif
 
 /* Cache control ************************************************************/
@@ -528,7 +511,7 @@ void up_wdtinit(void);
  * up_initialize().  Then this stub would not be needed.
  */
 
-#ifdef CONFIG_NET
+#if defined(CONFIG_NET) && !defined(CONFIG_NETDEV_LATEINIT)
 void up_netinitialize(void);
 #else
 # define up_netinitialize()

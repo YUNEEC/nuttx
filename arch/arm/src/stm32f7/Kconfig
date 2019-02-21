@@ -9,8 +9,136 @@ comment "STM32 F7 Configuration Options"
 
 choice
 	prompt "STM32 F7 Chip Selection"
-	default ARCH_CHIP_STM32F746
+	default ARCH_CHIP_STM32F746NG
 	depends on ARCH_CHIP_STM32F7
+
+config ARCH_CHIP_STM32F722RC
+	bool "STM32F722RC"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_R
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722RE
+	bool "STM32F722RE"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_R
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722VC
+	bool "STM32F722VC"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_V
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722VE
+	bool "STM32F722VE"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_V
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722ZC
+	bool "STM32F722ZC"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_Z
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722ZE
+	bool "STM32F722ZE"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_Z
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722IC
+	bool "STM32F722IC"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_I
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F722IE
+	bool "STM32F722IE"
+	select STM32F7_STM32F722XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_I
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723RC
+	bool "STM32F723RC"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_R
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723RE
+	bool "STM32F723RE"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_R
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723VC
+	bool "STM32F723VC"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_V
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723VE
+	bool "STM32F723VE"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_V
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723ZC
+	bool "STM32F723ZC"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_Z
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723ZE
+	bool "STM32F723ZE"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_Z
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723IC
+	bool "STM32F723IC"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_C
+	select STM32F7_IO_CONFIG_I
+	---help---
+		STM32 F7 Cortex M7, 256 FLASH, 256K (176+16+64) Kb SRAM
+
+config ARCH_CHIP_STM32F723IE
+	bool "STM32F723IE"
+	select STM32F7_STM32F723XX
+	select STM32F7_FLASH_CONFIG_E
+	select STM32F7_IO_CONFIG_I
+	---help---
+		STM32 F7 Cortex M7, 512 FLASH, 256K (176+16+64) Kb SRAM
 
 config ARCH_CHIP_STM32F745VG
 	bool "STM32F745VG"
@@ -470,6 +598,14 @@ config ARCH_CHIP_STM32F779AI
 
 endchoice # STM32 F7 Chip Selection
 
+config STM32F7_STM32F72XX
+	bool
+	default n
+
+config STM32F7_STM32F73XX
+	bool
+	default n
+
 config STM32F7_STM32F74XX
 	bool
 	default n
@@ -483,6 +619,10 @@ config STM32F7_STM32F76XX
 	default n
 
 config STM32F7_STM32F77XX
+	bool
+	default n
+
+config STM32F7_IO_CONFIG_R
 	bool
 	default n
 
@@ -510,11 +650,46 @@ config STM32F7_IO_CONFIG_A
 	bool
 	default n
 
+config STM32F7_STM32F722XX
+	bool
+	default n
+	select STM32F7_STM32F72XX
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
+	select ARMV7M_HAVE_ICACHE
+	select ARMV7M_HAVE_DCACHE
+	select ARMV7M_HAVE_ITCM
+	select ARMV7M_HAVE_DTCM
+	select STM32F7_HAVE_FMC
+	select STM32F7_HAVE_RNG
+	select STM32F7_HAVE_SPI4 if !STM32F7_IO_CONFIG_R
+	select STM32F7_HAVE_SPI5 if !(STM32F7_IO_CONFIG_R || STM32F7_IO_CONFIG_V)
+	select STM32F7_HAVE_CRYP
+	select STM32F7_HAVE_SDMMC2 if !STM32F7_IO_CONFIG_R
+
+config STM32F7_STM32F723XX
+	bool
+	default n
+	select STM32F7_STM32F72XX
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
+	select ARMV7M_HAVE_ICACHE
+	select ARMV7M_HAVE_DCACHE
+	select ARMV7M_HAVE_ITCM
+	select ARMV7M_HAVE_DTCM
+	select STM32F7_HAVE_FMC
+	select STM32F7_HAVE_RNG
+	select STM32F7_HAVE_SPI4 if !STM32F7_IO_CONFIG_R
+	select STM32F7_HAVE_SPI5 if !(STM32F7_IO_CONFIG_R || STM32F7_IO_CONFIG_V)
+	select STM32F7_HAVE_CRYP
+	select STM32F7_HAVE_SDMMC2 if !STM32F7_IO_CONFIG_R
+
 config STM32F7_STM32F745XX
 	bool
 	default n
 	select STM32F7_STM32F74XX
 	select ARCH_HAVE_FPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -526,12 +701,15 @@ config STM32F7_STM32F745XX
 	select STM32F7_HAVE_SPI6 if !STM32F7_IO_CONFIG_V
 	select STM32F7_HAVE_DCMI
 	select STM32F7_HAVE_DMA2D
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F746XX
 	bool
 	default n
 	select STM32F7_STM32F74XX
 	select ARCH_HAVE_FPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -544,6 +722,8 @@ config STM32F7_STM32F746XX
 	select STM32F7_HAVE_DCMI
 	select STM32F7_HAVE_LTDC
 	select STM32F7_HAVE_DMA2D
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F756XX
 	bool
@@ -563,6 +743,8 @@ config STM32F7_STM32F756XX
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F765XX
 	bool
@@ -570,6 +752,7 @@ config STM32F7_STM32F765XX
 	select STM32F7_STM32F76XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -584,6 +767,8 @@ config STM32F7_STM32F765XX
 	select STM32F7_HAVE_DCMI
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F767XX
 	bool
@@ -608,6 +793,8 @@ config STM32F7_STM32F767XX
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_JPEG
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F768XX # Revisit Wehn parts released
 	bool
@@ -615,6 +802,7 @@ config STM32F7_STM32F768XX # Revisit Wehn parts released
 	select STM32F7_STM32F76XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -632,6 +820,8 @@ config STM32F7_STM32F768XX # Revisit Wehn parts released
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_JPEG
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F768AX # Revisit When parts released
 	bool
@@ -639,6 +829,7 @@ config STM32F7_STM32F768AX # Revisit When parts released
 	select STM32F7_STM32F76XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -655,6 +846,8 @@ config STM32F7_STM32F768AX # Revisit When parts released
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_JPEG
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F769XX
 	bool
@@ -662,6 +855,7 @@ config STM32F7_STM32F769XX
 	select STM32F7_STM32F76XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -679,6 +873,8 @@ config STM32F7_STM32F769XX
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_JPEG
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F769AX # Revisit When parts released
 	bool
@@ -686,6 +882,7 @@ config STM32F7_STM32F769AX # Revisit When parts released
 	select STM32F7_STM32F76XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -702,6 +899,8 @@ config STM32F7_STM32F769AX # Revisit When parts released
 	select STM32F7_HAVE_DMA2D
 	select STM32F7_HAVE_JPEG
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F777XX
 	bool
@@ -709,6 +908,7 @@ config STM32F7_STM32F777XX
 	select STM32F7_STM32F77XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -728,6 +928,8 @@ config STM32F7_STM32F777XX
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F778XX # Revisit when parts released
 	bool
@@ -735,6 +937,7 @@ config STM32F7_STM32F778XX # Revisit when parts released
 	select STM32F7_STM32F77XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -754,6 +957,8 @@ config STM32F7_STM32F778XX # Revisit when parts released
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F778AX
 	bool
@@ -761,6 +966,7 @@ config STM32F7_STM32F778AX
 	select STM32F7_STM32F77XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -779,6 +985,8 @@ config STM32F7_STM32F778AX
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F779XX
 	bool
@@ -786,6 +994,7 @@ config STM32F7_STM32F779XX
 	select STM32F7_STM32F77XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -805,6 +1014,8 @@ config STM32F7_STM32F779XX
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_STM32F779AX
 	bool
@@ -812,6 +1023,7 @@ config STM32F7_STM32F779AX
 	select STM32F7_STM32F77XX
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_SDIO_DELAYED_INVLDT
 	select ARMV7M_HAVE_ICACHE
 	select ARMV7M_HAVE_DCACHE
 	select ARMV7M_HAVE_ITCM
@@ -830,6 +1042,8 @@ config STM32F7_STM32F779AX
 	select STM32F7_HAVE_CRYP
 	select STM32F7_HAVE_HASH
 	select STM32F7_HAVE_DFSDM1
+	select STM32F7_HAVE_CAN2
+	select STM32F7_HAVE_SPI4
 
 config STM32F7_FLASH_CONFIG_E
 	bool
@@ -852,6 +1066,7 @@ choice
 		that designates the FLASH size.
 
 				Designator  Size in KiB
+				   C	256
 				   E	512
 				   G	1024
 				   I	2048
@@ -870,6 +1085,9 @@ choice
 
 config STM32F7_FLASH_OVERRIDE_DEFAULT
 			bool "Default"
+
+config STM32F7_FLASH_OVERRIDE_C
+			bool "C 256KiB"
 
 config STM32F7_FLASH_OVERRIDE_E
 			bool "E 512KiB"
@@ -913,6 +1131,10 @@ config STM32F7_HAVE_RNG
 	bool
 	default n
 
+config STM32F7_HAVE_SPI4
+	bool
+	default n
+
 config STM32F7_HAVE_SPI5
 	bool
 	default n
@@ -934,6 +1156,10 @@ config STM32F7_HAVE_ADC2_DMA
 	default n
 
 config STM32F7_HAVE_ADC3_DMA
+	bool
+	default n
+
+config STM32F7_HAVE_CAN2
 	bool
 	default n
 
@@ -1121,6 +1347,8 @@ config STM32F7_DSIHOST
 config STM32F7_DMA2D
 	bool "DMA2D"
 	default n
+	select FB
+	select FB_OVERLAY
 	depends on STM32F7_HAVE_DMA2D
 	---help---
 		The STM32 DMA2D is an Chrom-Art Accelerator for image manipulation
@@ -1183,6 +1411,7 @@ config STM32F7_LPTIM1
 config STM32F7_LTDC
 	bool "LTDC"
 	default n
+	select FB
 	depends on STM32F7_HAVE_LTDC
 	---help---
 		The STM32 LTDC is an LCD-TFT Display Controller available on
@@ -1206,6 +1435,11 @@ config STM32F7_OTGHS
 config STM32F7_QUADSPI
 	bool "QuadSPI"
 	default n
+
+config STM32F7_RTC
+	bool "RTC"
+	default n
+	select RTC
 
 config STM32F7_PWR
 	bool "PWR"
@@ -1233,7 +1467,8 @@ config STM32F7_SDMMC1
 	select STM32F7_SDMMC
 	select ARCH_HAVE_SDIO
 	select ARCH_HAVE_SDIOWAIT_WRCOMPLETE
-	select SDIO_PREFLIGHT
+	select ARCH_HAVE_SDIO_PREFLIGHT
+	select SDIO_BLOCKSETUP
 
 config STM32F7_SDMMC2
 	bool "SDMMC2"
@@ -1242,7 +1477,8 @@ config STM32F7_SDMMC2
 	select STM32F7_SDMMC
 	select ARCH_HAVE_SDIO
 	select ARCH_HAVE_SDIOWAIT_WRCOMPLETE
-	select SDIO_PREFLIGHT
+	select ARCH_HAVE_SDIO_PREFLIGHT
+	select SDIO_BLOCKSETUP
 
 config STM32F7_SPDIFRX
 	bool "SPDIFRX"
@@ -1269,6 +1505,7 @@ config STM32F7_SPI3
 config STM32F7_SPI4
 	bool "SPI4"
 	default n
+	depends on STM32F7_HAVE_SPI4
 	select SPI
 	select STM32F7_SPI
 
@@ -1423,6 +1660,18 @@ config STM32F7_WWDG
 	select WATCHDOG
 
 endmenu
+
+config STM32F7_SYSCFG_IOCOMPENSATION
+	bool "SYSCFG I/O Compensation"
+	default n
+	---help---
+		By default the I/O compensation cell is not used. However when the I/O
+		output buffer speed is configured in 50 MHz or 100 MHz mode, it is
+		recommended to use the compensation cell for slew rate control on I/O
+		tf(IO)out)/tr(IO)out commutation to reduce the I/O noise on power supply.
+
+		The I/O compensation cell can be used only when the supply voltage ranges
+		from 2.4 to 3.6 V.
 
 menu "U[S]ART Configuration"
 	depends on STM32F7_USART
@@ -1639,7 +1888,7 @@ config STM32F7_SERIAL_RXDMA_BUFFER_SIZE
 
 		Value given here will be rounded up to next multiple of 32 bytes.
 
-config SERIAL_DISABLE_REORDERING
+config STM32F7_SERIAL_DISABLE_REORDERING
 	bool "Disable reordering of ttySx devices."
 	depends on STM32F7_USART1 || STM32F7_USART2 || STM32F7_USART3 || STM32F7_UART4 || STM32F7_UART5 || STM32F7_USART6 || STM32F7_UART7 || STM32F7_UART8
 	default n
@@ -1683,6 +1932,25 @@ config STM32F7_SERIALBRK_BSDCOMPAT
 		on because the SW starts the break and then the HW automatically clears
 		the break. This makes it is difficult to sent a long break.
 
+config STM32F7_USART_SINGLEWIRE
+	bool "Single Wire Support"
+	default n
+	depends on STM32F7_USART
+	---help---
+		Enable single wire UART support.  The option enables support for the
+		TIOCSSINGLEWIRE ioctl in the STM32F7 serial driver.
+
+if PM
+
+config STM32F7_PM_SERIAL_ACTIVITY
+	int "PM serial activity"
+	default 10
+	---help---
+		PM activity reported to power management logic on every serial
+		interrupt.
+
+endif
+
 endmenu # U[S]ART Configuration
 
 menu "SPI Configuration"
@@ -1701,6 +1969,48 @@ config STM32F7_SPI_DMA
 	default n
 	---help---
 		Use DMA to improve SPI transfer performance.  Cannot be used with STM32F7_SPI_INTERRUPT.
+		
+config STM32F7_SPI1_DMA
+	bool "SPI1 DMA"
+	default n
+	depends on STM32F7_SPI1 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI1 transfer performance.
+
+config STM32F7_SPI2_DMA
+	bool "SPI2 DMA"
+	default n
+	depends on STM32F7_SPI2 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI2 transfer performance.
+
+config STM32F7_SPI3_DMA
+	bool "SPI3 DMA"
+	default n
+	depends on STM32F7_SPI3 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI3 transfer performance.
+
+config STM32F7_SPI4_DMA
+	bool "SPI4 DMA"
+	default n
+	depends on STM32F7_SPI4 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI4 transfer performance.
+
+config STM32F7_SPI5_DMA
+	bool "SPI5 DMA"
+	default n
+	depends on STM32F7_SPI5 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI5 transfer performance.
+
+config STM32F7_SPI6_DMA
+	bool "SPI6 DMA"
+	default n
+	depends on STM32F7_SPI6 && STM32F7_SPI_DMA
+	---help---
+		Use DMA to improve SPI6 transfer performance.
 
 endmenu # "SPI Configuration"
 
@@ -1737,11 +2047,6 @@ config STM32F7_I2CTIMEOTICKS
 	default 500
 	depends on STM32F7_I2C && !STM32F7_I2C_DYNTIMEO
 
-config STM32F7_I2C_DUTY16_9
-	bool "Frequency with Tlow/Thigh = 16/9 "
-	default n
-	depends on STM32F7_I2C
-
 endmenu # "I2C Configuration"
 
 menu "SD/MMC Configuration"
@@ -1770,13 +2075,6 @@ config STM32F7_SDMMC_DMA
 menu "SDMMC1 Configuration"
 	depends on STM32F7_SDMMC1
 
-config STM32F7_SDMMC1_PRI
-	hex "SDMMC1 interrupt priority"
-	default 128
-	depends on ARCH_IRQPRIO && EXPERIMENTAL
-	---help---
-		Select SDMMC1 interrupt priority.  Default: 128.
-
 config STM32F7_SDMMC1_DMAPRIO
 	hex "SDMMC1 DMA priority"
 	default 0x00010000
@@ -1792,17 +2090,26 @@ config SDMMC1_WIDTH_D1_ONLY
 	---help---
 		Select 1-bit transfer mode.  Default: 4-bit transfer mode.
 
+config SDMMC1_SDIO_MODE
+	bool "SDIO Card Support"
+	default n
+	---help---
+		Build in additional support needed only for SDIO cards (vs. SD
+		memory cards)
+
+config SDMMC1_SDIO_PULLUP
+	bool "Enable internal Pull-Ups"
+	default n
+	---help---
+		If you are using an external SDCard module that does not have the
+		pull-up resistors for the SDIO interface (like the Gadgeteer SD Card
+		Module) then enable this option to activate the internal pull-up
+		resistors.
+
 endmenu # "SDMMC1 Configuration"
 
 menu "SDMMC2 Configuration"
 	depends on STM32F7_SDMMC2
-
-config STM32F7_SDMMC2_PRI
-	hex "SDMMC2 interrupt priority"
-	default 128
-	depends on ARCH_IRQPRIO && EXPERIMENTAL
-	---help---
-		Select SDMMC2 interrupt priority.  Default: 128.
 
 config STM32F7_SDMMC2_DMAPRIO
 	hex "SDMMC2 DMA priority"
@@ -1818,6 +2125,22 @@ config SDMMC2_WIDTH_D1_ONLY
 	default n
 	---help---
 		Select 1-bit transfer mode.  Default: 4-bit transfer mode.
+
+config SDMMC2_SDIO_MODE
+	bool "SDIO Card Support"
+	default n
+	---help---
+		Build in additional support needed only for SDIO cards (vs. SD
+		memory cards)
+
+config SDMMC2_SDIO_PULLUP
+	bool "Enable internal Pull-Ups"
+	default n
+	---help---
+		If you are using an external SDCard module that does not have the
+		pull-up resistors for the SDIO interface (like the Gadgeteer SD Card
+		Module) then enable this option to activate the internal pull-up
+		resistors.
 
 endmenu # "SDMMC2 Configuration"
 endmenu # "SD/MMC Configuration"
@@ -1844,9 +2167,9 @@ config STM32F7_HAVE_RTC_SUBSECONDS
 	default y
 
 menu "RTC Configuration"
-	depends on RTC
+	depends on STM32F7_RTC
 
-config RTC_MAGIC_REG
+config STM32F7_RTC_MAGIC_REG
 	int "BKP register"
 	default 0
 	range  0 31
@@ -1854,15 +2177,15 @@ config RTC_MAGIC_REG
 		The BKP register used to store/check the Magic value to determine if
 		RTC is already setup
 
-config RTC_MAGIC
+config STM32F7_RTC_MAGIC
 	hex "RTC Magic 1"
-	default 0xfacefeee
+	default 0xfacefeed
 	---help---
 		Value used as Magic to determine if the RTC is already setup
 
-config RTC_MAGIC_TIME_SET
+config STM32F7_RTC_MAGIC_TIME_SET
 	hex "RTC Magic 2"
-	default 0xfacefeef
+	default 0xf00dface
 	---help---
 		Value used as Magic to determine if the RTC has been setup and has
 		time set
@@ -3581,21 +3904,21 @@ choice
 config STM32F7_TIM1_ADC1
 	bool "TIM1 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM1 to trigger ADC1
 
 config STM32F7_TIM1_ADC2
 	bool "TIM1 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM1 to trigger ADC2
 
 config STM32F7_TIM1_ADC3
 	bool "TIM1 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM1 to trigger ADC3
 
@@ -3623,21 +3946,21 @@ choice
 config STM32F7_TIM2_ADC1
 	bool "TIM2 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM2 to trigger ADC1
 
 config STM32F7_TIM2_ADC2
 	bool "TIM2 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM2 to trigger ADC2
 
 config STM32F7_TIM2_ADC3
 	bool "TIM2 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM2 to trigger ADC3
 
@@ -3665,21 +3988,21 @@ choice
 config STM32F7_TIM3_ADC1
 	bool "TIM3 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM3 to trigger ADC1
 
 config STM32F7_TIM3_ADC2
 	bool "TIM3 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM3 to trigger ADC2
 
 config STM32F7_TIM3_ADC3
 	bool "TIM3 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM3 to trigger ADC3
 
@@ -3707,21 +4030,21 @@ choice
 config STM32F7_TIM4_ADC1
 	bool "TIM4 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM4 to trigger ADC1
 
 config STM32F7_TIM4_ADC2
 	bool "TIM4 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM4 to trigger ADC2
 
 config STM32F7_TIM4_ADC3
 	bool "TIM4 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM4 to trigger ADC3
 
@@ -3749,21 +4072,21 @@ choice
 config STM32F7_TIM5_ADC1
 	bool "TIM5 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM5 to trigger ADC1
 
 config STM32F7_TIM5_ADC2
 	bool "TIM5 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM5 to trigger ADC2
 
 config STM32F7_TIM5_ADC3
 	bool "TIM5 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM5 to trigger ADC3
 
@@ -3791,39 +4114,39 @@ choice
 config STM32F7_TIM8_ADC1
 	bool "TIM8 ADC channel 1"
 	depends on STM32F7_ADC1
-	select HAVE_ADC1_TIMER
+	select STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Reserve TIM8 to trigger ADC1
 
 config STM32F7_TIM8_ADC2
 	bool "TIM8 ADC channel 2"
 	depends on STM32F7_ADC2
-	select HAVE_ADC2_TIMER
+	select STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Reserve TIM8 to trigger ADC2
 
 config STM32F7_TIM8_ADC3
 	bool "TIM8 ADC channel 3"
 	depends on STM32F7_ADC3
-	select HAVE_ADC3_TIMER
+	select STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Reserve TIM8 to trigger ADC3
 
 endchoice
 
-config HAVE_ADC1_TIMER
+config STM32F7_HAVE_ADC1_TIMER
 	bool
 
-config HAVE_ADC2_TIMER
+config STM32F7_HAVE_ADC2_TIMER
 	bool
 
-config HAVE_ADC3_TIMER
+config STM32F7_HAVE_ADC3_TIMER
 	bool
 
 config STM32F7_ADC1_SAMPLE_FREQUENCY
 	int "ADC1 Sampling Frequency"
 	default 100
-	depends on HAVE_ADC1_TIMER
+	depends on STM32F7_HAVE_ADC1_TIMER
 	---help---
 		ADC1 sampling frequency.  Default:  100Hz
 
@@ -3831,14 +4154,14 @@ config STM32F7_ADC1_TIMTRIG
 	int "ADC1 Timer Trigger"
 	default 0
 	range 0 4
-	depends on HAVE_ADC1_TIMER
+	depends on STM32F7_HAVE_ADC1_TIMER
 	---help---
 		Values 0:CC1 1:CC2 2:CC3 3:CC4 4:TRGO
 
 config STM32F7_ADC2_SAMPLE_FREQUENCY
 	int "ADC2 Sampling Frequency"
 	default 100
-	depends on HAVE_ADC2_TIMER
+	depends on STM32F7_HAVE_ADC2_TIMER
 	---help---
 		ADC2 sampling frequency.  Default:  100Hz
 
@@ -3846,14 +4169,14 @@ config STM32F7_ADC2_TIMTRIG
 	int "ADC2 Timer Trigger"
 	default 0
 	range 0 4
-	depends on HAVE_ADC2_TIMER
+	depends on STM32F7_HAVE_ADC2_TIMER
 	---help---
 		Values 0:CC1 1:CC2 2:CC3 3:CC4 4:TRGO
 
 config STM32F7_ADC3_SAMPLE_FREQUENCY
 	int "ADC3 Sampling Frequency"
 	default 100
-	depends on HAVE_ADC3_TIMER
+	depends on STM32F7_HAVE_ADC3_TIMER
 	---help---
 		ADC3 sampling frequency.  Default:  100Hz
 
@@ -3861,7 +4184,7 @@ config STM32F7_ADC3_TIMTRIG
 	int "ADC3 Timer Trigger"
 	default 0
 	range 0 4
-	depends on HAVE_ADC3_TIMER
+	depends on STM32F7_HAVE_ADC3_TIMER
 	---help---
 		Values 0:CC1 1:CC2 2:CC3 3:CC4 4:TRGO
 
@@ -4302,7 +4625,7 @@ endchoice
 config STM32F7_TIM1_CAP
 	bool "TIM1 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM1
+	depends on STM32F7_TIM1
 	---help---
 		Reserve timer 1 for use by Capture
 
@@ -4312,7 +4635,7 @@ config STM32F7_TIM1_CAP
 config STM32F7_TIM2_CAP
 	bool "TIM2 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM2
+	depends on STM32F7_TIM2
 	---help---
 		Reserve timer 2 for use by Capture
 
@@ -4322,7 +4645,7 @@ config STM32F7_TIM2_CAP
 config STM32F7_TIM3_CAP
 	bool "TIM3 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM3
+	depends on STM32F7_TIM3
 	---help---
 		Reserve timer 3 for use by Capture
 
@@ -4332,7 +4655,7 @@ config STM32F7_TIM3_CAP
 config STM32F7_TIM4_CAP
 	bool "TIM4 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM4
+	depends on STM32F7_TIM4
 	---help---
 		Reserve timer 4 for use by Capture
 
@@ -4342,7 +4665,7 @@ config STM32F7_TIM4_CAP
 config STM32F7_TIM5_CAP
 	bool "TIM5 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM5
+	depends on STM32F7_TIM5
 	---help---
 		Reserve timer 5 for use by Capture
 
@@ -4352,7 +4675,7 @@ config STM32F7_TIM5_CAP
 config STM32F7_TIM8_CAP
 	bool "TIM8 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM8
+	depends on STM32F7_TIM8
 	---help---
 		Reserve timer 8 for use by Capture
 
@@ -4362,7 +4685,7 @@ config STM32F7_TIM8_CAP
 config STM32F7_TIM9_CAP
 	bool "TIM9 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM9
+	depends on STM32F7_TIM9
 	---help---
 		Reserve timer 9 for use by Capture
 
@@ -4372,7 +4695,7 @@ config STM32F7_TIM9_CAP
 config STM32F7_TIM10_CAP
 	bool "TIM10 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM10
+	depends on STM32F7_TIM10
 	---help---
 		Reserve timer 10 for use by Capture
 
@@ -4382,7 +4705,7 @@ config STM32F7_TIM10_CAP
 config STM32F7_TIM11_CAP
 	bool "TIM11 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM11
+	depends on STM32F7_TIM11
 	---help---
 		Reserve timer 11 for use by Capture
 
@@ -4392,7 +4715,7 @@ config STM32F7_TIM11_CAP
 config STM32F7_TIM12_CAP
 	bool "TIM12 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM12
+	depends on STM32F7_TIM12
 	---help---
 		Reserve timer 12 for use by Capture
 
@@ -4402,7 +4725,7 @@ config STM32F7_TIM12_CAP
 config STM32F7_TIM13_CAP
 	bool "TIM13 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM13
+	depends on STM32F7_TIM13
 	---help---
 		Reserve timer 13 for use by Capture
 
@@ -4412,7 +4735,7 @@ config STM32F7_TIM13_CAP
 config STM32F7_TIM14_CAP
 	bool "TIM14 Capture"
 	default n
-	depends on STM32F7_HAVE_TIM14
+	depends on STM32F7_TIM14
 	---help---
 		Reserve timer 14 for use by Capture
 
@@ -4644,26 +4967,6 @@ config STM32F7_RMII_EXTCLK
 
 endchoice # RMII clock configuration
 
-choice
-	prompt "Work queue"
-	default STM32F7_ETHMAC_LPWORK if SCHED_LPWORK
-	default STM32F7_ETHMAC_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config STM32F7_ETHMAC_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config STM32F7_ETHMAC_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
-
 config STM32F7_ETHMAC_REGDEBUG
 	bool "Register-Level Debug"
 	default n
@@ -4677,12 +4980,6 @@ endmenu # Ethernet MAC configuration
 if STM32F7_LTDC
 
 menu "LTDC Configuration"
-
-config STM32F7_LTDC_INTERFACE
-	bool "LTDC interface support"
-	default n
-	---help---
-		Enable the ltdc interface to support ltdc layer control.
 
 config STM32F7_LTDC_USE_DSI
 	bool "Use DSI as display connection"
@@ -4739,6 +5036,7 @@ config STM32F7_LTDC_DITHER_BLUE
 
 config STM32F7_LTDC_FB_BASE
 	hex "Framebuffer memory start address"
+	default 0
 	---help---
 		If you are using the LTDC, then you must provide the address
 		of the start of the framebuffer.  This address will typically
@@ -4747,6 +5045,20 @@ config STM32F7_LTDC_FB_BASE
 config STM32F7_LTDC_FB_SIZE
 	int "Framebuffer memory size (bytes)"
 	default 0
+	 ---help---
+		Must be the whole size of the active LTDC layer.
+
+config STM32F7_LTDC_L1_CHROMAKEYEN
+	bool "Enable chromakey support for layer 1"
+	default y
+
+config STM32F7_LTDC_L1_CHROMAKEY
+	hex "Layer L1 initial chroma key"
+	default 0x00000000
+
+config STM32F7_LTDC_L1_COLOR
+	hex "Layer L1 default color"
+	default 0x00000000
 
 choice
 	prompt "Layer 1 color format"
@@ -4754,27 +5066,35 @@ choice
 
 config STM32F7_LTDC_L1_L8
 	bool "8 bpp L8 (8-bit CLUT)"
+	depends on STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_AL44
 	bool "8 bpp AL44 (4-bit alpha + 4-bit CLUT)"
+	depends on STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_AL88
 	bool "16 bpp AL88 (8-bit alpha + 8-bit CLUT)"
+	depends on STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_RGB565
 	bool "16 bpp RGB 565"
+	depends on !STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_ARGB4444
 	bool "16 bpp ARGB 4444"
+	depends on !STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_ARGB1555
 	bool "16 bpp ARGB 1555"
+	depends on !STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_RGB888
 	bool "24 bpp RGB 888"
+	depends on !STM32F7_FB_CMAP
 
 config STM32F7_LTDC_L1_ARGB8888
 	bool "32 bpp ARGB 8888"
+	depends on !STM32F7_FB_CMAP
 
 endchoice # Layer 1 color format
 
@@ -4784,54 +5104,72 @@ config STM32F7_LTDC_L2
 
 if STM32F7_LTDC_L2
 
+config STM32F7_LTDC_L2_COLOR
+	hex "Layer L2 default color"
+	default 0x00000000
+
+config STM32F7_LTDC_L2_CHROMAKEYEN
+	bool "Enable chromakey support for layer 2"
+	default y
+
+config STM32F7_LTDC_L2_CHROMAKEY
+	hex "Layer L2 initial chroma key"
+	default 0x00000000
+
 choice
 	prompt "Layer 2 (top layer) color format"
 	default STM32F7_LTDC_L2_RGB565
 
 config STM32F7_LTDC_L2_L8
+	depends on STM32F7_LTDC_L1_L8
 	bool "8 bpp L8 (8-bit CLUT)"
 
 config STM32F7_LTDC_L2_AL44
+	depends on STM32F7_LTDC_L1_AL44
 	bool "8 bpp AL44 (4-bit alpha + 4-bit CLUT)"
 
 config STM32F7_LTDC_L2_AL88
+	depends on STM32F7_LTDC_L1_AL88
 	bool "16 bpp AL88 (8-bit alpha + 8-bit CLUT)"
 
 config STM32F7_LTDC_L2_RGB565
+	depends on STM32F7_LTDC_L1_RGB565
 	bool "16 bpp RGB 565"
 
 config STM32F7_LTDC_L2_ARGB4444
+	depends on STM32F7_LTDC_L1_ARGB4444
 	bool "16 bpp ARGB 4444"
 
 config STM32F7_LTDC_L2_ARGB1555
+	depends on STM32F7_LTDC_L1_ARGB1555
 	bool "16 bpp ARGB 1555"
 
 config STM32F7_LTDC_L2_RGB888
+	depends on STM32F7_LTDC_L1_RGB888
 	bool "24 bpp RGB 888"
 
 config STM32F7_LTDC_L2_ARGB8888
+	depends on STM32F7_LTDC_L1_ARGB8888
 	bool "32 bpp ARGB 8888"
 
 endchoice # Layer 2 color format
 
 endif # STM32F7_LTDC_L2
 
-if STM32F7_LTDC_L1_L8 || STM32F7_LTDC_L2_L8
-
-config FB_CMAP
-	bool "Enable color map support"
+config STM32F7_FB_CMAP
+	bool "Color map support"
 	default y
+	select FB_CMAP
 	---help---
-		Enabling color map support is neccessary for ltdc L8 format.
+		EnablingEnablescolor map support is necessary for ltdc L8 format.
 
-config FB_TRANSPARENCY
-	bool "Enable transparency color map support"
+config STM32F7_FB_TRANSPARENCY
+	bool "Transparency color map support"
 	default y
+	depends on STM32F7_FB_CMAP
+	select FB_TRANSPARENCY
 	---help---
-		Enabling transparency color map support is neccessary for
-		ltdc L8 format.
-
-endif
+		Enables transparency color map support is necessary for ltdc L8 format.
 
 config STM32F7_LTDC_REGDEBUG
 	bool "Enable LTDC register value debug messages"
@@ -4850,49 +5188,93 @@ if STM32F7_DMA2D
 menu "DMA2D Configuration"
 
 config STM32F7_DMA2D_NLAYERS
-	int "Number DMA2D layers"
-	default 2
+	int "Number DMA2D overlays"
+	default 1
+	range 1 256
 	---help---
-		Number of allocatable DMA2D layers except the LTDC layer.
+		Number of supported DMA2D layer.
+
+config STM32F7_DMA2D_LAYER_SHARED
+	bool "Overlays shared memory region"
+	default n
+	---help---
+		Several overlays can share the same memory region.
+		Setup a whole memory area (usually multiple size of the visible screen)
+		allows image preprocessing before they become visible by blit operation.
+
+config STM32F7_DMA2D_LAYER_PPLINE
+	int "Pixel per line"
+	default 1
+	range 1 65535
+	---help---
+		If you are using the DMA2D, then you must provide the pixel per line or
+		width of the overlay.
+
+config STM32F7_DMA2D_FB_BASE
+	hex "Framebuffer memory start address"
+	default 0
+	---help---
+		If you are using the DMA2D, then you must provide the address
+		of the start of the DMA2D overlays framebuffer. This address will typically
+		be in the SRAM or SDRAM memory region of the FSMC.
+
+config STM32F7_DMA2D_FB_SIZE
+	int "Framebuffer memory size (bytes)"
+	default 0
+	---help---
+		Must be the whole size of all DMA2D overlays.
 
 menu "Supported pixel format"
 
 config STM32F7_DMA2D_L8
-	depends on FB_CMAP
+	depends on STM32F7_FB_CMAP && STM32F7_LTDC_L1_L8
 	bool "8 bpp L8 (8-bit CLUT)"
 	default y
 
 config STM32F7_DMA2D_AL44
-	depends on FB_CMAP
+	depends on STM32F7_FB_CMAP && STM32F7_LTDC_L1_AL44
 	bool "8 bpp AL44 (4-bit alpha + 4-bit CLUT)"
-	default n
+	default y
 
 config STM32F7_DMA2D_AL88
-	depends on FB_CMAP
+	depends on STM32F7_FB_CMAP && STM32F7_LTDC_L1_AL88
 	bool "16 bpp AL88 (8-bit alpha + 8-bit CLUT)"
-	default n
+	default y
 
 config STM32F7_DMA2D_RGB565
 	bool "16 bpp RGB 565"
+	depends on STM32F7_LTDC_L1_RGB565
 	default y
 
 config STM32F7_DMA2D_ARGB4444
 	bool "16 bpp ARGB 4444"
-	default n
+	depends on STM32F7_LTDC_L1_ARGB4444
+	default y
 
 config STM32F7_DMA2D_ARGB1555
 	bool "16 bpp ARGB 1555"
-	default n
+	depends on STM32F7_LTDC_L1_ARGB15555
+	default y
 
 config STM32F7_DMA2D_RGB888
 	bool "24 bpp RGB 888"
+	depends on STM32F7_LTDC_L1_RGB888
 	default y
 
 config STM32F7_DMA2D_ARGB8888
 	bool "32 bpp ARGB 8888"
-	default n
+	depends on STM32F7_LTDC_L1_ARGB8888
+	default y
 
 endmenu
+
+config STM32F7_DMA2D_REGDEBUG
+	bool "DMA2D Register level debug"
+	depends on DEBUG_INFO && DEBUG_LCD
+	default n
+	---help---
+		Output detailed register-level DMA2D device debug information.
+
 endmenu
 endif # STM32F7_DMA2D
 
@@ -5037,5 +5419,182 @@ config STM32F7_QSPI_REGDEBUG
 		Requires also CONFIG_DEBUG_SPI_INFO.
 
 endif
+
+menu "QEncoder Driver"
+	depends on SENSORS_QENCODER
+	depends on STM32F7_TIM1 || STM32F7_TIM2 || STM32F7_TIM3 || STM32F7_TIM4 || STM32F7_TIM5 || STM32F7_TIM8
+
+config STM32F7_TIM1_QE
+	bool "TIM1"
+	default n
+	depends on STM32F7_TIM1
+	---help---
+		Reserve TIM1 for use by QEncoder.
+
+if STM32F7_TIM1_QE
+
+config STM32F7_TIM1_QEPSC
+	int "TIM1 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_TIM2_QE
+	bool "TIM2"
+	default n
+	depends on STM32F7_TIM2
+	---help---
+		Reserve TIM2 for use by QEncoder.
+
+if STM32F7_TIM2_QE
+
+config STM32F7_TIM2_QEPSC
+	int "TIM2 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_TIM3_QE
+	bool "TIM3"
+	default n
+	depends on STM32F7_TIM3
+	---help---
+		Reserve TIM3 for use by QEncoder.
+
+if STM32F7_TIM3_QE
+
+config STM32F7_TIM3_QEPSC
+	int "TIM3 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_TIM4_QE
+	bool "TIM4"
+	default n
+	depends on STM32F7_TIM4
+	---help---
+		Reserve TIM4 for use by QEncoder.
+
+if STM32F7_TIM4_QE
+
+config STM32F7_TIM4_QEPSC
+	int "TIM4 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_TIM5_QE
+	bool "TIM5"
+	default n
+	depends on STM32F7_TIM5
+	---help---
+		Reserve TIM5 for use by QEncoder.
+
+if STM32F7_TIM5_QE
+
+config STM32F7_TIM5_QEPSC
+	int "TIM5 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_TIM8_QE
+	bool "TIM8"
+	default n
+	depends on STM32F7_TIM8
+	---help---
+		Reserve TIM8 for use by QEncoder.
+
+if STM32F7_TIM8_QE
+
+config STM32F7_TIM8_QEPSC
+	int "TIM8 pulse prescaler"
+	default 1
+	---help---
+		This prescaler divides the number of recorded encoder pulses,
+		limiting the count rate at the expense of resolution.
+
+endif
+
+config STM32F7_QENCODER_FILTER
+	bool "Enable filtering on STM32 QEncoder input"
+	default y
+
+choice
+	depends on STM32F7_QENCODER_FILTER
+	prompt "Input channel sampling frequency"
+	default STM32F7_QENCODER_SAMPLE_FDTS_4
+
+config STM32F7_QENCODER_SAMPLE_FDTS
+	bool "fDTS"
+
+config STM32F7_QENCODER_SAMPLE_CKINT
+	bool "fCK_INT"
+
+config STM32F7_QENCODER_SAMPLE_FDTS_2
+	bool "fDTS/2"
+
+config STM32F7_QENCODER_SAMPLE_FDTS_4
+	bool "fDTS/4"
+
+config STM32F7_QENCODER_SAMPLE_FDTS_8
+	bool "fDTS/8"
+
+config STM32F7_QENCODER_SAMPLE_FDTS_16
+	bool "fDTS/16"
+
+config STM32F7_QENCODER_SAMPLE_FDTS_32
+	bool "fDTS/32"
+
+endchoice
+
+choice
+	depends on STM32F7_QENCODER_FILTER
+	prompt "Input channel event count"
+	default STM32F7_QENCODER_SAMPLE_EVENT_6
+
+config STM32F7_QENCODER_SAMPLE_EVENT_1
+	depends on STM32F7_QENCODER_SAMPLE_FDTS
+	bool "1"
+
+config STM32F7_QENCODER_SAMPLE_EVENT_2
+	depends on STM32F7_QENCODER_SAMPLE_CKINT
+	bool "2"
+
+config STM32F7_QENCODER_SAMPLE_EVENT_4
+	depends on STM32F7_QENCODER_SAMPLE_CKINT
+	bool "4"
+
+config STM32F7_QENCODER_SAMPLE_EVENT_5
+	depends on STM32F7_QENCODER_SAMPLE_FDTS_16 || STM32F7_QENCODER_SAMPLE_FDTS_32
+	bool "5"
+
+config STM32F7_QENCODER_SAMPLE_EVENT_6
+	depends on !STM32F7_QENCODER_SAMPLE_FDTS && !STM32F7_QENCODER_SAMPLE_CKINT
+	bool "6"
+
+config STM32F7_QENCODER_SAMPLE_EVENT_8
+	depends on !STM32F7_QENCODER_SAMPLE_FDTS
+	bool "8"
+
+endchoice
+
+endmenu
 
 endif # ARCH_CHIP_STM32F7

@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/lc823450-xgevk/src/lc823450_boot.c
  *
- *   Copyright (C) 2017 Sony Corporation. All rights reserved.
+ *   Copyright 2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,12 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+
 #include <debug.h>
+
 #include <nuttx/board.h>
+
+#include "lc823450-xgevk.h"
 
 /****************************************************************************
  * Public Functions
@@ -66,3 +70,4 @@ void board_initialize(void)
   (void)lc823450_bringup();
 }
 #endif /* CONFIG_BOARD_INITIALIZE */
+

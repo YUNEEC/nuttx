@@ -1,7 +1,7 @@
 ############################################################################
 # net/tcp/Make.defs
 #
-#   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2014, 2017-2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -54,8 +54,15 @@ endif
 
 ifneq ($(CONFIG_DISABLE_POLL),y)
 ifeq ($(CONFIG_NET_TCP_READAHEAD),y)
-NET_CSRCS += tcp_netpoll.c
+SOCK_CSRCS += tcp_netpoll.c
+ifeq ($(CONFIG_TCP_NOTIFIER),y)
+SOCK_CSRCS += tcp_notifier.c
 endif
+endif
+endif
+
+ifeq ($(CONFIG_NET_TCPPROTO_OPTIONS),y)
+SOCK_CSRCS += tcp_setsockopt.c tcp_getsockopt.c
 endif
 
 # Transport layer
@@ -63,6 +70,7 @@ endif
 NET_CSRCS += tcp_conn.c tcp_seqno.c tcp_devpoll.c tcp_finddev.c tcp_timer.c
 NET_CSRCS += tcp_send.c tcp_input.c tcp_appsend.c tcp_listen.c
 NET_CSRCS += tcp_monitor.c tcp_callback.c tcp_backlog.c tcp_ipselect.c
+NET_CSRCS += tcp_recvwindow.c
 
 # TCP write buffering
 

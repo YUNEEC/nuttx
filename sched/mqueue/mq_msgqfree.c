@@ -48,7 +48,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_msgqfree
+ * Name: nxmq_free_msgq
  *
  * Description:
  *   This function deallocates an initialized message queue structure.
@@ -57,15 +57,15 @@
  *   closed so that no thread will attempt access it while it is being
  *   deleted.
  *
- * Inputs:
+ * Input Parameters:
  *   msgq - Named essage queue to be freed
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-void mq_msgqfree(FAR struct mqueue_inode_s *msgq)
+void nxmq_free_msgq(FAR struct mqueue_inode_s *msgq)
 {
   FAR struct mqueue_msg_s *curr;
   FAR struct mqueue_msg_s *next;
@@ -78,7 +78,7 @@ void mq_msgqfree(FAR struct mqueue_inode_s *msgq)
       /* Deallocate the message structure. */
 
       next = curr->next;
-      mq_msgfree(curr);
+      nxmq_free_msg(curr);
       curr = next;
     }
 

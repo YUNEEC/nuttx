@@ -1045,89 +1045,55 @@ endmenu # SPI Driver Configuration
 menu "PIC32MX PHY/Ethernet device driver settings"
 	depends on PIC32MX_ETHERNET
 
-config PHY_AUTONEG
+config PIC32MX_PHY_AUTONEG
 	bool "Auto-negotion"
 	default y
 	depends on PIC32MX_ETHERNET
 	---help---
 		Enable auto-negotion
 
-config PHY_SPEED100
+config PIC32MX_PHY_SPEED100
 	bool "100Mbps spped"
 	default n
-	depends on PIC32MX_ETHERNET && !PHY_AUTONEG
+	depends on PIC32MX_ETHERNET && !PIC32MX_PHY_AUTONEG
 	---help---
 		Select 100Mbit vs. 10Mbit speed.
 
-config PHY_FDUPLEX
+config PIC32MX_PHY_FDUPLEX
 	bool "Full duplex"
 	default n
-	depends on PIC32MX_ETHERNET && !PHY_AUTONEG
+	depends on PIC32MX_ETHERNET && !PIC32MX_PHY_AUTONEG
 	---help---
 		Select full (vs. half) duplex
 
-config NET_NTXDESC
+config PIC32MX_ETH_NTXDESC
 	int "Number Tx descriptors"
 	default 2
 	depends on PIC32MX_ETHERNET
 	---help---
 		Configured number of Tx descriptors. Default: 2
 
-config NET_NRXDESC
+config PIC32MX_ETH_NRXDESC
 	int "Number Rx descriptors"
 	default 4
 	depends on PIC32MX_ETHERNET
 	---help---
 		Configured number of Rx descriptors. Default: 4
 
-config NET_PRIORITY
+config PIC32MX_ETH_PRIORITY
 	int ""
 	default 28
 	depends on PIC32MX_ETHERNET
 	---help---
-		Ethernet interrupt priority.  The is default is the higest priority.
-
-config NET_WOL
-	bool "Wake-up on LAN"
-	default n
-	depends on PIC32MX_ETHERNET
-	---help---
-		Enable Wake-up on LAN (not fully implemented).
-
-config NET_HASH
-	bool "Hash"
-	default n
-	depends on PIC32MX_ETHERNET
-	---help---
-		Enable receipt of near-perfect match frames.
+		Ethernet interrupt priority.  The is default is the highest priority.
 
 config PIC32MX_MULTICAST
 	bool "Multicast"
-	default y if NET_IGMP
+	default y if NET_MCASTGROUP
 	depends on PIC32MX_ETHERNET
 	---help---
 		Enable receipt of multicast (and unicast) frames. Automatically set if
-		NET_IGMP is selected.
-
-choice
-	prompt "Work queue"
-	default PIC32MX_ETHERNET_LPWORK if SCHED_LPWORK
-	default PIC32MX_ETHERNET_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config PIC32MX_ETHERNET_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config PIC32MX_ETHERNET_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
+		NET_MCASTGROUP is selected.
 
 config NET_REGDEBUG
 	bool "Register level debug"

@@ -232,6 +232,12 @@ config PM_SLEEPENTER_COUNT
 
 endif # PM
 
+config DRIVERS_POWERLED
+	bool "High Power LED driver"
+	default n
+	---help---
+		Enables building of an powerled upper half driver.
+
 menuconfig DRIVERS_SMPS
 	bool "Switched-Mode Power Supply (SMPS)"
 	default n
@@ -270,6 +276,56 @@ config SMPS_HAVE_EFFICIENCY
 
 endif
 
+config DRIVERS_MOTOR
+	bool "Motor driver"
+	default n
+	---help---
+		Enables building of a motor upper half driver.
+
+if DRIVERS_MOTOR
+
+config MOTOR_HAVE_POSITION
+	bool "Have position control"
+	default n
+
+config MOTOR_HAVE_DIRECTION
+	bool "Have direction control"
+	default n
+
+config MOTOR_HAVE_SPEED
+	bool "Have speed control"
+	default n
+
+config MOTOR_HAVE_TORQUE
+	bool "Have torque control (rotary motors)"
+	default n
+
+config MOTOR_HAVE_FORCE
+	bool "Have force control (linear motors)"
+	default n
+
+config MOTOR_HAVE_ACCELERATION
+	bool "Have acceleration control"
+	default n
+
+config MOTOR_HAVE_DECELERATION
+	bool "Have deceleration control"
+	default n
+
+config MOTOR_HAVE_INPUT_VOLTAGE
+	bool "Have input voltage protection"
+	default n
+
+config MOTOR_HAVE_INPUT_CURRENT
+	bool "Have input current protection"
+	default n
+
+config MOTOR_HAVE_INPUT_POWER
+	bool "Have input power protection"
+	default n
+
+endif
+
 menuconfig POWER
 	bool "Power Management Support"
 	default n
@@ -300,6 +356,13 @@ config BQ2429X
 	depends on BATTERY_CHARGER
 	---help---
 		The BQ24296/BQ24297/BQ24296M are battery charger for lithium-ion batteries.
+
+config MCP73871
+	bool "Microchip MCP73871 Battery charger support"
+	default n
+	depends on BATTERY_CHARGER
+	---help---
+		A simple driver to report MCP73871 status.
 
 if BQ2429X
 

@@ -63,31 +63,36 @@ static const char *dequote_list[] =
 {
   /* NuttX */
 
-  "CONFIG_USER_ENTRYPOINT",            /* Name of entry point function */
-  "CONFIG_EXECFUNCS_SYMTAB",           /* Symbol table used by exec[l|v] */
-  "CONFIG_PASS1_BUILDIR",              /* Pass1 build directory */
-  "CONFIG_PASS1_TARGET",               /* Pass1 build target */
-  "CONFIG_PASS1_OBJECT",               /* Pass1 build object */
-  "CONFIG_DEBUG_OPTLEVEL",             /* Custom debug level */
-  "CONFIG_INIT_SYMTAB",                /* Global symbol table */
-  "CONFIG_INIT_NEXPORTS",              /* Global symbol table size */
+  "CONFIG_USER_ENTRYPOINT",               /* Name of entry point function */
+  "CONFIG_EXECFUNCS_SYMTAB_ARRAY",        /* Symbol table array used by exec[l|v] */
+  "CONFIG_EXECFUNCS_NSYMBOLS_VAR",        /* Variable holding number of symbols in the table */
+  "CONFIG_MODLIB_SYMTAB_ARRAY",           /* Symbol table array used by dllfcn[l|v] */
+  "CONFIG_MODLIB_NSYMBOLS_VAR",           /* Variable holding number of symbols in the table */
+  "CONFIG_PASS1_BUILDIR",                 /* Pass1 build directory */
+  "CONFIG_PASS1_TARGET",                  /* Pass1 build target */
+  "CONFIG_PASS1_OBJECT",                  /* Pass1 build object */
+  "CONFIG_DEBUG_OPTLEVEL",                /* Custom debug level */
+  "CONFIG_INIT_SYMTAB",                   /* Global symbol table */
+  "CONFIG_INIT_NEXPORTS",                 /* Global symbol table size */
 
   /* NxWidgets/NxWM */
 
-  "CONFIG_NXWM_BACKGROUND_IMAGE",      /* Name of bitmap image class */
-  "CONFIG_NXWM_STOP_BITMAP",           /* Name of bitmap image class */
-  "CONFIG_NXWM_MINIMIZE_BITMAP",       /* Name of bitmap image class */
-  "CONFIG_NXWM_STARTWINDOW_ICON",      /* Name of bitmap image class */
-  "CONFIG_NXWM_NXTERM_ICON",           /* Name of bitmap image class */
-  "CONFIG_NXWM_CALIBRATION_ICON",      /* Name of bitmap image class */
-  "CONFIG_NXWM_HEXCALCULATOR_ICON",    /* Name of bitmap image class */
+  "CONFIG_NXWM_BACKGROUND_IMAGE",         /* Name of bitmap image class */
+  "CONFIG_NXWM_STOP_BITMAP",              /* Name of bitmap image class */
+  "CONFIG_NXWM_MINIMIZE_BITMAP",          /* Name of bitmap image class */
+  "CONFIG_NXWM_STARTWINDOW_ICON",         /* Name of bitmap image class */
+  "CONFIG_NXWM_NXTERM_ICON",              /* Name of bitmap image class */
+  "CONFIG_NXWM_CALIBRATION_ICON",         /* Name of bitmap image class */
+  "CONFIG_NXWM_HEXCALCULATOR_ICON",       /* Name of bitmap image class */
 
   /* apps/ definitions */
 
-  "CONFIG_EXAMPLES_HELLO_PROGNAME",    /* Name of installed hello example program */
-  "CONFIG_EXAMPLES_NSH_PROGNAME",      /* Name of installed NSH example program */
-  "CONFIG_THTTPD_INDEX_NAMES",         /* List of index file names */
-  NULL                                 /* Marks the end of the list */
+  "CONFIG_EXAMPLES_HELLO_PROGNAME",       /* Name of installed hello example program */
+  "CONFIG_SYSTEM_NSH_PROGNAME",           /* Name of installed NSH example program */
+  "CONFIG_SYSTEM_NSH_SYMTAB_ARRAYNAME",   /* Symbol table array name */
+  "CONFIG_SYSTEM_NSH_SYMTAB_COUNTNAME",   /* Name of the variable holding the number of symbols */
+  "CONFIG_THTTPD_INDEX_NAMES",            /* List of index file names */
+  NULL                                    /* Marks the end of the list */
 };
 
 /****************************************************************************
@@ -338,13 +343,20 @@ void generate_definitions(FILE *stream)
                   printf("#undef %s\n", varname);
                 }
 
-              /* Simply define the configuration variable if it has the special
-               * value "y"
+              /* Simply define the configuration variable to '1' if it has the
+               * special value "y"
                */
 
               else if (strcmp(varval, "y") == 0)
                 {
                   printf("#define %s 1\n", varname);
+                }
+
+              /* Or to '2' if it has the special value 'm' */
+
+              else if (strcmp(varval, "m") == 0)
+                {
+                  printf("#define %s 2\n", varname);
                 }
 
               /* Otherwise, use the value as provided */

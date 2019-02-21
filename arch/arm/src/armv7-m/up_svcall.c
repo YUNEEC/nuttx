@@ -179,8 +179,7 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
         {
           DEBUGASSERT(regs[REG_R1] != 0);
           memcpy((uint32_t *)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
-#if defined(CONFIG_ARCH_FPU) && \
-    (!defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_ARMV7M_LAZYFPU))
+#if defined(CONFIG_ARCH_FPU) && defined(CONFIG_ARMV7M_LAZYFPU)
           up_savefpu((uint32_t *)regs[REG_R1]);
 #endif
         }
@@ -228,8 +227,7 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
         {
           DEBUGASSERT(regs[REG_R1] != 0 && regs[REG_R2] != 0);
           memcpy((uint32_t *)regs[REG_R1], regs, XCPTCONTEXT_SIZE);
-#if defined(CONFIG_ARCH_FPU) && \
-    (!defined(CONFIG_ARMV7M_CMNVECTOR) || defined(CONFIG_ARMV7M_LAZYFPU))
+#if defined(CONFIG_ARCH_FPU) && defined(CONFIG_ARMV7M_LAZYFPU)
           up_savefpu((uint32_t *)regs[REG_R1]);
 #endif
           CURRENT_REGS = (uint32_t *)regs[REG_R2];
@@ -350,7 +348,7 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
        *   R1 = sighand
        *   R2 = signo
        *   R3 = info
-       *        ucontext (on the stack)
+       *   R4 = ucontext
        */
 
 #if defined(CONFIG_BUILD_PROTECTED) && !defined(CONFIG_DISABLE_SIGNALS)
@@ -377,12 +375,7 @@ int up_svcall(int irq, FAR void *context, FAR void *arg)
           regs[REG_R0]         = regs[REG_R1]; /* sighand */
           regs[REG_R1]         = regs[REG_R2]; /* signal */
           regs[REG_R2]         = regs[REG_R3]; /* info */
-
-          /* The last parameter, ucontext, is trickier.  The ucontext
-           * parameter will reside at an offset of 4 from the stack pointer.
-           */
-
-          regs[REG_R3]         = *(uint32_t *)(regs[REG_SP]+4);
+          regs[REG_R3]         = regs[REG_R4]; /* ucontext */
         }
         break;
 #endif

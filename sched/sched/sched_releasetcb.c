@@ -94,7 +94,7 @@ static void sched_releasepid(pid_t pid)
  * Description:
  *   Free all resources contained in a TCB
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - The TCB to be released
  *   ttype - The type of the TCB to be released
  *
@@ -102,7 +102,7 @@ static void sched_releasepid(pid_t pid)
  *   however, there are certain error recovery contexts where the TCB my
  *   not be fully initialized when sched_releasetcb is called.
  *
- * Return Value:
+ * Returned Value:
  *   OK on success; ERROR on failure
  *
  * Assumptions:

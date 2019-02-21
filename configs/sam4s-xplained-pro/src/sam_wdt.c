@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/sam4s-xplained-pro/src/up_wdt.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2018 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Bob Doiron
  *
@@ -48,6 +48,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 
+#include <nuttx/signal.h>
+#include <nuttx/fs/fs.h>
 #include <nuttx/timers/watchdog.h>
 #include <arch/board/board.h>
 
@@ -91,36 +93,36 @@
 #if defined(CONFIG_WDT_THREAD)
 static int wdog_daemon(int argc, char *argv[])
 {
-  int fd;
+  FAR struct file filestruct;
   int ret;
 
   /* Open the watchdog device for reading */
 
   wdinfo("Opening.\n");
-  fd = open(CONFIG_WATCHDOG_DEVPATH, O_RDONLY);
-  if (fd < 0)
+  ret = file_open(&filestruct, CONFIG_WATCHDOG_DEVPATH, O_RDONLY);
+  if (ret < 0)
     {
-      wderr("ERROR: open %s failed: %d\n", CONFIG_WATCHDOG_DEVPATH, errno);
+      wderr("ERROR: open %s failed: %d\n", CONFIG_WATCHDOG_DEVPATH, ret);
       goto errout;
     }
 
   /* Start the watchdog timer. */
 
   wdinfo("Starting.\n");
-  ret = ioctl(fd, WDIOC_START, 0);
+  ret = file_ioctl(&filestruct, WDIOC_START, 0);
   if (ret < 0)
     {
       wderr("ERROR: ioctl(WDIOC_START) failed: %d\n", errno);
       goto errout_with_dev;
     }
 
-  usleep(200);
+  nxsig_usleep(200);
   while(1)
     {
-      usleep((CONFIG_WDT_THREAD_INTERVAL)*1000);
+      nxsig_usleep((CONFIG_WDT_THREAD_INTERVAL)*1000);
 
       wdinfo("ping\n");
-      ret = ioctl(fd, WDIOC_KEEPALIVE, 0);
+      ret = file_ioctl(&filestruct, WDIOC_KEEPALIVE, 0);
       if (ret < 0)
         {
           wderr("ERROR: ioctl(WDIOC_KEEPALIVE) failed: %d\n", errno);
@@ -129,9 +131,9 @@ static int wdog_daemon(int argc, char *argv[])
     }
 
 errout_with_dev:
-  close(fd);
+  file_close(&filestruct);
 errout:
-  return ERROR;
+  return ret;
 }
 #endif
 
@@ -148,28 +150,32 @@ errout:
 int sam_watchdog_initialize(void)
 {
 #if (defined(CONFIG_SAM34_WDT) && !defined(CONFIG_WDT_DISABLE_ON_RESET))
-  int fd;
+  FAR struct file filestruct;
   int ret;
 
   /* Initialize tha register the watchdog timer device */
 
   wdinfo("Initializing Watchdog driver...\n");
+
   sam_wdtinitialize(CONFIG_WATCHDOG_DEVPATH);
 
   /* Open the watchdog device */
 
   wdinfo("Opening.\n");
-  fd = open(CONFIG_WATCHDOG_DEVPATH, O_RDONLY);
-  if (fd < 0)
+
+  ret = file_open(&filestruct, CONFIG_WATCHDOG_DEVPATH, O_RDONLY);
+  if (ret < 0)
     {
-      wderr("ERROR: open %s failed: %d\n", CONFIG_WATCHDOG_DEVPATH, errno);
+      wderr("ERROR: open %s failed: %d\n", CONFIG_WATCHDOG_DEVPATH, ret);
       goto errout;
     }
 
   /* Set the watchdog timeout */
 
   wdinfo("Timeout = %d.\n", CONFIG_WDT_TIMEOUT);
-  ret = ioctl(fd, WDIOC_SETTIMEOUT, (unsigned long)CONFIG_WDT_TIMEOUT);
+
+  ret = file_ioctl(&filestruct, WDIOC_SETTIMEOUT,
+                   (unsigned long)CONFIG_WDT_TIMEOUT);
   if (ret < 0)
     {
       wderr("ERROR: ioctl(WDIOC_SETTIMEOUT) failed: %d\n", errno);
@@ -179,7 +185,8 @@ int sam_watchdog_initialize(void)
   /* Set the watchdog minimum time */
 
   wdinfo("MinTime = %d.\n", CONFIG_WDT_MINTIME);
-  ret = ioctl(fd, WDIOC_MINTIME, (unsigned long)CONFIG_WDT_MINTIME);
+  ret = file_ioctl(&filestruct, WDIOC_MINTIME,
+                   (unsigned long)CONFIG_WDT_MINTIME);
   if (ret < 0)
     {
       wderr("ERROR: ioctl(WDIOC_MINTIME) failed: %d\n", errno);
@@ -191,19 +198,21 @@ int sam_watchdog_initialize(void)
 #if defined(CONFIG_WDT_THREAD)
   sched_lock();
 
-  int taskid = kernel_thread(CONFIG_WDT_THREAD_NAME,
-                             CONFIG_WDT_THREAD_PRIORITY,
-                             CONFIG_WDT_THREAD_STACKSIZE,
-                             (main_t)wdog_daemon, (FAR char * const *)NULL);
+  int taskid = kthread_create(CONFIG_WDT_THREAD_NAME,
+                              CONFIG_WDT_THREAD_PRIORITY,
+                              CONFIG_WDT_THREAD_STACKSIZE,
+                              (main_t)wdog_daemon, (FAR char * const *)NULL);
 
-  ASSERT(taskid > 0);
+  DEBUGASSERT(taskid > 0);
+  UNUSED(taskid);
+
   sched_unlock();
 #endif
   return OK;
 errout_with_dev:
-  close(fd);
+  file_close(&filestruct);
 errout:
-  return ERROR;
+  return ret;
 #else
   return -ENODEV;
 #endif

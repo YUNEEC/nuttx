@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_tc.c
  *
- *   Copyright (C) 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -129,7 +129,7 @@ struct sam_chan_s
 /* Low-level helpers ********************************************************/
 
 static void sam_takesem(struct sam_chan_s *chan);
-#define     sam_givesem(chan) (sem_post(&chan->exclsem))
+#define     sam_givesem(chan) (nxsem_post(&chan->exclsem))
 
 #ifdef CONFIG_SAM34_TC_REGDEBUG
 static void sam_regdump(struct sam_chan_s *chan, const char *msg);
@@ -360,16 +360,21 @@ static const uint8_t g_regoffset[TC_NREGISTERS] =
 
 static void sam_takesem(struct sam_chan_s *chan)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&chan->exclsem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&chan->exclsem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -748,7 +753,7 @@ static inline struct sam_chan_s *sam_tc_initialize(int channel)
       tmrerr("ERROR: Initializing TC%d\n", chconfig->chan);
 
       memset(chan, 0, sizeof(struct sam_chan_s));
-      sem_init(&chan->exclsem, 0, 1);
+      nxsem_init(&chan->exclsem, 0, 1);
       chan->base = chconfig->base;
       chan->pid  = chconfig->pid;
       chan->irq  = chconfig->irq;

@@ -399,7 +399,7 @@ struct sam_dev_s
 /* Low-level helpers ********************************************************/
 
 static void sam_takesem(struct sam_dev_s *priv);
-#define     sam_givesem(priv) (sem_post(&priv->waitsem))
+#define     sam_givesem(priv) (nxsem_post(&priv->waitsem))
 
 #ifdef CONFIG_SAMV7_HSMCI_REGDEBUG
 static bool sam_checkreg(struct sam_dev_s *priv, bool wr,
@@ -610,16 +610,21 @@ static struct sam_dev_s g_hsmci1;
 
 static void sam_takesem(struct sam_dev_s *priv)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&priv->waitsem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->waitsem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -2067,7 +2072,7 @@ static int sam_sendcmd(FAR struct sdio_dev_s *dev,
  * Name: sam_blocksetup
  *
  * Description:
- *   Some hardward needs to be informed of the selected blocksize.
+ *   Some hardware needs to be informed of the selected blocksize.
  *
  * Input Parameters:
  *   dev      - An instance of the SDIO device interface
@@ -2195,6 +2200,7 @@ static int sam_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer,
   unsigned int remaining;
   const uint32_t *src;
   uint32_t sr;
+  irqstate_t flags;
 
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
 
@@ -2224,9 +2230,12 @@ static int sam_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer,
 
   /* Copy each word to the TX FIFO
    *
-   * REVISIT:  If TX data underruns occur, then it may be necessary to
-   * disable pre-emption around this loop.
+   * It is necessary to disable pre-emption and interrupts around this loop
+   * in order to avoid a TX data underrun.
    */
+
+  sched_lock();
+  flags = enter_critical_section();
 
   src       = (const uint32_t *)buffer;
   remaining = buflen;
@@ -2297,6 +2306,8 @@ static int sam_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer,
         }
     }
 
+  leave_critical_section(flags);
+  sched_unlock();
   return OK;
 }
 
@@ -2780,7 +2791,7 @@ static sdio_eventset_t sam_eventwait(FAR struct sdio_dev_s *dev,
       delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)sam_eventtimeout,
                        1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
            mcerr("ERROR: wd_start failed: %d\n", ret);
         }
@@ -3223,7 +3234,7 @@ static void sam_callback(void *arg)
  * Input Parameters:
  *   slotno - Not used.
  *
- * Returned Values:
+ * Returned Value:
  *   A reference to an SDIO interface structure.  NULL is returned on failures.
  *
  ****************************************************************************/
@@ -3330,13 +3341,13 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
   /* Initialize the HSMCI slot structure */
   /* Initialize semaphores */
 
-  sem_init(&priv->waitsem, 0, 0);
+  nxsem_init(&priv->waitsem, 0, 0);
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Create a watchdog timer */
 
@@ -3374,7 +3385,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
  *                card has been removed from the slot.  Only transitions
  *                (inserted->removed or removed->inserted should be reported)
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -3427,7 +3438,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
  *   dev       - An instance of the SDIO driver device state structure.
  *   wrprotect - true is a card is write protected.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

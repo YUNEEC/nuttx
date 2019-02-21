@@ -1231,7 +1231,7 @@ void usbmsc_rdcomplete(FAR struct usbdev_ep_s *ep,
  *   In all cases, the success reponse is a zero-length packet; the failure
  *   response is an EP0 stall.
  *
- * Input parameters:
+ * Input Parameters:
  *   priv  - Private state structure for this USB storage instance
  *   stall - true is the action failed and a stall is required
  *
@@ -1296,10 +1296,10 @@ static inline void usbmsc_sync_wait(FAR struct usbmsc_dev_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->thsynch);
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      ret = nxsem_wait(&priv->thsynch);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1358,16 +1358,16 @@ int usbmsc_configure(unsigned int nluns, void **handle)
 
   /* Initialize semaphores */
 
-  sem_init(&priv->thsynch, 0, 0);
-  sem_init(&priv->thlock, 0, 1);
-  sem_init(&priv->thwaitsem, 0, 0);
+  nxsem_init(&priv->thsynch, 0, 0);
+  nxsem_init(&priv->thlock, 0, 1);
+  nxsem_init(&priv->thwaitsem, 0, 0);
 
   /* The thsynch and thwaitsem semaphores are used for signaling and, hence,
    * should not have priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->thsynch, SEM_PRIO_NONE);
-  sem_setprotocol(&priv->thwaitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->thsynch, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->thwaitsem, SEM_PRIO_NONE);
 
   sq_init(&priv->wrreqlist);
   priv->nluns = nluns;
@@ -1704,9 +1704,9 @@ int usbmsc_exportluns(FAR void *handle)
   g_usbmsc_handoff = priv;
 
   uinfo("Starting SCSI worker thread\n");
-  priv->thpid = kernel_thread("scsid", CONFIG_USBMSC_SCSI_PRIO,
-                              CONFIG_USBMSC_SCSI_STACKSIZE,
-                              usbmsc_scsi_main, NULL);
+  priv->thpid = kthread_create("scsid", CONFIG_USBMSC_SCSI_PRIO,
+                               CONFIG_USBMSC_SCSI_STACKSIZE,
+                               usbmsc_scsi_main, NULL);
   if (priv->thpid <= 0)
     {
       usbtrace(TRACE_CLSERROR(USBMSC_TRACEERR_THREADCREATE),
@@ -1780,7 +1780,7 @@ int usbmsc_classobject(FAR void *handle,
   ret = usbmsc_exportluns(handle);
   if (ret == OK)
     {
-      /* On sucess, return an (typed) instance of the class instance */
+      /* On success, return an (typed) instance of the class instance */
 
       *classdev = &alloc->drvr.drvr;
     }
@@ -1889,9 +1889,9 @@ void usbmsc_uninitialize(FAR void *handle)
 
   /* Uninitialize and release the driver structure */
 
-  sem_destroy(&priv->thsynch);
-  sem_destroy(&priv->thlock);
-  sem_destroy(&priv->thwaitsem);
+  nxsem_destroy(&priv->thsynch);
+  nxsem_destroy(&priv->thlock);
+  nxsem_destroy(&priv->thwaitsem);
 
 #ifndef CONFIG_USBMSC_COMPOSITE
   /* For the case of the composite driver, there is a two pass

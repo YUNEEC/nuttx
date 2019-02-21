@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_spi_slave.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -142,7 +142,7 @@ static void     spi_dumpregs(struct sam_spidev_s *priv, const char *msg);
 #endif
 
 static void     spi_semtake(struct sam_spidev_s *priv);
-#define         spi_semgive(priv) (sem_post(&(priv)->spisem))
+#define         spi_semgive(priv) (nxsem_post(&(priv)->spisem))
 
 /* Interrupt Handling */
 
@@ -369,10 +369,10 @@ static void spi_semtake(struct sam_spidev_s *priv)
 
   do
     {
-      ret = sem_wait(&priv->spisem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(&priv->spisem);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1059,7 +1059,7 @@ static void spi_qflush(struct spi_sctrlr_s *sctrlr)
  * Description:
  *   Initialize the selected SPI port in slave mode.
  *
- * Input Parameter:
+ * Input Parameters:
  *   port - Chip select number identifying the "logical" SPI port.  Includes
  *          encoded port and chip select information.
  *
@@ -1198,7 +1198,7 @@ struct spi_sctrlr_s *sam_spi_slave_initialize(int port)
        * access to the SPI registers.
        */
 
-      sem_init(&priv->spisem, 0, 1);
+      nxsem_init(&priv->spisem, 0, 1);
       priv->nss         = true;
       priv->initialized = true;
 

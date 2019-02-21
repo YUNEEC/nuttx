@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/efm32/efm32_dma.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -255,7 +255,7 @@ static int efm32_dmac_interrupt(int irq, void *context, FAR void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_dmainitialize
+ * Name: up_dma_initialize
  *
  * Description:
  *   Initialize the DMA subsystem
@@ -265,7 +265,7 @@ static int efm32_dmac_interrupt(int irq, void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
   uint32_t regval;
   int i;
@@ -274,8 +274,8 @@ void weak_function up_dmainitialize(void)
 
   /* Initialize the channel list  */
 
-  sem_init(&g_dmac.exclsem, 0, 1);
-  sem_init(&g_dmac.chansem, 0, EFM32_DMA_NCHANNELS);
+  nxsem_init(&g_dmac.exclsem, 0, 1);
+  nxsem_init(&g_dmac.chansem, 0, EFM32_DMA_NCHANNELS);
 
   for (i = 0; i < EFM32_DMA_NCHANNELS; i++)
     {
@@ -319,7 +319,7 @@ void weak_function up_dmainitialize(void)
  *   until the holder of a channel relinquishes the channel by calling
  *   efm32_dmafree().
  *
- * Input parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -336,6 +336,7 @@ DMA_HANDLE efm32_dmachannel(void)
   struct dma_channel_s *dmach;
   unsigned int chndx;
   uint32_t bit;
+  int ret;
 
   /* Take a count from from the channel counting semaphore.  We may block
    * if there are no free channels.  When we get the count, then we can
@@ -343,21 +344,35 @@ DMA_HANDLE efm32_dmachannel(void)
    * reserved for us.
    */
 
-  while (sem_wait(&g_dmac.chansem) < 0)
+  do
     {
-      /* sem_wait should fail only if it is awakened by a a signal */
+      /* Take the semaphore (perhaps waiting) */
 
-      DEBUGASSERT(errno == EINTR);
+      ret = nxsem_wait(&g_dmac.chansem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Get exclusive access to the DMA channel list */
 
-  while (sem_wait(&g_dmac.exclsem) < 0)
+  do
     {
-      /* sem_wait should fail only if it is awakened by a a signal */
+      /* Take the semaphore (perhaps waiting) */
 
-      DEBUGASSERT(errno == EINTR);
+      ret = nxsem_wait(&g_dmac.exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Search for an available DMA channel */
 
@@ -381,7 +396,7 @@ DMA_HANDLE efm32_dmachannel(void)
         }
     }
 
-  sem_post(&g_dmac.exclsem);
+  nxsem_post(&g_dmac.exclsem);
 
   /* Since we have reserved a DMA descriptor by taking a count from chansem,
    * it would be a serious logic failure if we could not find a free channel
@@ -432,7 +447,7 @@ void efm32_dmafree(DMA_HANDLE handle)
    * thread that may be waiting for a channel.
    */
 
-  sem_post(&g_dmac.chansem);
+  nxsem_post(&g_dmac.chansem);
 }
 
 /****************************************************************************

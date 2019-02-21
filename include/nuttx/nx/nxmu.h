@@ -47,9 +47,8 @@
 #include <mqueue.h>
 #include <semaphore.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/nx/nx.h>
-
-#ifdef CONFIG_NX_MULTIUSER
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -87,7 +86,7 @@
 
 /* Handy macros */
 
-#define nxmu_semgive(sem)    sem_post(sem) /* To match nxmu_semtake() */
+#define nxmu_semgive(sem)    _SEM_POST(sem) /* To match nxmu_semtake() */
 
 /****************************************************************************
  * Public Types
@@ -481,7 +480,7 @@ extern "C"
  *   This function is the same a nx_openwindow EXCEPT that the client provides
  *   the window structure instance.  nx_constructwindow will initialize the
  *   the pre-allocated window structure for use by NX.  This function is
- *   provided in addition to nx_open window in order to support a kind of
+ *   provided in addition to nx_openwindow in order to support a kind of
  *   inheritance:  The caller's window structure may include extensions that
  *   are not visible to NX.
  *
@@ -496,7 +495,7 @@ extern "C"
  *   cb     - Callbacks used to process window events
  *   arg    - User provided value that will be returned with NX callbacks.
  *
- * Return:
+ * Returned Value:
  *   OK on success; ERROR on failure with errno set appropriately.  In the
  *   case of ERROR, NX will have deallocated the pre-allocated window.
  *
@@ -516,7 +515,7 @@ int nxfe_constructwindow(NXHANDLE handle,
  * Input Parameters:
  *   sem - the semaphore to be taken.
  *
- * Return:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -534,7 +533,7 @@ void nxmu_semtake(sem_t *sem);
  *   msg    - A pointer to the message to send
  *   msglen - The length of the message in bytes.
  *
- * Return:
+ * Returned Value:
  *   OK on success; ERROR on failure with errno set appropriately
  *
  ****************************************************************************/
@@ -554,7 +553,7 @@ int nxmu_sendserver(FAR struct nxfe_conn_s *conn,
  *   msg    - A pointer to the message to send
  *   msglen - The length of the message in bytes.
  *
- * Return:
+ * Returned Value:
  *   OK on success; ERROR on failure with errno set appropriately
  *
  ****************************************************************************/
@@ -567,5 +566,4 @@ int nxmu_sendwindow(FAR struct nxbe_window_s *wnd, FAR const void *msg,
 }
 #endif
 
-#endif  /* CONFIG_NX_MULTIUSER */
 #endif  /* __INCLUDE_NUTTX_NX_NXMU_H */

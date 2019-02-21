@@ -2,7 +2,8 @@
  * net/devif/ipv4_input.c
  * Device driver IPv4 packet receipt interface
  *
- *   Copyright (C) 2007-2009, 2013-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2015, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Adapted for NuttX from logic in uIP which also has a BSD-like license:
@@ -112,20 +113,29 @@
 #define BUF                  ((FAR struct ipv4_hdr_s *)&dev->d_buf[NET_LL_HDRLEN(dev)])
 #define FBUF                 ((FAR struct ipv4_hdr_s *)&g_reassembly_buffer[0])
 
-/* IP fragment re-assembly */
+/* IP fragment re-assembly.
+ *
+ * REVISIT:  There are multiple issues with the current implementation:
+ * 1. IPv4 reassembly is untested.
+ * 2. Currently can only work with Ethernet due to the definition of
+ *    IPv4_REASS_BUFSIZE.
+ * 3. Since there is only a single reassembly buffer, IPv4 reassembly cannot
+ *    be used in a context where multiple network devices may be concurrently
+ *    re-assembling packets.
+ */
 
 #define IP_MF                0x20  /* See IP_FLAG_MOREFRAGS */
-#define TCP_REASS_BUFSIZE    (NET_DEV_MTU(dev) - NET_LL_HDRLEN(dev))
-#define TCP_REASS_LASTFRAG   0x01
+#define IPv4_REASS_BUFSIZE   (CONFIG_NET_ETH_PKTSIZE - ETH_HDRLEN)
+#define IPv4_REASS_LASTFRAG  0x01
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
-#if defined(CONFIG_NET_TCP_REASSEMBLY) && !defined(CONFIG_NET_IPv6)
+#ifdef CONFIG_NET_IPv4_REASSEMBLY
 
-static uint8_t g_reassembly_buffer[TCP_REASS_BUFSIZE];
-static uint8_t g_reassembly_bitmap[TCP_REASS_BUFSIZE / (8 * 8)];
+static uint8_t g_reassembly_buffer[IPv4_REASS_BUFSIZE];
+static uint8_t g_reassembly_bitmap[IPv4_REASS_BUFSIZE / (8 * 8)];
 
 static const uint8_t g_bitmap_bits[8] =
 {
@@ -135,7 +145,7 @@ static const uint8_t g_bitmap_bits[8] =
 static uint16_t g_reassembly_len;
 static uint8_t g_reassembly_flags;
 
-#endif /* CONFIG_NET_TCP_REASSEMBLY */
+#endif /* CONFIG_NET_IPv4_REASSEMBLY */
 
 /****************************************************************************
  * Private Functions
@@ -151,8 +161,8 @@ static uint8_t g_reassembly_flags;
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_TCP_REASSEMBLY) && !defined(CONFIG_NET_IPv6)
-static uint8_t devif_reassembly(void)
+#ifdef CONFIG_NET_IPv4_REASSEMBLY
+static uint8_t devif_reassembly(FAR struct net_driver_s *dev)
 {
   FAR struct ipv4_hdr_s *ipv4  = BUF;
   FAR struct ipv4_hdr_s *fipv4 = FBUF;
@@ -168,7 +178,7 @@ static uint8_t devif_reassembly(void)
   if (!g_reassembly_timer)
     {
       memcpy(g_reassembly_buffer, &ipv4->vhl, IPv4_HDRLEN);
-      g_reassembly_timer = CONFIG_NET_TCP_REASS_MAXAGE;
+      g_reassembly_timer = CONFIG_NET_IPv4_REASS_MAXAGE;
       g_reassembly_flags = 0;
 
       /* Clear the bitmap. */
@@ -183,16 +193,17 @@ static uint8_t devif_reassembly(void)
 
   if (net_ipv4addr_hdrcmp(ipv4->srcipaddr, fipv4->srcipaddr) &&
       net_ipv4addr_hdrcmp(ipv4->destipaddr, fipv4->destipaddr) &&
-      ipv4->g_ipid[0] == fipv4->g_ipid[0] && ipv4->g_ipid[1] == fipv4->g_ipid[1])
+      ipv4->ipid[0] == fipv4->ipid[0] && ipv4->ipid[1] == fipv4->ipid[1])
     {
-      len = (ipv4->len[0] << 8) + ipv4->len[1] - (ipv4->vhl & 0x0f) * 4;
+      len    = ((uint16_t)ipv4->len[0] << 8) + (uint16_t)ipv4->len[1] -
+               (uint16_t)(ipv4->vhl & 0x0f) * 4;
       offset = (((ipv4->ipoffset[0] & 0x3f) << 8) + ipv4->ipoffset[1]) * 8;
 
       /* If the offset or the offset + fragment length overflows the
        * reassembly buffer, we discard the entire packet.
        */
 
-      if (offset > TCP_REASS_BUFSIZE || offset + len > TCP_REASS_BUFSIZE)
+      if (offset > IPv4_REASS_BUFSIZE || offset + len > IPv4_REASS_BUFSIZE)
         {
           g_reassembly_timer = 0;
           goto nullreturn;
@@ -217,7 +228,7 @@ static uint8_t devif_reassembly(void)
       else
         {
           /* If the two endpoints are in different bytes, we update the bytes
-           * in the endpoints and fill the stuff inbetween with 0xff.
+           * in the endpoints and fill the stuff in between with 0xff.
            */
 
           g_reassembly_bitmap[offset / (8 * 8)] |=
@@ -240,7 +251,7 @@ static uint8_t devif_reassembly(void)
 
       if ((ipv4->ipoffset[0] & IP_MF) == 0)
         {
-          g_reassembly_flags |= TCP_REASS_LASTFRAG;
+          g_reassembly_flags |= IPv4_REASS_LASTFRAG;
           g_reassembly_len = offset + len;
         }
 
@@ -249,7 +260,7 @@ static uint8_t devif_reassembly(void)
        * are set.
        */
 
-      if (g_reassembly_flags & TCP_REASS_LASTFRAG)
+      if (g_reassembly_flags & IPv4_REASS_LASTFRAG)
         {
           /* Check all bytes up to and including all but the last byte in
            * the bitmap.
@@ -298,7 +309,7 @@ static uint8_t devif_reassembly(void)
 nullreturn:
   return 0;
 }
-#endif /* CONFIG_NET_TCP_REASSEMBLY */
+#endif /* CONFIG_NET_IPv4_REASSEMBLY */
 
 /****************************************************************************
  * Public Functions
@@ -321,6 +332,7 @@ nullreturn:
 int ipv4_input(FAR struct net_driver_s *dev)
 {
   FAR struct ipv4_hdr_s *ipv4 = BUF;
+  in_addr_t destipaddr;
   uint16_t hdrlen;
   uint16_t iplen;
 
@@ -379,21 +391,23 @@ int ipv4_input(FAR struct net_driver_s *dev)
 
   if ((ipv4->ipoffset[0] & 0x3f) != 0 || ipv4->ipoffset[1] != 0)
     {
-#if defined(CONFIG_NET_TCP_REASSEMBLY)
-      dev->d_len = devif_reassembly();
+#ifdef CONFIG_NET_IPv4_REASSEMBLY
+      dev->d_len = devif_reassembly(dev);
       if (dev->d_len == 0)
+#endif
         {
+#ifdef CONFIG_NET_STATISTICS
+          g_netstats.ipv4.drop++;
+          g_netstats.ipv4.fragerr++;
+#endif
+          nwarn("WARNING: IP fragment dropped\n");
           goto drop;
         }
-#else /* CONFIG_NET_TCP_REASSEMBLY */
-#ifdef CONFIG_NET_STATISTICS
-      g_netstats.ipv4.drop++;
-      g_netstats.ipv4.fragerr++;
-#endif
-      nwarn("WARNING: IP fragment dropped\n");
-      goto drop;
-#endif /* CONFIG_NET_TCP_REASSEMBLY */
     }
+
+  /* Get the destination IP address in a friendlier form */
+
+  destipaddr = net_ip4addr_conv32(ipv4->destipaddr);
 
 #if defined(CONFIG_NET_BROADCAST) && defined(NET_UDP_HAVE_STACK)
   /* If IP broadcast support is configured, we check for a broadcast
@@ -403,8 +417,7 @@ int ipv4_input(FAR struct net_driver_s *dev)
    */
 
   if (ipv4->proto == IP_PROTO_UDP &&
-      net_ipv4addr_cmp(net_ip4addr_conv32(ipv4->destipaddr),
-                       INADDR_BROADCAST))
+      net_ipv4addr_cmp(destipaddr, INADDR_BROADCAST))
     {
 #ifdef CONFIG_NET_IPFORWARD_BROADCAST
       /* Forward broadcast packets */
@@ -413,74 +426,90 @@ int ipv4_input(FAR struct net_driver_s *dev)
 #endif
       return udp_ipv4_input(dev);
     }
-
-  /* In other cases, the device must be assigned a non-zero IP address. */
-
   else
 #endif
 #ifdef CONFIG_NET_ICMP
+  /* In other cases, the device must be assigned a non-zero IP address. */
+
   if (net_ipv4addr_cmp(dev->d_ipaddr, INADDR_ANY))
     {
       nwarn("WARNING: No IP address assigned\n");
       goto drop;
     }
-
-  /* Check if the packet is destined for our IP address */
   else
 #endif
-    {
-      /* Check if the packet is destined for our IP address. */
+#if defined(CONFIG_NET_BROADCAST) && defined(NET_UDP_HAVE_STACK)
+  /* The address is not the broadcast address and we have been assigned a
+   * address.  So there is also the possibility that the destination address
+   * is a sub-net broadcast address which we will need to handle just as for
+   * the broadcast address above.
+   */
 
-      if (!net_ipv4addr_cmp(net_ip4addr_conv32(ipv4->destipaddr),
-                            dev->d_ipaddr))
-        {
-          /* Check for an IPv4 IGMP group address */
+  if (ipv4->proto == IP_PROTO_UDP &&
+      net_ipv4addr_maskcmp(destipaddr, dev->d_ipaddr, dev->d_netmask) &&
+      net_ipv4addr_broadcast(destipaddr, dev->d_netmask))
+    {
+#ifdef CONFIG_NET_IPFORWARD_BROADCAST
+      /* Forward broadcast packets */
+
+      ipv4_forward_broadcast(dev, ipv4);
+#endif
+      return udp_ipv4_input(dev);
+    }
+  else
+#endif
+  /* Check if the packet is destined for our IP address. */
+
+  if (!net_ipv4addr_cmp(destipaddr, dev->d_ipaddr))
+    {
+      /* No.. This is not our IP address. Check for an IPv4 IGMP group
+       * address
+       */
 
 #ifdef CONFIG_NET_IGMP
-          in_addr_t destip = net_ip4addr_conv32(ipv4->destipaddr);
-          if (igmp_grpfind(dev, &destip) != NULL)
-            {
+      in_addr_t destip = net_ip4addr_conv32(ipv4->destipaddr);
+      if (igmp_grpfind(dev, &destip) != NULL)
+        {
 #ifdef CONFIG_NET_IPFORWARD_BROADCAST
-              /* Forward multicast packets */
+          /* Forward multicast packets */
 
-              ipv4_forward_broadcast(dev, ipv4);
+          ipv4_forward_broadcast(dev, ipv4);
 #endif
+        }
+      else
+#endif
+        {
+          /* No.. The packet is not destined for us. */
+
+#ifdef CONFIG_NET_IPFORWARD
+          /* Try to forward the packet */
+
+          int ret = ipv4_forward(dev, ipv4);
+          if (ret >= 0)
+            {
+              /* The packet was forwarded.  Return success; d_len will
+               * be set appropriately by the forwarding logic:  Cleared
+               * if the packet is forward via anoother device or non-
+               * zero if it will be forwarded by the same device that
+               * it was received on.
+               */
+
+              return OK;
             }
           else
 #endif
             {
-              /* No.. The packet is not destined for us. */
+              /* Not destined for us and not forwardable... Drop the
+               * packet.
+               */
 
-#ifdef CONFIG_NET_IPFORWARD
-              /* Try to forward the packet */
-
-              int ret = ipv4_forward(dev, ipv4);
-              if (ret >= 0)
-                {
-                  /* The packet was forwarded.  Return success; d_len will
-                   * be set appropriately by the forwarding logic:  Cleared
-                   * if the packet is forward via anoother device or non-
-                   * zero if it will be forwarded by the same device that
-                   * it was received on.
-                   */
-
-                  return OK;
-                }
-              else
-#endif
-                {
-                  /* Not destined for us and not forwardable... Drop the
-                   * packet.
-                   */
-
-                  nwarn("WARNING: Not destined for us; not forwardable... "
-                        "Dropping!\n");
+              nwarn("WARNING: Not destined for us; not forwardable... "
+                    "Dropping!\n");
 
 #ifdef CONFIG_NET_STATISTICS
-                  g_netstats.ipv4.drop++;
+              g_netstats.ipv4.drop++;
 #endif
-                  goto drop;
-                }
+              goto drop;
             }
         }
     }
@@ -519,7 +548,7 @@ int ipv4_input(FAR struct net_driver_s *dev)
         break;
 #endif
 
-#ifdef CONFIG_NET_ICMP
+#ifdef NET_ICMP_HAVE_STACK
   /* Check for ICMP input */
 
       case IP_PROTO_ICMP:  /* ICMP input */

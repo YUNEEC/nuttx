@@ -66,7 +66,7 @@
 
 /* Frame size */
 
-/* This maximum size of an IEEE802.15.4 frame.  Certain, non-standard
+/* This maximum size of an IEEE 802.15.4 frame.  Certain, non-standard
  * devices may exceed this value, however.
  */
 
@@ -153,7 +153,6 @@ EXTERN const struct sock_intf_s g_ieee802154_sockif;
 struct ieee802154_data_ind_s; /* Forward reference */
 struct radio_driver_s;        /* Forward reference */
 struct net_driver_s;          /* Forward reference */
-struct eth_hdr_s;             /* Forward reference */
 struct socket;                /* Forward reference */
 struct sockaddr;              /* Forward reference */
 
@@ -175,7 +174,7 @@ void ieee802154_initialize(void);
  * Name: ieee802154_conn_initialize
  *
  * Description:
- *   Initialize the IEEE 802.15.5 connection structure allocator.  Called
+ *   Initialize the IEEE 802.15.4 connection structure allocator.  Called
  *   once and only from ieee802154_initialize().
  *
  * Assumptions:
@@ -258,7 +257,7 @@ FAR struct ieee802154_conn_s *
  *   - The io_flink field points to the next frame in the list (if enable)
  *   - The last frame in the list will have io_flink == NULL.
  *
- * Parameters:
+ * Input Parameters:
  *   radio       The radio network driver interface.
  *   framelist - The head of an incoming list of frames.  Normally this
  *               would be a single frame.  A list may be provided if
@@ -268,7 +267,7 @@ FAR struct ieee802154_conn_s *
  *               If there are multilple frames in the list, this metadata
  *               must apply to all of the frames in the list.
  *
- * Return:
+ * Returned Value:
  *   OK    The IEEE 802.15.4 has been processed  and can be deleted
  *   ERROR Hold the IEEE 802.15.4 and try again later. There is a listening
  *         socket but no recv in place to catch the IEEE 802.15.4 yet.
@@ -314,7 +313,7 @@ uint16_t ieee802154_callback(FAR struct radio_driver_s *radio,
  *   modified on return to indicate the actual size of the address stored
  *   there.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Buffer to receive data
  *   len      Length of buffer
@@ -360,11 +359,11 @@ FAR struct radio_driver_s *
  * Description:
  *   Poll a IEEE 802.15.4 "connection" structure for availability of TX data
  *
- * Parameters:
+ * Input Parameters:
  *   dev - The device driver structure to use in the send operation
  *   conn - The IEEE 802.15.4 "connection" to poll for TX data
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -385,7 +384,7 @@ void ieee802154_poll(FAR struct net_driver_s *dev,
  *   may be returned when they are not NULL and 0), and the error ENOTCONN is
  *   returned when the socket was not actually connected.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Data to send
  *   len      Length of data to send
@@ -395,8 +394,8 @@ void ieee802154_poll(FAR struct net_driver_s *dev,
  *
  * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
- *   -1 is returned, and errno is set appropriately.  See sendto()
- *   for the complete list of return values.
+ *   a negated errno value is retruend.  See sendto() for the complete list
+ *   of return values.
  *
  ****************************************************************************/
 
@@ -413,10 +412,10 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock,
  *   be called early in the initialization sequence before any socket
  *   activity.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -437,10 +436,10 @@ void ieee802154_container_initialize(void);
  *   list.  If that the list is empty, then the meta-data structure will be
  *   allocated from the dynamic memory pool.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the allocated container structure.  All user fields in this
  *   structure have been zeroed.  On a failure to allocate, NULL is
  *   returned.
@@ -461,10 +460,10 @@ FAR struct ieee802154_container_s *ieee802154_container_allocate(void);
  *   structure. If the container structure was allocated dynamically it will
  *   be deallocated.
  *
- * Inputs:
+ * Input Parameters:
  *   container - container structure to free
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:

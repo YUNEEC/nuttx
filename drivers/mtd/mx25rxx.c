@@ -47,6 +47,8 @@
 #include <stdint.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/spi/qspi.h>
 #include <nuttx/mtd/mtd.h>
@@ -397,7 +399,7 @@ int mx25rxx_erase_sector(struct mx25rxx_dev_s *priv, off_t sector)
 
   do
     {
-      usleep(50*1000);
+      nxsig_usleep(50*1000);
       mx25rxx_read_status(priv);
       status = priv->cmdbuf[0];
     }
@@ -421,7 +423,7 @@ int mx25rxx_erase_block(struct mx25rxx_dev_s *priv, off_t block)
 
   do
     {
-      usleep(300*1000);
+      nxsig_usleep(300*1000);
       mx25rxx_read_status(priv);
       status = priv->cmdbuf[0];
     }
@@ -446,7 +448,7 @@ int mx25rxx_erase_chip(struct mx25rxx_dev_s *priv)
 
   while ((status & MX25R_SR_WIP) != 0)
     {
-      sleep(2);
+      nxsig_sleep(2);
       mx25rxx_read_status(priv);
       status = priv->cmdbuf[0];
     }
@@ -745,6 +747,7 @@ FAR struct mtd_dev_s *mx25rxx_initialize(FAR struct qspi_dev_s *qspi, bool unpro
   dev->mtd.bwrite = mx25rxx_bwrite;
   dev->mtd.read   = mx25rxx_read;
   dev->mtd.ioctl  = mx25rxx_ioctl;
+  dev->mtd.name   = "mx25rxx";
   dev->qspi       = qspi;
 
   /* Allocate a 4-byte buffer to support DMA-able command data */
@@ -785,12 +788,6 @@ FAR struct mtd_dev_s *mx25rxx_initialize(FAR struct qspi_dev_s *qspi, bool unpro
   finfo("device ready 0x%02x 0x%04x\n", status, config);
 
   mx25rxx_unlock(dev->qspi);
-
-#ifdef CONFIG_MTD_REGISTRATION
-  /* Register the MTD with the procfs system if enabled */
-
-  mtd_register(&dev->mtd, "mx25rxx");
-#endif
 
   /* Return the implementation-specific state structure as the MTD device */
 

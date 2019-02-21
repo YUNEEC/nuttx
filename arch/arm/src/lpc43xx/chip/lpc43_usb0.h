@@ -50,7 +50,7 @@
                                                     /* 0x000 - 0x0ff: Reserved */
 /* Device/host capability registers */
 
-#define LPC43_USBOTG_HCCR_OFFSET             0x0100 /* Offset to EHCI Host Controller Capabiliy registers */
+#define LPC43_USBOTG_HCCR_OFFSET             0x0100 /* Offset to EHCI Host Controller Capability registers */
 #define LPC43_USBOTG_CAPLENGTH_OFFSET        0x0100 /* Capability length register */
 #define LPC43_USBHOST_HCSPARAMS_OFFSET       0x0104 /* Host controller structural parameters */
 #define LPC43_USBHOST_HCCPARAMS_OFFSET       0x0108 /* Host controller capability parameters */
@@ -58,6 +58,7 @@
 #define LPC43_USBDEV_DCCPARAMS_OFFSET        0x0124 /* Device controller capability parameters */
 
 /* Device/host/OTG operational registers */
+
 #define LPC43_USBOTG_HCOR_OFFSET             0x0140 /* Offset to EHCI Host Controller Operational Registers */
 #define LPC43_USBOTG_USBCMD_OFFSET           0x0140 /* USB command (both) */
 #define LPC43_USBOTG_USBSTS_OFFSET           0x0144 /* USB status (both) */

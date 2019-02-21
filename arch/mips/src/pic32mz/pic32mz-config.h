@@ -232,6 +232,40 @@
 #  define CONFIG_PIC32MZ_SPI 1
 #endif
 
+/* I2C ******************************************************************************/
+/* Don't enable I2C peripherals not supported by the chip. */
+
+#if CHIP_NI2C < 1
+#  undef CONFIG_PIC32MZ_I2C1
+#  undef CONFIG_PIC32MZ_I2C2
+#  undef CONFIG_PIC32MZ_I2C3
+#  undef CONFIG_PIC32MZ_I2C4
+#  undef CONFIG_PIC32MZ_I2C5
+#elif CHIP_NI2C < 2
+#  undef CONFIG_PIC32MZ_I2C2
+#  undef CONFIG_PIC32MZ_I2C3
+#  undef CONFIG_PIC32MZ_I2C4
+#  undef CONFIG_PIC32MZ_I2C5
+#elif CHIP_NI2C < 3
+#  undef CONFIG_PIC32MZ_I2C3
+#  undef CONFIG_PIC32MZ_I2C4
+#  undef CONFIG_PIC32MZ_I2C5
+#elif CHIP_NI2C < 4
+#  undef CONFIG_PIC32MZ_I2C4
+#  undef CONFIG_PIC32MZ_I2C5
+#elif CHIP_NI2C < 5
+#  undef CONFIG_PIC32MZ_I2C5
+#endif
+
+/* Are any I2C peripherals enabled? */
+
+#undef CONFIG_PIC32MZ_I2C
+#if defined(CONFIG_PIC32MZ_I2C1) || defined(CONFIG_PIC32MZ_I2C2) || \
+    defined(CONFIG_PIC32MZ_I2C4) || defined(CONFIG_PIC32MZ_I2C4) || \
+    defined(CONFIG_PIC32MZ_I2C5)
+#  define CONFIG_PIC32MZ_I2C 1
+#endif
+
 /* Device Configuration *************************************************************/
 /* DEVCFG3 */
 /* Configurable settings */
@@ -536,6 +570,20 @@
 #define CONFIG_PIC32MZ_FECCCON  (CONFIG_PIC32MZ_ECC_OPTION << DEVCFG0_FECCCON_SHIFT)
 
 /* Not yet configurable settings */
+
+#if defined(CONFIG_ARCH_CHIP_PIC32MZEC)
+#  define CONFIG_PIC32MX_SMCLR      0
+#  define CONFIG_PIC32MX_SOSCGAIN   0
+#  define CONFIG_PIC32MX_SOSCBOOST  0
+#  define CONFIG_PIC32MX_POSCGAIN   0
+#  define CONFIG_PIC32MX_POSCBOOST  0
+#elif defined(CONFIG_ARCH_CHIP_PIC32MZEF)
+#  define CONFIG_PIC32MX_SMCLR      DEVCFG0_SMCLR
+#  define CONFIG_PIC32MX_SOSCGAIN   DEVCFG0_SOSCGAIN_HIGH
+#  define CONFIG_PIC32MX_SOSCBOOST  DEVCFG0_SOSCBOOST
+#  define CONFIG_PIC32MX_POSCGAIN   DEVCFG0_POSCGAIN_HIGH
+#  define CONFIG_PIC32MX_POSCBOOST  DEVCFG0_POSCBOOST
+#endif
 
 #define CONFIG_PIC32MZ_FSLEEP   DEVCFG0_FSLEEP_OFF
 #define CONFIG_PIC32MZ_DBGPER   DEVCFG0_DBGPER_ALL

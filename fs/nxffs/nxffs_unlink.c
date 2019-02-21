@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/nxffs/nxffs_unlink.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -46,6 +46,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/mtd/mtd.h>
 
@@ -157,7 +158,7 @@ int nxffs_unlink(FAR struct inode *mountpt, FAR const char *relpath)
   /* Get the mountpoint private data from the NuttX inode structure */
 
   volume = mountpt->i_private;
-  ret = sem_wait(&volume->exclsem);
+  ret = nxsem_wait(&volume->exclsem);
   if (ret != OK)
     {
       goto errout;
@@ -167,7 +168,8 @@ int nxffs_unlink(FAR struct inode *mountpt, FAR const char *relpath)
 
   ret = nxffs_rminode(volume, relpath);
 
-  sem_post(&volume->exclsem);
+  nxsem_post(&volume->exclsem);
+
 errout:
   return ret;
 }

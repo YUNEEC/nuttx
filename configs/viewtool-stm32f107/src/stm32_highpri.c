@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/viewtool-stm32f107/src/stm32_highpri.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,16 +44,18 @@
 #include <unistd.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 
 #include <arch/irq.h>
-#include <arch/chip/chip.h>
-#include <arch/board/board.h>
+#include <arch/armv7-m/nvicpri.h>
 
 #include "up_internal.h"
 #include "ram_vectors.h"
 #include "stm32_tim.h"
 
 #include "viewtool_stm32f107.h"
+
+#include <arch/board/board.h>
 
 #ifdef CONFIG_VIEWTOOL_HIGHPRI
 
@@ -129,7 +131,7 @@ void tim6_handler(void)
 
   /* Acknowledge the timer interrupt */
 
-  STM32_TIM_ACKINT(g_highpri.dev, 0);
+  STM32_TIM_ACKINT(g_highpri.dev, ATIM_SR_UIF);
 
   /* Increment the count associated with the current basepri */
 
@@ -216,7 +218,7 @@ int highpri_main(int argc, char *argv[])
   /* Enable the timer interrupt at the NVIC and at TIM6 */
 
   up_enable_irq(STM32_IRQ_TIM6);
-  STM32_TIM_ENABLEINT(dev, 0);
+  STM32_TIM_ENABLEINT(dev, ATIM_SR_UIF);
 
   /* Monitor interrupts */
 
@@ -226,7 +228,7 @@ int highpri_main(int argc, char *argv[])
       /* Flush stdout and wait a bit */
 
       fflush(stdout);
-      sleep(1);
+      nxsig_sleep(1);
       seconds++;
 
       /* Sample counts so that they are not volatile.  Missing a count now

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/ioexpander/pcf8574.h
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -154,15 +154,24 @@ static const struct ioexpander_ops_s g_pcf8574_ops =
 
 static void pcf8574_lock(FAR struct pcf8574_dev_s *priv)
 {
-  while (sem_wait(&priv->exclsem) < 0)
-    {
-      /* EINTR is the only expected error from sem_wait() */
+  int ret;
 
-      DEBUGASSERT(errno == EINTR);
+  do
+    {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define pcf8574_unlock(p) sem_post(&(p)->exclsem)
+#define pcf8574_unlock(p) nxsem_post(&(p)->exclsem)
 
 /****************************************************************************
  * Name: pcf8574_read
@@ -768,6 +777,7 @@ static FAR void *pcf8574_attach(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
+#ifdef CONFIG_PCF8574_INT_ENABLE
 static int pcf8574_detach(FAR struct ioexpander_dev_s *dev, FAR void *handle)
 {
   FAR struct pcf8574_dev_s *priv = (FAR struct pcf8574_dev_s *)dev;
@@ -783,6 +793,7 @@ static int pcf8574_detach(FAR struct ioexpander_dev_s *dev, FAR void *handle)
   cb->cbarg  = NULL;
   return OK;
 }
+#endif
 
 /****************************************************************************
  * Name: pcf8574_int_update
@@ -1130,7 +1141,7 @@ FAR struct ioexpander_dev_s *pcf8574_initialize(FAR struct i2c_master_s *i2c,
   priv->config->enable(config, true);
 #endif
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   return &priv->dev;
 }
 
