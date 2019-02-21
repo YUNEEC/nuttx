@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/mqueue/mq_sndinternal.c
  *
- *   Copyright (C) 2007, 2009, 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2013-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,9 +56,6 @@
 #include <nuttx/cancelpt.h>
 
 #include "sched/sched.h"
-#ifndef CONFIG_DISABLE_SIGNALS
-#  include "signal/signal.h"
-#endif
 #include "mqueue/mqueue.h"
 
 /****************************************************************************
@@ -66,62 +63,58 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_verifysend
+ * Name: nxmq_verify_send
  *
  * Description:
- *   This is internal, common logic shared by both mq_send and mq_timesend.
- *   This function verifies the input parameters that are common to both
- *   functions.
+ *   This is internal, common logic shared by both [nx]mq_send and
+ *   [nx]mq_timesend.  This function verifies the input parameters that are
+ *   common to both functions.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor
  *   msg - Message to send
  *   msglen - The length of the message in bytes
  *   prio - The priority of the message
  *
- * Return Value:
- *   One success, 0 (OK) is returned. On failure, -1 (ERROR) is returned and
- *   the errno is set appropriately:
+ * Returned Value:
+ *   One success, 0 (OK) is returned. On failure, a negated errno value is
+ *   returned.
  *
- *   EINVAL   Either msg or mqdes is NULL or the value of prio is invalid.
- *   EPERM    Message queue opened not opened for writing.
- *   EMSGSIZE 'msglen' was greater than the maxmsgsize attribute of the
- *             message queue.
- *
- * Assumptions:
+ *     EINVAL   Either msg or mqdes is NULL or the value of prio is invalid.
+ *     EPERM    Message queue opened not opened for writing.
+ *     EMSGSIZE 'msglen' was greater than the maxmsgsize attribute of the
+ *               message queue.
  *
  ****************************************************************************/
 
-int mq_verifysend(mqd_t mqdes, FAR const char *msg, size_t msglen, int prio)
+int nxmq_verify_send(mqd_t mqdes, FAR const char *msg, size_t msglen,
+                     int prio)
 {
   /* Verify the input parameters */
 
   if (!msg || !mqdes || prio < 0 || prio > MQ_PRIO_MAX)
     {
-      set_errno(EINVAL);
-      return ERROR;
+      return -EINVAL;
     }
 
   if ((mqdes->oflags & O_WROK) == 0)
     {
-      set_errno(EPERM);
-      return ERROR;
+      return -EPERM;
     }
 
   if (msglen > (size_t)mqdes->msgq->maxmsgsize)
     {
-      set_errno(EMSGSIZE);
-      return ERROR;
+      return -EMSGSIZE;
     }
 
   return OK;
 }
 
 /****************************************************************************
- * Name: mq_msgalloc
+ * Name: nxmq_alloc_msg
  *
  * Description:
- *   The mq_msgalloc function will get a free message for use by the
+ *   The nxmq_alloc_msg function will get a free message for use by the
  *   operating system.  The message will be allocated from the g_msgfree
  *   list.
  *
@@ -135,16 +128,16 @@ int mq_verifysend(mqd_t mqdes, FAR const char *msg, size_t msglen, int prio)
  *   the g_msgfreeirq list.  If this is unsuccessful, the calling interrupt
  *   handler will be notified.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the allocated msg structure.  On a failure to allocate,
  *   this function PANICs.
  *
  ****************************************************************************/
 
-FAR struct mqueue_msg_s *mq_msgalloc(void)
+FAR struct mqueue_msg_s *nxmq_alloc_msg(void)
 {
   FAR struct mqueue_msg_s *mqmsg;
   irqstate_t flags;
@@ -203,18 +196,19 @@ FAR struct mqueue_msg_s *mq_msgalloc(void)
 }
 
 /****************************************************************************
- * Name: mq_waitsend
+ * Name: nxmq_wait_send
  *
  * Description:
- *   This is internal, common logic shared by both mq_send and mq_timesend.
- *   This function waits until the message queue is not full.
+ *   This is internal, common logic shared by both [nx]mq_send and
+ *   [nx]mq_timesend.  This function waits until the message queue is not
+ *   full.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor
  *
- * Return Value:
- *   On success, mq_send() returns 0 (OK); on error, -1 (ERROR) is
- *   returned, with errno set to indicate the error:
+ * Returned Value:
+ *   On success, nxmq_wait_send() returns 0 (OK); a negated errno value is
+ *   returned on any failure:
  *
  *   EAGAIN   The queue was full and the O_NONBLOCK flag was set for the
  *            message queue description referred to by mqdes.
@@ -223,32 +217,31 @@ FAR struct mqueue_msg_s *mq_msgalloc(void)
  *            (mq_timedsend only).
  *
  * Assumptions/restrictions:
- * - The caller has verified the input parameters using mq_verifysend().
+ * - The caller has verified the input parameters using nxmq_verify_send().
  * - Executes within a critical section established by the caller.
  *
  ****************************************************************************/
 
-int mq_waitsend(mqd_t mqdes)
+int nxmq_wait_send(mqd_t mqdes)
 {
   FAR struct tcb_s *rtcb;
   FAR struct mqueue_inode_s *msgq;
+  int ret;
 
-  /* mq_waitsend() is not a cancellation point, but it is always called from
-   * a cancellation point.
+#ifdef CONFIG_CANCELLATION_POINTS
+  /* nxmq_wait_send() is not a cancellation point, but may be called via
+   * mq_send() or mq_timedsend() which are cancellation points.
    */
 
-  if (enter_cancellation_point())
+  if (check_cancellation_point())
     {
-#ifdef CONFIG_CANCELLATION_POINTS
       /* If there is a pending cancellation, then do not perform
        * the wait.  Exit now with ECANCELED.
        */
 
-      set_errno(ECANCELED);
-      leave_cancellation_point();
-      return ERROR;
-#endif
+      return -ECANCELED;
     }
+#endif
 
   /* Get a pointer to the message queue */
 
@@ -266,9 +259,7 @@ int mq_waitsend(mqd_t mqdes)
         {
           /* No... We will return an error to the caller. */
 
-          set_errno(EAGAIN);
-          leave_cancellation_point();
-          return ERROR;
+          return -EAGAIN;
         }
 
       /* Yes... We will not return control until the message queue is
@@ -283,61 +274,73 @@ int mq_waitsend(mqd_t mqdes)
 
           while (msgq->nmsgs >= msgq->maxmsgs)
             {
+              int saved_errno;
+
               /* Block until the message queue is no longer full.
                * When we are unblocked, we will try again
                */
 
-              rtcb = this_task();
+              rtcb           = this_task();
               rtcb->msgwaitq = msgq;
               msgq->nwaitnotfull++;
 
-              set_errno(OK);
+              /* "Borrow" the per-task errno to communication wake-up error
+               * conditions.
+               */
+
+              saved_errno   = rtcb->pterrno;
+              rtcb->pterrno = OK;
+
+              /* Make sure this is not the idle task, descheduling that
+               * isn't going to end well.
+               */
+
+              DEBUGASSERT(NULL != rtcb->flink);
               up_block_task(rtcb, TSTATE_WAIT_MQNOTFULL);
 
               /* When we resume at this point, either (1) the message queue
                * is no longer empty, or (2) the wait has been interrupted by
                * a signal.  We can detect the latter case be examining the
-               * errno value (should be EINTR or ETIMEOUT).
+               * per-task errno value (should be EINTR or ETIMEOUT).
                */
 
-              if (get_errno() != OK)
+              ret           = rtcb->pterrno;
+              rtcb->pterrno = saved_errno;
+
+              if (ret != OK)
                 {
-                  leave_cancellation_point();
-                  return ERROR;
+                  return -ret;
                 }
             }
         }
     }
 
-  leave_cancellation_point();
   return OK;
 }
 
 /****************************************************************************
- * Name: mq_dosend
+ * Name: nxmq_do_send
  *
  * Description:
- *   This is internal, common logic shared by both mq_send and mq_timesend.
- *   This function adds the specified message (msg) to the message queue
- *   (mqdes).  Then it notifies any tasks that were waiting for message
- *   queue notifications setup by mq_notify.  And, finally, it awakens any
- *   tasks that were waiting for the message not empty event.
+ *   This is internal, common logic shared by both [nx]mq_send and
+ *   [nx]mq_timesend.  This function adds the specified message (msg) to the
+ *   message queue (mqdes).  Then it notifies any tasks that were waiting
+ *   for message queue notifications setup by mq_notify.  And, finally, it
+ *   awakens any tasks that were waiting for the message not empty event.
  *
- * Parameters:
- *   mqdes - Message queue descriptor
- *   msg - Message to send
+ * Input Parameters:
+ *   mqdes  - Message queue descriptor
+ *   msg    - Message to send
  *   msglen - The length of the message in bytes
- *   prio - The priority of the message
+ *   prio   - The priority of the message
  *
- * Return Value:
+ * Returned Value:
  *   This function always returns OK.
- *
- * Assumptions/restrictions:
  *
  ****************************************************************************/
 
-int mq_dosend(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg, FAR const char *msg,
-              size_t msglen, int prio)
+int nxmq_do_send(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg,
+                 FAR const char *msg, size_t msglen, int prio)
 {
   FAR struct tcb_s *btcb;
   FAR struct mqueue_inode_s *msgq;
@@ -409,30 +412,9 @@ int mq_dosend(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg, FAR const char *msg,
       msgq->ntpid   = INVALID_PROCESS_ID;
       msgq->ntmqdes = NULL;
 
-      /* Notification the client via signal? */
+      /* Notification the client */
 
-      if (event.sigev_notify == SIGEV_SIGNAL)
-        {
-          /* Yes... Queue the signal -- What if this returns an error? */
-
-#ifdef CONFIG_CAN_PASS_STRUCTS
-          DEBUGVERIFY(sig_mqnotempty(pid, event.sigev_signo,
-                                     event.sigev_value));
-#else
-          DEBUGVERIFY(sig_mqnotempty(pid, event.sigev_signo,
-                                     event.sigev_value.sival_ptr));
-#endif
-        }
-
-#ifdef CONFIG_SIG_EVTHREAD
-      /* Notify the client via a function call */
-
-      else if (event.sigev_notify == SIGEV_THREAD)
-        {
-          DEBUGVERIFY(sig_notification(pid, &event));
-        }
-#endif
-
+      DEBUGVERIFY(nxsig_notification(pid, &event, SI_MESGQ));
     }
 #endif
 
@@ -453,7 +435,7 @@ int mq_dosend(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg, FAR const char *msg,
 
       /* If one was found, unblock it */
 
-      ASSERT(btcb);
+      DEBUGASSERT(btcb);
 
       btcb->msgwaitq = NULL;
       msgq->nwaitnotempty--;

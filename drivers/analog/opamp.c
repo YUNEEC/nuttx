@@ -98,15 +98,12 @@ static int opamp_open(FAR struct file *filep)
   FAR struct inode      *inode = filep->f_inode;
   FAR struct opamp_dev_s *dev   = inode->i_private;
   uint8_t                tmp;
-  int                    ret   = OK;
+  int                    ret;
 
   /* If the port is the middle of closing, wait until the close is finished */
 
-  if (sem_wait(&dev->ad_closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_closesem);
+  if (ret >= 0)
     {
       /* Increment the count of references to the device.  If this the first
        * time that the driver has been opened for this device, then initialize
@@ -141,7 +138,7 @@ static int opamp_open(FAR struct file *filep)
             }
         }
 
-      sem_post(&dev->ad_closesem);
+      nxsem_post(&dev->ad_closesem);
     }
 
   return ret;
@@ -161,13 +158,10 @@ static int opamp_close(FAR struct file *filep)
   FAR struct inode     *inode = filep->f_inode;
   FAR struct opamp_dev_s *dev   = inode->i_private;
   irqstate_t            flags;
-  int                   ret = OK;
+  int                   ret;
 
-  if (sem_wait(&dev->ad_closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_closesem);
+  if (ret >= 0)
     {
       /* Decrement the references to the driver.  If the reference count will
        * decrement to 0, then uninitialize the driver.
@@ -176,7 +170,7 @@ static int opamp_close(FAR struct file *filep)
       if (dev->ad_ocount > 1)
         {
           dev->ad_ocount--;
-          sem_post(&dev->ad_closesem);
+          nxsem_post(&dev->ad_closesem);
         }
       else
         {
@@ -190,7 +184,7 @@ static int opamp_close(FAR struct file *filep)
           dev->ad_ops->ao_shutdown(dev);          /* Disable the OPAMP */
           leave_critical_section(flags);
 
-          sem_post(&dev->ad_closesem);
+          nxsem_post(&dev->ad_closesem);
         }
     }
 
@@ -229,14 +223,14 @@ int opamp_register(FAR const char *path, FAR struct opamp_dev_s *dev)
 
   /* Initialize semaphores */
 
-  sem_init(&dev->ad_closesem, 0, 1);
+  nxsem_init(&dev->ad_closesem, 0, 1);
 
   /* Register the OPAMP character driver */
 
   ret =  register_driver(path, &opamp_fops, 0444, dev);
   if (ret < 0)
     {
-      sem_destroy(&dev->ad_closesem);
+      nxsem_destroy(&dev->ad_closesem);
     }
 
   return ret;

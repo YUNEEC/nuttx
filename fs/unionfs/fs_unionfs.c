@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/unionfs/fs_unionfs.c
  *
- *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -110,7 +110,7 @@ struct unionfs_file_s
 /* Helper functions */
 
 static int     unionfs_semtake(FAR struct unionfs_inode_s *ui, bool noint);
-#define        unionfs_semgive(ui) (void)sem_post(&(ui)->ui_exclsem)
+#define        unionfs_semgive(ui) (void)nxsem_post(&(ui)->ui_exclsem)
 
 static FAR const char *unionfs_offsetpath(FAR const char *relpath,
                  FAR const char *prefix);
@@ -162,6 +162,7 @@ static int     unionfs_dup(FAR const struct file *oldp,
                  FAR struct file *newp);
 static int     unionfs_fstat(FAR const struct file *filep,
                  FAR struct stat *buf);
+static int     unionfs_truncate(FAR struct file *filep, off_t length);
 
 /* Operations on directories */
 
@@ -218,6 +219,7 @@ static const struct mountpt_operations g_unionfs_mops =
   unionfs_sync,        /* sync */
   unionfs_dup,         /* dup */
   unionfs_fstat,       /* fstat */
+  unionfs_truncate,    /* truncate */
 
   unionfs_opendir,     /* opendir */
   unionfs_closedir,    /* closedir */
@@ -249,20 +251,19 @@ static int unionfs_semtake(FAR struct unionfs_inode_s *ui, bool noint)
 
   do
     {
-      ret = sem_wait(&ui->ui_exclsem);
+      ret = nxsem_wait(&ui->ui_exclsem);
       if (ret < 0)
         {
-          int errcode = errno;
-          DEBUGASSERT(errcode == EINTR);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
           if (!noint)
             {
-              return -errcode;
+              return ret;
             }
         }
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -825,7 +826,7 @@ static void unionfs_destroy(FAR struct unionfs_inode_s *ui)
 
   /* And finally free the allocated unionfs state structure as well */
 
-  sem_destroy(&ui->ui_exclsem);
+  nxsem_destroy(&ui->ui_exclsem);
   kmm_free(ui);
 }
 
@@ -953,7 +954,7 @@ static int unionfs_close(FAR struct file *filep)
 
   /* Perform the lower level close operation */
 
-  if (ops->close)
+  if (ops->close != NULL)
     {
       ret = ops->close(&uf->uf_file);
     }
@@ -1013,9 +1014,9 @@ static ssize_t unionfs_read(FAR struct file *filep, FAR char *buffer,
   DEBUGASSERT(um != NULL && um->um_node != NULL && um->um_node->u.i_mops != NULL);
   ops = um->um_node->u.i_mops;
 
-  /* Perform the lower level write operation */
+  /* Perform the lower level read operation */
 
-  if (ops->read)
+  if (ops->read != NULL)
     {
       ret = ops->read(&uf->uf_file, buffer, buflen);
     }
@@ -1063,7 +1064,7 @@ static ssize_t unionfs_write(FAR struct file *filep, FAR const char *buffer,
 
   /* Perform the lower level write operation */
 
-  if (ops->write)
+  if (ops->write != NULL)
     {
       ret = ops->write(&uf->uf_file, buffer, buflen);
     }
@@ -1110,7 +1111,7 @@ static off_t unionfs_seek(FAR struct file *filep, off_t offset, int whence)
 
   /* Invoke the file seek method if available */
 
-  if (ops->seek)
+  if (ops->seek != NULL)
     {
       offset = ops->seek(&uf->uf_file, offset, whence);
     }
@@ -1186,7 +1187,7 @@ static int unionfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Perform the lower level ioctl operation */
 
-  if (ops->ioctl)
+  if (ops->ioctl != NULL)
     {
       ret = ops->ioctl(&uf->uf_file, cmd, arg);
     }
@@ -1207,7 +1208,7 @@ static int unionfs_sync(FAR struct file *filep)
   FAR const struct mountpt_operations *ops;
   int ret = -EINVAL;
 
-  finfo("Entry\n");
+  finfo("filep=%p\n", filep);
 
   /* Recover the open file data from the struct file instance */
 
@@ -1233,7 +1234,7 @@ static int unionfs_sync(FAR struct file *filep)
 
   /* Perform the lower level sync operation */
 
-  if (ops->sync)
+  if (ops->sync != NULL)
     {
       ret = ops->sync(&uf->uf_file);
     }
@@ -1255,7 +1256,7 @@ static int unionfs_dup(FAR const struct file *oldp, FAR struct file *newp)
   FAR const struct mountpt_operations *ops;
   int ret = -ENOMEM;
 
-  finfo("Entry\n");
+  finfo("oldp=%p newp=%p\n", oldp, newp);
 
   /* Recover the open file data from the struct file instance */
 
@@ -1294,7 +1295,7 @@ static int unionfs_dup(FAR const struct file *oldp, FAR struct file *newp)
       /* Then perform the lower lowel dup operation */
 
       ret = OK;
-      if (ops->dup)
+      if (ops->dup != NULL)
         {
           ret = ops->dup(&oldpriv->uf_file, &newpriv->uf_file);
           if (ret < 0)
@@ -1329,7 +1330,7 @@ static int unionfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
   FAR const struct mountpt_operations *ops;
   int ret = -EPERM;
 
-  finfo("Entry\n");
+  finfo("filep=%p buf=%p\n");
 
   /* Recover the open file data from the struct file instance */
 
@@ -1355,9 +1356,60 @@ static int unionfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
 
   /* Perform the lower level write operation */
 
-  if (ops->fstat)
+  if (ops->fstat != NULL)
     {
       ret = ops->fstat(&uf->uf_file, buf);
+    }
+
+  unionfs_semgive(ui);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: unionfs_truncate
+ *
+ * Description:
+ *   Set the size of the file references by 'filep' to 'length'.
+ *
+ ****************************************************************************/
+
+static int unionfs_truncate(FAR struct file *filep, off_t length)
+{
+  FAR struct unionfs_inode_s *ui;
+  FAR struct unionfs_file_s *uf;
+  FAR struct unionfs_mountpt_s *um;
+  FAR const struct mountpt_operations *ops;
+  int ret = -EPERM;
+
+  finfo("filep=%p length=%ld\n", filep, (long)length);
+
+  /* Recover the open file data from the struct file instance */
+
+  DEBUGASSERT(filep != NULL && filep->f_inode != NULL);
+  ui = (FAR struct unionfs_inode_s *)filep->f_inode->i_private;
+
+  /* Get exclusive access to the file system data structures */
+
+  ret = unionfs_semtake(ui, false);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  DEBUGASSERT(ui != NULL && filep->f_priv != NULL);
+  uf = (FAR struct unionfs_file_s *)filep->f_priv;
+
+  DEBUGASSERT(uf->uf_ndx == 0 || uf->uf_ndx == 1);
+  um = &ui->ui_fs[uf->uf_ndx];
+
+  DEBUGASSERT(um != NULL && um->um_node != NULL && um->um_node->u.i_mops != NULL);
+  ops = um->um_node->u.i_mops;
+
+  /* Perform the lower level write operation */
+
+  if (ops->truncate != NULL)
+    {
+      ret = ops->truncate(&uf->uf_file, length);
     }
 
   unionfs_semgive(ui);
@@ -1509,7 +1561,7 @@ static int unionfs_opendir(FAR struct inode *mountpt, FAR const char *relpath,
 errout_with_fs2open:
   ops = ui->ui_fs[1].um_node->u.i_mops;
   DEBUGASSERT(ops != NULL);
-  if (ops->closedir)
+  if (ops->closedir != NULL)
     {
       ret = ops->closedir(um->um_node, fu->fu_lower[1]);
     }
@@ -1541,7 +1593,7 @@ static int unionfs_closedir(FAR struct inode *mountpt,
   int ret = OK;
   int i;
 
-  finfo("Entry\n");
+  finfo("mountpt=%p dir=%p\n", mountpt, dir);
 
   /* Recover the union file system data from the struct inode instance */
 
@@ -1570,7 +1622,7 @@ static int unionfs_closedir(FAR struct inode *mountpt,
 
           /* Perform the lower level closedir operation */
 
-          if (ops->closedir)
+          if (ops->closedir != NULL)
             {
               ret = ops->closedir(um->um_node, fu->fu_lower[i]);
             }
@@ -1697,7 +1749,7 @@ static int unionfs_readdir(struct inode *mountpt, struct fs_dirent_s *dir)
 
   /* Perform the lower level readdir operation */
 
-  if (ops->readdir)
+  if (ops->readdir != NULL)
     {
       /* Loop if we discard duplicate directory entries in filey system 2 */
 
@@ -1874,7 +1926,7 @@ static int unionfs_rewinddir(struct inode *mountpt, struct fs_dirent_s *dir)
   FAR struct fs_unionfsdir_s *fu;
   int ret;
 
-  finfo("Entry\n");
+  finfo("mountpt=%p dir=%p\n", mountpt, dir);
 
   /* Recover the union file system data from the struct inode instance */
 
@@ -1938,7 +1990,7 @@ static int unionfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
 {
   FAR struct unionfs_inode_s *ui;
 
-  finfo("Entry\n");
+  finfo("handle=%p blkdriver=%p flags=%x\n", handle, blkdriver, flags);
 
   /* Recover the union file system data from the struct inode instance */
 
@@ -1984,7 +2036,7 @@ static int unionfs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
   uint32_t ratiob16;
   int ret;
 
-  finfo("Entry\n");
+  finfo("mountpt=%p buf=%p\n", mountpt, buf);
 
   /* Recover the union file system data from the struct inode instance */
 
@@ -2565,7 +2617,7 @@ errout_with_search:
  *             file system appear a some path below the unionfs mountpoint,
  *   mountpt - The full path to the mountpoint for the union file system
  *
- * Returned value:
+ * Returned Value:
  *   Zero (OK) is returned if the union file system was correctly created and
  *   mounted.  On any failure, a negated error value will be returned to
  *   indicate the nature of the failure.
@@ -2593,7 +2645,7 @@ int unionfs_mount(FAR const char *fspath1, FAR const char *prefix1,
       return -ENOMEM;
     }
 
-  sem_init(&ui->ui_exclsem, 0, 1);
+  nxsem_init(&ui->ui_exclsem, 0, 1);
 
   /* Get the inodes associated with fspath1 and fspath2 */
 
@@ -2704,7 +2756,7 @@ errout_with_fs1:
   inode_release(ui->ui_fs[0].um_node);
 
 errout_with_uinode:
-  sem_destroy(&ui->ui_exclsem);
+  nxsem_destroy(&ui->ui_exclsem);
   kmm_free(ui);
   return ret;
 }

@@ -64,11 +64,11 @@
  *   absolute time. The it_interval member of value will contain the reload
  *   value last set by timer_settime().
  *
- * Parameters:
+ * Input Parameters:
  *   timerid - The pre-thread timer, previously created by the call to
  *   timer_create(), whose remaining time count will be returned..
  *
- * Return Value:
+ * Returned Value:
  *   If the timer_gettime() succeeds, a value of 0 (OK) will be returned.
  *   If an error occurs, the value -1 (ERROR) will be returned, and errno
  *   set to indicate the error.
@@ -86,7 +86,7 @@
 int timer_gettime(timer_t timerid, FAR struct itimerspec *value)
 {
   FAR struct posix_timer_s *timer = (FAR struct posix_timer_s *)timerid;
-  ssystime_t ticks;
+  sclock_t ticks;
 
   if (!timer || !value)
     {

@@ -53,10 +53,12 @@
 #include <arch/board/board.h>
 
 #include "chip.h"
-#include "mpu.h"
+#ifdef CONFIG_ARM_MPU
+#  include "mpu.h"
+#  include "stm32_mpuinit.h"
+#endif
 #include "up_arch.h"
 #include "up_internal.h"
-#include "stm32_mpuinit.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -188,7 +190,7 @@
        /* Only one memory region.  Force Configuration 1 */
 
 #      ifndef CONFIG_STM32_CCMEXCLUDE
-#        if CONFIG_STM32_HAVE_CCM
+#        ifdef CONFIG_STM32_HAVE_CCM
 #          warning "CCM SRAM excluded from the heap"
 #        endif
 #        define CONFIG_STM32_CCMEXCLUDE 1
@@ -322,19 +324,21 @@
  *   1) 112KiB of System SRAM beginning at address 0x2000:0000
  *   2)  16KiB of System SRAM beginning at address 0x2001:c000
  *
- * The STM32F401 family is an exception and has only 96Kib total on one bank:
+ * The STM32F401 family is an exception and has only 64KiB or 96Kib total on one
+ * bank:
  *
- *   3)  96KiB of System SRAM beginning at address 0x2000:0000
+ *   3) 64KiB (STM32F401xB/C) or 96KiB (STM32401xD/E) of System SRAM beginning
+ *      at address 0x2000:0000
  *
  * Members of the STM32F40xxx family have an additional 64Kib of CCM RAM
  * for a total of 192KB.
  *
- *   4)  64Kib of CCM SRAM beginning at address 0x1000:0000
+ *   4) 64Kib of CCM SRAM beginning at address 0x1000:0000
  *
  * The STM32F427/437/429/439 parts have another 64KiB of System SRAM for a total
  * of 256KiB.
  *
- *   5)  64Kib of System SRAM beginning at address 0x2002:0000
+ *   5) 64Kib of System SRAM beginning at address 0x2002:0000
  *
  * As determined by the linker script, g_heapbase lies in the 112KiB memory
  * region and that extends to 0x2001:0000.  But the  first and second memory
@@ -360,7 +364,9 @@
 
    /* Set the end of system SRAM */
 
-#  if defined(CONFIG_STM32_STM32F401)
+#  if defined(CONFIG_STM32_STM32F401xBC)
+#    define SRAM1_END 0x20010000
+#  elif defined(CONFIG_STM32_STM32F401xDE)
 #    define SRAM1_END 0x20018000
 #  elif defined(CONFIG_STM32_STM32F410)
 #    define SRAM1_END 0x20008000

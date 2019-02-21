@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_mtd.h
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@
 #define LC823450_PART5_START    (LC823450_PART4_START + LC823450_PART4_NBLOCKS)
 #define LC823450_PART5_NBLOCKS  32768
 #define LC823450_PART6_START    (LC823450_PART5_START + LC823450_PART5_NBLOCKS)
-#define LC823450_PART6_NBLOCKS  131072 
+#define LC823450_PART6_NBLOCKS  131072
 #define LC823450_PART7_START    (LC823450_PART6_START + LC823450_PART6_NBLOCKS)
 #define LC823450_PART7_NBLOCKS  32768
 #define LC823450_PART8_START    (LC823450_PART7_START + LC823450_PART7_NBLOCKS)

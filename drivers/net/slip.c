@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/net/slip.c
  *
- *   Copyright (C) 2011-2012, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Reference: RFC 1055
@@ -56,6 +56,8 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
+#include <nuttx/kthread.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/netdev.h>
@@ -86,7 +88,7 @@
 
 /* The Linux slip module hard-codes its MTU size to 296 (40 bytes for the
  * IP+TPC headers plus 256 bytes of data).  So you might as well set
- * CONFIG_NET_SLIP_MTU to 296 as well.
+ * CONFIG_NET_SLIP_PKTSIZE to 296 as well.
  *
  * There may be an issue with this setting, however.  I see that Linux uses
  * a MTU of 296 and window of 256, but actually only sends 168 bytes of data:
@@ -95,10 +97,8 @@
  * transfers to 128 bytes (possibly by modifying the tcp_mss() macro).
  */
 
-#if CONFIG_NET_SLIP_MTU < 296
-#  error "CONFIG_NET_SLIP_MTU >= 296 is required"
-#elif CONFIG_NET_SLIP_MTU > 296
-#  warning "CONFIG_NET_SLIP_MTU == 296 is optimal"
+#if CONFIG_NET_SLIP_PKTSIZE < 296
+#  error "CONFIG_NET_SLIP_PKTSIZE >= 296 is required"
 #endif
 
 /* CONFIG_NET_SLIP_NINTERFACES determines the number of physical interfaces
@@ -121,7 +121,11 @@
 /* TX poll delay = 1 second = 1000000 microseconds. */
 
 #define SLIP_WDDELAY   (1*1000000)
-#define SLIP_POLLHSEC  (1*2)
+
+/* This is a helper pointer for accessing the contents of the ip header */
+
+#define IPv4BUF        ((FAR struct ipv4_hdr_s *)priv->dev.d_buf)
+#define IPv6BUF        ((FAR struct ipv6_hdr_s *)priv->dev.d_buf)
 
 /****************************************************************************
  * Private Types
@@ -134,7 +138,7 @@
 struct slip_driver_s
 {
   volatile bool bifup;      /* true:ifup false:ifdown */
-  bool          txnodelay;  /* True: usleep() not needed */
+  bool          txnodelay;  /* True: nxsig_usleep() not needed */
   int16_t       fd;         /* TTY file descriptor */
   uint16_t      rxlen;      /* The number of bytes in rxbuf */
   pid_t         rxpid;      /* Receiver thread ID */
@@ -144,8 +148,8 @@ struct slip_driver_s
   /* This holds the information visible to the NuttX network */
 
   struct net_driver_s dev;  /* Interface understood by the network */
-  uint8_t rxbuf[CONFIG_NET_SLIP_MTU + 2];
-  uint8_t txbuf[CONFIG_NET_SLIP_MTU + 2];
+  uint8_t rxbuf[CONFIG_NET_SLIP_PKTSIZE + 2];
+  uint8_t txbuf[CONFIG_NET_SLIP_PKTSIZE + 2];
 };
 
 /****************************************************************************
@@ -184,7 +188,7 @@ static int slip_rxtask(int argc, FAR char *argv[]);
 static int slip_ifup(FAR struct net_driver_s *dev);
 static int slip_ifdown(FAR struct net_driver_s *dev);
 static int slip_txavail(FAR struct net_driver_s *dev);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int slip_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 static int slip_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -199,19 +203,24 @@ static int slip_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 
 static void slip_semtake(FAR struct slip_driver_s *priv)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&priv->waitsem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->waitsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define slip_semgive(p) sem_post(&(p)->waitsem);
+#define slip_semgive(p) nxsem_post(&(p)->waitsem);
 
 /****************************************************************************
  * Name: slip_write
@@ -398,7 +407,10 @@ static int slip_txpoll(FAR struct net_driver_s *dev)
 
   if (priv->dev.d_len > 0)
     {
-      slip_transmit(priv);
+      if (!devif_loopback(&priv->dev))
+        {
+          slip_transmit(priv);
+        }
     }
 
   /* If zero is returned, the polling will continue until all connections have
@@ -426,8 +438,8 @@ static void slip_txtask(int argc, FAR char *argv[])
 {
   FAR struct slip_driver_s *priv;
   unsigned int index = *(argv[1]) - '0';
-  systime_t start_ticks;
-  systime_t now_ticks;
+  clock_t start_ticks;
+  clock_t now_ticks;
   unsigned int hsec;
 
   nerr("index: %d\n", index);
@@ -451,7 +463,7 @@ static void slip_txtask(int argc, FAR char *argv[])
       if (!priv->txnodelay)
         {
           slip_semgive(priv);
-          usleep(SLIP_WDDELAY);
+          nxsig_usleep(SLIP_WDDELAY);
         }
       else
         {
@@ -619,7 +631,7 @@ static inline void slip_receive(FAR struct slip_driver_s *priv)
 
         default:
           {
-            if (priv->rxlen < CONFIG_NET_SLIP_MTU+2)
+            if (priv->rxlen < CONFIG_NET_SLIP_PKTSIZE+2)
               {
                 priv->rxbuf[priv->rxlen++] = ch;
               }
@@ -704,6 +716,14 @@ static int slip_rxtask(int argc, FAR char *argv[])
        */
 
       slip_receive(priv);
+
+      /* Handle the IP input.  Get exclusive access to the network. */
+
+      slip_semtake(priv);
+      priv->dev.d_buf = priv->rxbuf;
+      priv->dev.d_len = priv->rxlen;
+
+      net_lock();
       NETDEV_RXPACKETS(&priv->dev);
 
       /* All packets are assumed to be IP packets (we don't have a choice..
@@ -712,17 +732,10 @@ static int slip_rxtask(int argc, FAR char *argv[])
        * enough to hold an IP header.
        */
 
-      if (priv->rxlen >= IPv4_HDRLEN)
+#ifdef CONFIG_NET_IPv4
+      if ((IPv4BUF->vhl & IP_VERSION_MASK) == IPv4_VERSION)
         {
           NETDEV_RXIPV4(&priv->dev);
-
-          /* Handle the IP input.  Get exclusive access to the network. */
-
-          slip_semtake(priv);
-          priv->dev.d_buf = priv->rxbuf;
-          priv->dev.d_len = priv->rxlen;
-
-          net_lock();
           ipv4_input(&priv->dev);
 
           /* If the above function invocation resulted in data that should
@@ -733,16 +746,34 @@ static int slip_rxtask(int argc, FAR char *argv[])
           if (priv->dev.d_len > 0)
             {
               slip_transmit(priv);
-              kill(priv->txpid, SIGALRM);
             }
-
-          net_unlock();
-          slip_semgive(priv);
         }
       else
+#endif
+#ifdef CONFIG_NET_IPv6
+      if ((IPv6BUF->vtc & IP_VERSION_MASK) == IPv6_VERSION)
+        {
+          NETDEV_RXIPV6(&priv->dev);
+          ipv6_input(&priv->dev);
+
+          /* If the above function invocation resulted in data that should
+           * be sent out on the network, the field  d_len will set to a
+           * value > 0.  NOTE that we are transmitting using the RX buffer!
+           */
+
+          if (priv->dev.d_len > 0)
+            {
+              slip_transmit(priv);
+            }
+        }
+      else
+#endif
         {
           NETDEV_RXERRORS(&priv->dev);
         }
+
+      net_unlock();
+      slip_semgive(priv);
     }
 
   /* We won't get here */
@@ -771,9 +802,17 @@ static int slip_ifup(FAR struct net_driver_s *dev)
 {
   FAR struct slip_driver_s *priv = (FAR struct slip_driver_s *)dev->d_private;
 
+#ifdef CONFIG_NET_IPv4
   nerr("Bringing up: %d.%d.%d.%d\n",
        dev->d_ipaddr & 0xff, (dev->d_ipaddr >> 8) & 0xff,
        (dev->d_ipaddr >> 16) & 0xff, dev->d_ipaddr >> 24);
+#endif
+#ifdef CONFIG_NET_IPv6
+  ninfo("Bringing up: %04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x\n",
+        dev->d_ipv6addr[0], dev->d_ipv6addr[1], dev->d_ipv6addr[2],
+        dev->d_ipv6addr[3], dev->d_ipv6addr[4], dev->d_ipv6addr[5],
+        dev->d_ipv6addr[6], dev->d_ipv6addr[7]);
+#endif
 
   /* Mark the interface up */
 
@@ -834,7 +873,7 @@ static int slip_txavail(FAR struct net_driver_s *dev)
       /* Wake up the TX polling thread */
 
       priv->txnodelay = true;
-      kill(priv->txpid, SIGALRM);
+      (void)nxsig_kill(priv->txpid, SIGALRM);
     }
 
   return OK;
@@ -858,7 +897,7 @@ static int slip_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int slip_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct slip_driver_s *priv = (FAR struct slip_driver_s *)dev->d_private;
@@ -887,7 +926,7 @@ static int slip_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int slip_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct slip_driver_s *priv = (FAR struct slip_driver_s *)dev->d_private;
@@ -939,7 +978,7 @@ int slip_initialize(int intf, FAR const char *devname)
   priv->dev.d_ifup    = slip_ifup;     /* I/F up (new IP address) callback */
   priv->dev.d_ifdown  = slip_ifdown;   /* I/F down callback */
   priv->dev.d_txavail = slip_txavail;  /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   priv->dev.d_addmac  = slip_addmac;   /* Add multicast MAC address */
   priv->dev.d_rmmac   = slip_rmmac;    /* Remove multicast MAC address */
 #endif
@@ -947,52 +986,46 @@ int slip_initialize(int intf, FAR const char *devname)
 
   /* Open the device */
 
-  priv->fd            = open(devname, O_RDWR, 0666);
+  priv->fd            = nx_open(devname, O_RDWR, 0666);
   if (priv->fd < 0)
     {
-      nerr("ERROR: Failed to open %s: %d\n", devname, errno);
-      return -errno;
+      nerr("ERROR: Failed to open %s: %d\n", devname, priv->fd);
+      return priv->fd;
     }
 
   /* Initialize the wait semaphore */
 
-  sem_init(&priv->waitsem, 0, 0);
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_init(&priv->waitsem, 0, 0);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
-  /* Put the interface in the down state.  This usually amounts to resetting
-   * the device and/or calling slip_ifdown().
-   */
-
-  slip_ifdown(&priv->dev);
-
-  /* Start the SLIP receiver task */
+  /* Start the SLIP receiver kernel thread */
 
   snprintf(buffer, 8, "%d", intf);
   argv[0] = buffer;
   argv[1] = NULL;
 
-  priv->rxpid = task_create("rxslip", CONFIG_NET_SLIP_DEFPRIO,
-                            CONFIG_NET_SLIP_STACKSIZE, (main_t)slip_rxtask,
-                            (FAR char * const *)argv);
+  priv->rxpid = kthread_create("rxslip", CONFIG_NET_SLIP_DEFPRIO,
+                               CONFIG_NET_SLIP_STACKSIZE, (main_t)slip_rxtask,
+                               (FAR char * const *)argv);
   if (priv->rxpid < 0)
     {
       nerr("ERROR: Failed to start receiver task\n");
-      return -errno;
+      return priv->rxpid;
     }
 
   /* Wait and make sure that the receive task is started. */
 
   slip_semtake(priv);
 
-  /* Start the SLIP transmitter task */
+  /* Start the SLIP transmitter kernel thread */
 
-  priv->txpid = task_create("txslip", CONFIG_NET_SLIP_DEFPRIO,
-                            CONFIG_NET_SLIP_STACKSIZE, (main_t)slip_txtask,
-                            (FAR char * const *)argv);
+  priv->txpid = kthread_create("txslip", CONFIG_NET_SLIP_DEFPRIO,
+                               CONFIG_NET_SLIP_STACKSIZE, (main_t)slip_txtask,
+                               (FAR char * const *)argv);
   if (priv->txpid < 0)
     {
       nerr("ERROR: Failed to start receiver task\n");
-      return -errno;
+      return priv->txpid;
     }
 
   /* Wait and make sure that the transmit task is started. */

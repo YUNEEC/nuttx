@@ -59,14 +59,11 @@
  *   Find a previously registered network device using its assigned
  *   network interface name
  *
- * Parameters:
+ * Input Parameters:
  *   ifname The interface name of the device of interest
  *
  * Returned Value:
  *  Pointer to driver on success; null on failure
- *
- * Assumptions:
- *  Called from normal user mode
  *
  ****************************************************************************/
 

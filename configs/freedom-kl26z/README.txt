@@ -44,8 +44,7 @@ NuttX Buildroot Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh freedom-kl26z/<sub-dir>
+     tools/configure.sh freedom-kl26z/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -186,13 +185,6 @@ Freedom KL26Z-specific Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
   Individual subsystems can be enabled as follows.  These settings are for
   all of the K25Z100/120 line and may not be available for the MKL26Z128
   in particular:
@@ -260,9 +252,7 @@ Configurations
 Each FREEDOM-KL26Z configuration is maintained in a sub-directory and
 can be selected as follow:
 
-    cd tools
-    ./configure.sh freedom-kl26z/<subdir>
-    cd -
+    tools/configure.sh freedom-kl26z/<subdir>
 
 If this is a Windows native build, then configure.bat should be used
 instead of configure.sh:

@@ -1,7 +1,7 @@
 /****************************************************************************
  *  arch/arm/src/armv7-r/arm_initialstate.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -134,6 +134,12 @@ void up_initial_state(struct tcb_s *tcb)
   cpsr |= PSR_F_BIT;
 
 #endif /* !CONFIG_ARMV7R_DECODEFIQ */
+
+#ifdef CONFIG_ENDIAN_BIG
+
+  cpsr |= PSR_E_BIT;
+
+#endif /* CONFIG_ENDIAN_BIG */
 #endif /* CONFIG_SUPPRESS_INTERRUPTS */
 
   xcp->regs[REG_CPSR] = cpsr;

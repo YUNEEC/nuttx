@@ -1,7 +1,8 @@
 /****************************************************************************
  *  sched/mqueue/mq_timedreceive.c
  *
- *   Copyright (C) 2007-2009, 2011, 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011, 2013-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,6 +51,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/wdog.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/cancelpt.h>
 
 #include "sched/sched.h"
@@ -61,24 +63,24 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_rcvtimeout
+ * Name: nxmq_rcvtimeout
  *
  * Description:
  *   This function is called if the timeout elapses before the message queue
  *   becomes non-empty.
  *
- * Parameters:
+ * Input Parameters:
  *   argc  - the number of arguments (should be 1)
  *   pid   - the task ID of the task to wakeup
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-static void mq_rcvtimeout(int argc, wdparm_t pid)
+static void nxmq_rcvtimeout(int argc, wdparm_t pid)
 {
   FAR struct tcb_s *wtcb;
   irqstate_t flags;
@@ -103,7 +105,7 @@ static void mq_rcvtimeout(int argc, wdparm_t pid)
     {
       /* Restart with task with a timeout error */
 
-      mq_waitirq(wtcb, ETIMEDOUT);
+      nxmq_wait_irq(wtcb, ETIMEDOUT);
     }
 
   /* Interrupts may now be re-enabled. */
@@ -114,6 +116,166 @@ static void mq_rcvtimeout(int argc, wdparm_t pid)
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: nxmq_timedreceive
+ *
+ * Description:
+ *   This function receives the oldest of the highest priority messages from
+ *   the message queue specified by "mqdes."  If the message queue is empty
+ *   and O_NONBLOCK was not set, nxmq_timedreceive() will block until a
+ *   message is added to the message queue (or until a timeout occurs).
+ *
+ *   nxmq_timedreceive() is an internal OS interface.  It is functionally
+ *   equivalent to mq_timedreceive() except that:
+ *
+ *   - It is not a cancellaction point, and
+ *   - It does not modify the errno value.
+ *
+ *  See comments with mq_timedreceive() for a more complete description of
+ *  the behavior of this function
+ *
+ * Input Parameters:
+ *   mqdes   - Message Queue Descriptor
+ *   msg     - Buffer to receive the message
+ *   msglen  - Size of the buffer in bytes
+ *   prio    - If not NULL, the location to store message priority.
+ *   abstime - the absolute time to wait until a timeout is declared.
+ *
+ * Returned Value:
+ *   This is an internal OS interface and should not be used by applications.
+ *   It follows the NuttX internal error return policy:  Zero (OK) is
+ *   returned on success.  A negated errno value is returned on failure.
+ *   (see mq_timedreceive() for the list list valid return values).
+ *
+ ****************************************************************************/
+
+ssize_t nxmq_timedreceive(mqd_t mqdes, FAR char *msg, size_t msglen,
+                        FAR int *prio, FAR const struct timespec *abstime)
+{
+  FAR struct tcb_s *rtcb = this_task();
+  FAR struct mqueue_msg_s *mqmsg;
+  irqstate_t flags;
+  int ret;
+
+  DEBUGASSERT(up_interrupt_context() == false && rtcb->waitdog == NULL);
+
+  /* Verify the input parameters and, in case of an error, set
+   * errno appropriately.
+   */
+
+  ret = nxmq_verify_receive(mqdes, msg, msglen);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!abstime || abstime->tv_nsec < 0 || abstime->tv_nsec >= 1000000000)
+    {
+      return -EINVAL;
+    }
+
+  /* Create a watchdog.  We will not actually need this watchdog
+   * unless the queue is not empty, but we will reserve it up front
+   * before we enter the following critical section.
+   */
+
+  rtcb->waitdog = wd_create();
+  if (!rtcb->waitdog)
+    {
+      return -ENOMEM;
+    }
+
+  /* Get the next message from the message queue.  We will disable
+   * pre-emption until we have completed the message received.  This
+   * is not too bad because if the receipt takes a long time, it will
+   * be because we are blocked waiting for a message and pre-emption
+   * will be re-enabled while we are blocked
+   */
+
+  sched_lock();
+
+  /* Furthermore, nxmq_wait_receive() expects to have interrupts disabled
+   * because messages can be sent from interrupt level.
+   */
+
+  flags = enter_critical_section();
+
+  /* Check if the message queue is empty.  If it is NOT empty, then we
+   * will not need to start timer.
+   */
+
+  if (mqdes->msgq->msglist.head == NULL)
+    {
+      sclock_t ticks;
+
+      /* Convert the timespec to clock ticks.  We must have interrupts
+       * disabled here so that this time stays valid until the wait begins.
+       */
+
+      int result = clock_abstime2ticks(CLOCK_REALTIME, abstime, &ticks);
+
+      /* If the time has already expired and the message queue is empty,
+       * return immediately.
+       */
+
+      if (result == OK && ticks <= 0)
+        {
+          result = ETIMEDOUT;
+        }
+
+      /* Handle any time-related errors */
+
+      if (result != OK)
+        {
+          leave_critical_section(flags);
+          sched_unlock();
+
+          wd_delete(rtcb->waitdog);
+          rtcb->waitdog = NULL;
+
+          return -result;
+        }
+
+      /* Start the watchdog */
+
+      (void)wd_start(rtcb->waitdog, ticks, (wdentry_t)nxmq_rcvtimeout,
+                     1, getpid());
+    }
+
+  /* Get the message from the message queue */
+
+  ret = nxmq_wait_receive(mqdes, &mqmsg);
+
+  /* Stop the watchdog timer (this is not harmful in the case where
+   * it was never started)
+   */
+
+  wd_cancel(rtcb->waitdog);
+
+  /* We can now restore interrupts */
+
+  leave_critical_section(flags);
+
+  /* Check if we got a message from the message queue.  We might
+   * not have a message if:
+   *
+   * - The message queue is empty and O_NONBLOCK is set in the mqdes
+   * - The wait was interrupted by a signal
+   * - The watchdog timeout expired
+   */
+
+  if (ret >= 0)
+    {
+      DEBUGASSERT(mqmsg != NULL);
+      ret = nxmq_do_receive(mqdes, mqmsg, msg, prio);
+    }
+
+  sched_unlock();
+  wd_delete(rtcb->waitdog);
+  rtcb->waitdog = NULL;
+  return ret;
+}
 
 /****************************************************************************
  * Name: mq_timedreceive
@@ -141,14 +303,14 @@ static void mq_rcvtimeout(int argc, wdparm_t pid)
  *   If no message is available, and the timeout has already expired by the
  *   time of the call, mq_timedreceive() returns immediately.
  *
- * Parameters:
- *   mqdes - Message Queue Descriptor
- *   msg - Buffer to receive the message
- *   msglen - Size of the buffer in bytes
- *   prio - If not NULL, the location to store message priority.
+ * Input Parameters:
+ *   mqdes   - Message Queue Descriptor
+ *   msg     - Buffer to receive the message
+ *   msglen  - Size of the buffer in bytes
+ *   prio    - If not NULL, the location to store message priority.
  *   abstime - the absolute time to wait until a timeout is declared.
  *
- * Return Value:
+ * Returned Value:
  *   One success, the length of the selected message in bytes is returned.
  *   On failure, -1 (ERROR) is returned and the errno is set appropriately:
  *
@@ -161,142 +323,26 @@ static void mq_rcvtimeout(int argc, wdparm_t pid)
  *   EINVAL    Invalid 'msg' or 'mqdes' or 'abstime'
  *   ETIMEDOUT The call timed out before a message could be transferred.
  *
- * Assumptions:
- *
  ****************************************************************************/
 
 ssize_t mq_timedreceive(mqd_t mqdes, FAR char *msg, size_t msglen,
                         FAR int *prio, FAR const struct timespec *abstime)
 {
-  FAR struct tcb_s *rtcb = this_task();
-  FAR struct mqueue_msg_s *mqmsg;
-  irqstate_t flags;
-  int ret = ERROR;
-
-  DEBUGASSERT(up_interrupt_context() == false && rtcb->waitdog == NULL);
+  int ret;
 
   /* mq_timedreceive() is a cancellation point */
 
   (void)enter_cancellation_point();
 
-  /* Verify the input parameters and, in case of an error, set
-   * errno appropriately.
-   */
+  /* Let nxmq_timedreceive do all of the work */
 
-  if (mq_verifyreceive(mqdes, msg, msglen) != OK)
+  ret = nxmq_timedreceive(mqdes, msg, msglen, prio, abstime);
+  if (ret < 0)
     {
-      leave_cancellation_point();
-      return ERROR;
+      set_errno(-ret);
+      ret = ERROR;
     }
 
-  if (!abstime || abstime->tv_nsec < 0 || abstime->tv_nsec >= 1000000000)
-    {
-      set_errno(EINVAL);
-      leave_cancellation_point();
-      return ERROR;
-    }
-
-  /* Create a watchdog.  We will not actually need this watchdog
-   * unless the queue is not empty, but we will reserve it up front
-   * before we enter the following critical section.
-   */
-
-  rtcb->waitdog = wd_create();
-  if (!rtcb->waitdog)
-    {
-      set_errno(EINVAL);
-      leave_cancellation_point();
-      return ERROR;
-    }
-
-  /* Get the next message from the message queue.  We will disable
-   * pre-emption until we have completed the message received.  This
-   * is not too bad because if the receipt takes a long time, it will
-   * be because we are blocked waiting for a message and pre-emption
-   * will be re-enabled while we are blocked
-   */
-
-  sched_lock();
-
-  /* Furthermore, mq_waitreceive() expects to have interrupts disabled
-   * because messages can be sent from interrupt level.
-   */
-
-  flags = enter_critical_section();
-
-  /* Check if the message queue is empty.  If it is NOT empty, then we
-   * will not need to start timer.
-   */
-
-  if (mqdes->msgq->msglist.head == NULL)
-    {
-      ssystime_t ticks;
-
-      /* Convert the timespec to clock ticks.  We must have interrupts
-       * disabled here so that this time stays valid until the wait begins.
-       */
-
-      int result = clock_abstime2ticks(CLOCK_REALTIME, abstime, &ticks);
-
-      /* If the time has already expired and the message queue is empty,
-       * return immediately.
-       */
-
-      if (result == OK && ticks <= 0)
-        {
-          result = ETIMEDOUT;
-        }
-
-      /* Handle any time-related errors */
-
-      if (result != OK)
-        {
-          leave_critical_section(flags);
-          sched_unlock();
-
-          wd_delete(rtcb->waitdog);
-          rtcb->waitdog = NULL;
-
-          set_errno(result);
-          leave_cancellation_point();
-          return ERROR;
-        }
-
-      /* Start the watchdog */
-
-      wd_start(rtcb->waitdog, ticks, (wdentry_t)mq_rcvtimeout, 1, getpid());
-    }
-
-  /* Get the message from the message queue */
-
-  mqmsg = mq_waitreceive(mqdes);
-
-  /* Stop the watchdog timer (this is not harmful in the case where
-   * it was never started)
-   */
-
-  wd_cancel(rtcb->waitdog);
-
-  /* We can now restore interrupts */
-
-  leave_critical_section(flags);
-
-  /* Check if we got a message from the message queue.  We might
-   * not have a message if:
-   *
-   * - The message queue is empty and O_NONBLOCK is set in the mqdes
-   * - The wait was interrupted by a signal
-   * - The watchdog timeout expired
-   */
-
-  if (mqmsg)
-    {
-      ret = mq_doreceive(mqdes, mqmsg, msg, prio);
-    }
-
-  sched_unlock();
-  wd_delete(rtcb->waitdog);
-  rtcb->waitdog = NULL;
   leave_cancellation_point();
   return ret;
 }

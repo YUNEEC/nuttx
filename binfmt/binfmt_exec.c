@@ -1,7 +1,8 @@
 /****************************************************************************
  * binfmt/binfmt_exec.c
  *
- *   Copyright (C) 2009, 2013-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2013-2014, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +45,7 @@
 #include <errno.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/sched.h>
 #include <nuttx/binfmt/binfmt.h>
 
 #include "binfmt.h"
@@ -59,19 +61,54 @@
  *
  * Description:
  *   This is a convenience function that wraps load_ and exec_module into
- *   one call.  If CONFIG_SCHED_ONEXIT and CONFIG_SCHED_HAVE_PARENT are
- *   also defined, this function will automatically call schedule_unload()
- *   to unload the module when task exits.
+ *   one call.  If CONFIG_BINFMT_LOADABLE is defined, this function will
+ *   schedule to unload the module when task exits.
  *
- *   NOTE: This function is flawed and useless without CONFIG_SCHED_ONEXIT
- *   and CONFIG_SCHED_HAVE_PARENT because there is then no mechanism to
- *   unload the module once it exits.
+ *   This non-standard, NuttX function is similar to execv() and
+ *   posix_spawn() but differs in the following ways;
  *
- * Input Parameter:
- *   filename - Full path to the binary to be loaded
- *   argv     - Argument list
- *   exports  - Table of exported symbols
- *   nexports - The number of symbols in exports
+ *   - Unlike execv() and posix_spawn() this function accepts symbol table
+ *     information as input parameters. This means that the symbol table
+ *     used to link the application prior to execution is provided by the
+ *     caller, not by the system.
+ *   - Unlike execv(), this function always returns.
+ *
+ *   This non-standard interface is included as a official NuttX API only
+ *   because it is needed in certain build modes: exec() is probably the
+ *   only want to load programs in the PROTECTED mode. Other file execution
+ *   APIs rely on a symbol table provided by the OS. In the PROTECTED build
+ *   mode, the OS cannot provide any meaningful symbolic information for
+ *   execution of code in the user-space blob so that is the exec() function
+ *   is really needed in that build case
+ *
+ *   The interface is available in the FLAT build mode although it is not
+ *   really necessary in that case. It is currently used by some example
+ *   code under the apps/ that that generate their own symbol tables for
+ *   linking test programs. So althought it is not necessary, it can still
+ *   be useful.
+ *
+ *   The interface would be completely useless and will not be supported in
+ *   in the KERNEL build mode where the contrary is true: An application
+ *   process cannot provide any meaning symbolic information for use in
+ *   linking a different process.
+ *
+ *   NOTE: This function is flawed and useless without CONFIG_BINFMT_LOADABLE
+ *   because without that features there is then no mechanism to unload the
+ *   module once it exits.
+ *
+ * Input Parameters:
+ *   filename - The path to the program to be executed. If
+ *              CONFIG_LIB_ENVPATH is defined in the configuration, then
+ *              this may be a relative path from the current working
+ *              directory. Otherwise, path must be the absolute path to the
+ *              program.
+ *   argv     - A pointer to an array of string arguments. The end of the
+ *              array is indicated with a NULL entry.
+ *   exports  - The address of the start of the caller-provided symbol
+ *              table. This symbol table contains the addresses of symbols
+ *              exported by the caller and made available for linking the
+ *              module into the system.
+ *   nexports - The number of symbols in the exports table.
  *
  * Returned Value:
  *   This is an end-user function, so it follows the normal convention:
@@ -83,7 +120,6 @@
 int exec(FAR const char *filename, FAR char * const *argv,
          FAR const struct symtab_s *exports, int nexports)
 {
-#if defined(CONFIG_SCHED_ONEXIT) && defined(CONFIG_SCHED_HAVE_PARENT)
   FAR struct binary_s *bin;
   int pid;
   int errcode;
@@ -120,7 +156,7 @@ int exec(FAR const char *filename, FAR char * const *argv,
   ret = load_module(bin);
   if (ret < 0)
     {
-      errcode = get_errno();
+      errcode = -ret;
       berr("ERROR: Failed to load program '%s': %d\n", filename, errcode);
       goto errout_with_argv;
     }
@@ -137,28 +173,38 @@ int exec(FAR const char *filename, FAR char * const *argv,
   pid = exec_module(bin);
   if (pid < 0)
     {
-      errcode = get_errno();
-      berr("ERROR: Failed to execute program '%s': %d\n", filename, errcode);
+      errcode = -pid;
+      berr("ERROR: Failed to execute program '%s': %d\n",
+           filename, errcode);
       goto errout_with_lock;
     }
 
+#ifdef CONFIG_BINFMT_LOADABLE
   /* Set up to unload the module (and free the binary_s structure)
    * when the task exists.
    */
 
-  ret = schedule_unload(pid, bin);
+  ret = group_exitinfo(pid, bin);
   if (ret < 0)
     {
-      errcode = get_errno();
-      berr("ERROR: Failed to schedule unload '%s': %d\n", filename, errcode);
+      berr("ERROR: Failed to schedule unload '%s': %d\n", filename, ret);
     }
+
+#else
+  /* Free the binary_s structure here */
+
+  binfmt_freeargv(bin);
+  kmm_free(bin);
+
+  /* TODO: How does the module get unloaded in this case? */
+#endif
 
   sched_unlock();
   return pid;
 
 errout_with_lock:
   sched_unlock();
-  unload_module(bin);
+  (void)unload_module(bin);
 errout_with_argv:
   binfmt_freeargv(bin);
 errout_with_bin:
@@ -167,46 +213,6 @@ errout:
   set_errno(errcode);
   return ERROR;
 
-#else
-  struct binary_s bin;
-  int errcode;
-  int ret;
-
-  /* Load the module into memory */
-
-  memset(&bin, 0, sizeof(struct binary_s));
-  bin.filename = filename;
-  bin.exports  = exports;
-  bin.nexports = nexports;
-
-  ret = load_module(&bin);
-  if (ret < 0)
-    {
-      errcode = get_errno();
-      berr("ERROR: Failed to load program '%s': %d\n", filename, errcode);
-      goto errout;
-    }
-
-  /* Then start the module */
-
-  ret = exec_module(&bin);
-  if (ret < 0)
-    {
-      errcode = get_errno();
-      berr("ERROR: Failed to execute program '%s': %d\n", filename, errcode);
-      goto errout_with_module;
-    }
-
-  /* TODO:  How does the module get unloaded in this case? */
-
-  return ret;
-
-errout_with_module:
-  unload_module(&bin);
-errout:
-  set_errno(errcode);
-  return ERROR;
-#endif
 }
 
 #endif /* !CONFIG_BINFMT_DISABLE */

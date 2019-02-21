@@ -2,7 +2,7 @@
 # Config.mk
 # Global build rules and macros.
 #
-#   Copyright (C) 2011, 2013-2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011, 2013-2014, 2018 Gregory Nutt. All rights reserved.
 #   Author: Richard Cochran
 #           Gregory Nutt <gnutt@nuttx.org>
 #
@@ -38,6 +38,10 @@
 #
 ############################################################################
 
+ifeq ($(CONFIG_WINDOWS_NATIVE),y)
+export SHELL=cmd
+endif
+
 # These are configuration variables that are quoted by configuration tool
 # but which must be unquoated when used in the build system.
 
@@ -65,7 +69,7 @@ else
 endif
 
 # INCDIR - Convert a list of directory paths to a list of compiler include
-#   directirves
+#   directories
 # Example: CFFLAGS += ${shell $(INCDIR) [options] "compiler" "dir1" "dir2" "dir2" ...}
 #
 # Note that the compiler string and each directory path string must quoted if
@@ -152,6 +156,14 @@ define ASSEMBLE
 	$(Q) $(CC) -c $(AFLAGS) $1 -o $2
 endef
 
+# INSTALL_LIB - Install a library $1 into target $2
+# Example: $(call INSTALL_LIB, libabc.a, $(TOPDIR)/staging/)
+
+define INSTALL_LIB
+	@echo "IN: $1 -> $2"
+	$(Q) install -m 0644 $1 $2
+endef
+
 # MOVEOBJ - Default macro to move an object file to the correct location
 # Example: $(call MOVEOBJ, prefix, directory)
 #
@@ -204,8 +216,8 @@ endif
 # Depends on these settings defined in board-specific Make.defs file
 # installed at $(TOPDIR)/Make.defs:
 #
-#   LD - The command to invoke the linker (includes any options)
-#    OBJCOPY - The command to invoke the object cop (includes any options)
+#   LD      - The command to invoke the linker (includes any options)
+#   OBJCOPY - The command to invoke the object cop (includes any options)
 #
 # Depends on this settings defined in board-specific defconfig file installed
 # at $(TOPDIR)/.config:
@@ -259,6 +271,45 @@ define MOVEFILE
 	$(Q) mv -f $1 $2
 endef
 endif
+
+# COPYFILE - Copy one file
+
+ifeq ($(CONFIG_WINDOWS_NATIVE),y)
+define COPYFILE
+	$(Q) if exist $1 (copy /y /b $1 $2)
+endef
+else
+define COPYFILE
+	$(Q) cp -f $1 $2
+endef
+endif
+
+# CATFILE - Cat and append a list of files
+#
+# USAGE: $(call CATFILE,dest,src1,src2,src3,...)
+
+ifeq ($(CONFIG_WINDOWS_NATIVE),y)
+define CATFILE
+	$(Q) type $(2) >> $1
+endef
+else
+define CATFILE
+	$(Q) cat $(2) >> $1
+endef
+endif
+
+# RWILDCARD - Recursive wildcard used to get lists of files from directories
+#
+# USAGE:  FILELIST = $(call RWILDCARD,<dir>,<wildcard-filename)
+#
+# This is functionally equivent to the fillowing, but has the advantage in
+# that it is portable
+#
+# FILELIST = ${shell find <dir> -name <wildcard-file>}
+
+define RWILDCARD
+  $(foreach d,$(wildcard $1/*),$(call RWILDCARD,$d,$2)$(filter $(subst *,%,$2),$d))
+endef
 
 # CLEAN - Default clean target
 

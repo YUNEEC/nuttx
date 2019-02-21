@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32l4/stm32l4x6xx_dma.c
  *
- *   Copyright (C) 2009, 2011-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2011-2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *           Sebastien Lorquet <sebastien@lorquet.fr>
  *           dev@ziggurat29.com
@@ -68,10 +68,6 @@
 #  define DMA_NCHANNELS  (DMA1_NCHANNELS+DMA2_NCHANNELS)
 #else
 #  define DMA_NCHANNELS  DMA1_NCHANNELS
-#endif
-
-#ifndef CONFIG_DMA_PRI
-#  define CONFIG_DMA_PRI NVIC_SYSH_PRIORITY_DEFAULT
 #endif
 
 /* Convert the DMA channel base address to the DMA register block address */
@@ -223,21 +219,26 @@ static inline void dmachan_putreg(struct stm32l4_dma_s *dmach, uint32_t offset, 
 
 static void stm32l4_dmatake(FAR struct stm32l4_dma_s *dmach)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&dmach->sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if the wait was awakened
-       * by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&dmach->sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void stm32l4_dmagive(FAR struct stm32l4_dma_s *dmach)
 {
-  (void)sem_post(&dmach->sem);
+  (void)nxsem_post(&dmach->sem);
 }
 
 /************************************************************************************
@@ -300,7 +301,7 @@ static int stm32l4_dmainterrupt(int irq, void *context, FAR void *arg)
 #endif
   else
     {
-      PANIC();
+      DEBUGPANIC();
     }
   dmach = &g_dma[chndx];
 
@@ -337,7 +338,7 @@ static int stm32l4_dmainterrupt(int irq, void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
   struct stm32l4_dma_s *dmach;
   int chndx;
@@ -347,7 +348,7 @@ void weak_function up_dmainitialize(void)
   for (chndx = 0; chndx < DMA_NCHANNELS; chndx++)
     {
       dmach = &g_dma[chndx];
-      sem_init(&dmach->sem, 0, 1);
+      nxsem_init(&dmach->sem, 0, 1);
 
       /* Attach DMA interrupt vectors */
 
@@ -360,12 +361,6 @@ void weak_function up_dmainitialize(void)
       /* Enable the IRQ at the NVIC (still disabled at the DMA controller) */
 
       up_enable_irq(dmach->irq);
-
-#ifdef CONFIG_ARCH_IRQPRIO
-      /* Set the interrupt priority */
-
-      up_prioritize_irq(dmach->irq, CONFIG_DMA_PRI);
-#endif
     }
 }
 
@@ -389,7 +384,7 @@ void weak_function up_dmainitialize(void)
  *   Hmm.. I suppose this interface could be extended to make a non-blocking
  *   version.  Feel free to do that if that is what you need.
  *
- * Input parameter:
+ * Input Parameters:
  *   chan - Identifies the stream/channel resource
  *     This is a bit encoded value as provided by the DMACHAN_* definitions
  *     in chip/stm32l4x6xx_dma.h
@@ -637,7 +632,7 @@ size_t stm32l4_dmaresidual(DMA_HANDLE handle)
  *   of the processor. Note that this only applies to memory addresses, it
  *   will return false for any peripheral address.
  *
- * Returned value:
+ * Returned Value:
  *   True, if transfer is possible.
  *
  ****************************************************************************/

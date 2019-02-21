@@ -1,7 +1,7 @@
 /****************************************************************************
  * binfmt/binfmt_loadmodule.c
  *
- *   Copyright (C) 2009, 2012-2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2012-2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,18 +53,6 @@
 #ifndef CONFIG_BINFMT_DISABLE
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -75,7 +63,7 @@
  *   Execute C++ static constructors.
  *
  * Input Parameters:
- *   loadinfo - Load state information
+ *   binp - Load state information
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -162,8 +150,7 @@ int unload_module(FAR struct binary_s *binp)
           if (ret < 0)
             {
               berr("binp->unload() failed: %d\n", ret);
-              set_errno(-ret);
-              return ERROR;
+              return ret;
             }
         }
 
@@ -174,8 +161,7 @@ int unload_module(FAR struct binary_s *binp)
       if (ret < 0)
         {
           berr("exec_ctors() failed: %d\n", ret);
-          set_errno(-ret);
-          return ERROR;
+          return ret;
         }
 #endif
 

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/djoystick.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,9 +58,10 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/random.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/input/djoystick.h>
-#include <nuttx/random.h>
 
 #include <nuttx/irq.h>
 
@@ -126,7 +127,7 @@ struct djoy_open_s
 /* Semaphore helpers */
 
 static inline int djoy_takesem(sem_t *sem);
-#define djoy_givesem(s) sem_post(s);
+#define djoy_givesem(s) nxsem_post(s);
 
 /* Sampling and Interrupt handling */
 
@@ -180,18 +181,18 @@ static const struct file_operations djoy_fops =
 
 static inline int djoy_takesem(sem_t *sem)
 {
+  int ret;
+
   /* Take a count from the semaphore, possibly waiting */
 
-  if (sem_wait(sem) < 0)
-    {
-      /* EINTR is the only error that we expect */
+  ret = nxsem_wait(sem);
 
-      int errcode = get_errno();
-      DEBUGASSERT(errcode == EINTR);
-      return -errcode;
-    }
+  /* The only case that an error should occur here is if the wait
+   * was awakened by a signal
+   */
 
-  return OK;
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
@@ -358,7 +359,7 @@ static void djoy_sample(FAR struct djoy_upperhalf_s *priv)
                   if (fds->revents != 0)
                     {
                       iinfo("Report events: %02x\n", fds->revents);
-                      sem_post(fds->sem);
+                      nxsem_post(fds->sem);
                     }
                 }
             }
@@ -376,10 +377,11 @@ static void djoy_sample(FAR struct djoy_upperhalf_s *priv)
 #ifdef CONFIG_CAN_PASS_STRUCTS
           union sigval value;
           value.sival_int = (int)sample;
-          (void)sigqueue(opriv->do_pid, opriv->do_notify.dn_signo, value);
+          (void)nxsig_queue(opriv->do_pid, opriv->do_notify.dn_signo,
+                            value);
 #else
-          (void)sigqueue(opriv->do_pid, opriv->do_notify.dn.signo,
-                         (FAR void *)sample);
+          (void)nxsig_queue(opriv->do_pid, opriv->do_notify.dn.signo,
+                            (FAR void *)sample);
 #endif
         }
 #endif
@@ -402,9 +404,9 @@ static int djoy_open(FAR struct file *filep)
 {
   FAR struct inode *inode;
   FAR struct djoy_upperhalf_s *priv;
-  FAR const struct djoy_lowerhalf_s *lower;
   FAR struct djoy_open_s *opriv;
 #ifndef CONFIG_DISABLE_POLL
+  FAR const struct djoy_lowerhalf_s *lower;
   djoy_buttonset_t supported;
 #endif
   int ret;
@@ -835,7 +837,7 @@ errout_with_dusem:
  *   lower - An instance of the platform-specific discrete joystick lower
  *     half driver.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success.  Otherwise a negated errno value is
  *   returned to indicate the nature of the failure.
  *
@@ -869,7 +871,7 @@ int djoy_register(FAR const char *devname,
   /* Initialize the new djoystick driver instance */
 
   priv->du_lower = lower;
-  sem_init(&priv->du_exclsem, 0, 1);
+  nxsem_init(&priv->du_exclsem, 0, 1);
 
   DEBUGASSERT(lower->dl_sample);
   priv->du_sample = lower->dl_sample(lower);
@@ -880,7 +882,7 @@ int djoy_register(FAR const char *devname,
   if (ret < 0)
     {
       ierr("ERROR: register_driver failed: %d\n", ret);
-      sem_destroy(&priv->du_exclsem);
+      nxsem_destroy(&priv->du_exclsem);
       kmm_free(priv);
     }
 

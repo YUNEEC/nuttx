@@ -1,7 +1,8 @@
 /****************************************************************************
  * include/nuttx/fs/ioctl.h
  *
- *   Copyright (C) 2008, 2009, 2011-2014, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2009, 2011-2014, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +46,7 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* General ioctl definitions ************************************************/
 /* Each NuttX ioctl commands are uint16_t's consisting of an 8-bit type
  * identifier and an 8-bit command number.  All command type identifiers are
@@ -67,13 +69,13 @@
 #define _BATIOCBASE     (0x0e00) /* Battery driver ioctl commands */
 #define _QEIOCBASE      (0x0f00) /* Quadrature encoder ioctl commands */
 #define _AUDIOIOCBASE   (0x1000) /* Audio ioctl commands */
-#define _SLCDIOCBASE    (0x1100) /* Segment LCD ioctl commands */
-#define _WLIOCBASE      (0x1200) /* Wireless modules ioctl network commands */
-#define _WLCIOCBASE     (0x1300) /* Wireless modules ioctl character driver commands */
-#define _CFGDIOCBASE    (0x1400) /* Config Data device (app config) ioctl commands */
-#define _TCIOCBASE      (0x1500) /* Timer ioctl commands */
-#define _DJOYBASE       (0x1600) /* Discrete joystick ioctl commands */
-#define _AJOYBASE       (0x1700) /* Analog joystick ioctl commands */
+#define _LCDIOCBASE     (0x1100) /* LCD character driver ioctl commands */
+#define _SLCDIOCBASE    (0x1200) /* Segment LCD ioctl commands */
+#define _WLIOCBASE      (0x1300) /* Wireless modules ioctl network commands */
+#define _WLCIOCBASE     (0x1400) /* Wireless modules ioctl character driver commands */
+#define _CFGDIOCBASE    (0x1500) /* Config Data device (app config) ioctl commands */
+#define _TCIOCBASE      (0x1600) /* Timer ioctl commands */
+#define _JOYBASE        (0x1700) /* Joystick ioctl commands */
 #define _PIPEBASE       (0x1800) /* FIFO/pipe ioctl commands */
 #define _RTCBASE        (0x1900) /* RTC ioctl commands */
 #define _RELAYBASE      (0x1a00) /* Relay devices ioctl commands */
@@ -96,7 +98,10 @@
 
 #define _BOARDBASE      (0xff00) /* boardctl commands */
 
-/* Macros used to manage ioctl commands */
+/* Macros used to manage ioctl commands.  IOCTL commands are divided into
+ * groups of 256 commands for major, broad functional areas.  That makes
+ * them a limited resource.
+ */
 
 #define _IOC_MASK       (0x00ff)
 #define _IOC_TYPE(cmd)  ((cmd) & ~_IOC_MASK)
@@ -131,7 +136,8 @@
 #define FIOC_REFORMAT   _FIOC(0x0002)     /* IN:  None
                                            * OUT: None
                                            */
-#define FIOC_OPTIMIZE   _FIOC(0x0003)     /* IN:  None
+#define FIOC_OPTIMIZE   _FIOC(0x0003)     /* IN:  The number of bytes to recover
+                                           *      (ignored on most file systems)
                                            * OUT: None
                                            */
 #define FIOC_FILENAME   _FIOC(0x0004)     /* IN:  FAR const char ** pointer
@@ -139,15 +145,27 @@
                                            *      (Guaranteed to persist while the file
                                            *      is open).
                                            */
+#define FIOC_INTEGRITY  _FIOC(0x0005)     /* Run a consistency check on the
+                                           *      file system media.
+                                           * IN:  None
+                                           * OUT: None */
+#define FIOC_DUMP       _FIOC(0x0006)     /* Dump logical content of media.
+                                           * IN:  None
+                                           * OUT: None */
 
-#define FIONREAD        _FIOC(0x0005)     /* IN:  Location to return value (int *)
+#define FIONREAD        _FIOC(0x0007)     /* IN:  Location to return value (int *)
                                            * OUT: Bytes readable from this fd
                                            */
-#define FIONWRITE       _FIOC(0x0006)     /* IN:  Location to return value (int *)
+#define FIONWRITE       _FIOC(0x0008)     /* IN:  Location to return value (int *)
                                            * OUT: Number bytes in send queue
                                            */
-#define FIONSPACE       _FIOC(0x0007)     /* IN:  Location to return value (int *)
+#define FIONSPACE       _FIOC(0x0009)     /* IN:  Location to return value (int *)
                                            * OUT: Free space in send queue.
+                                           */
+#define FIONUSERFS      _FIOC(0x000a)     /* IN:  Pointer to struct usefs_config_s
+                                           *      holding userfs configuration.
+                                           * OUT: Instance number is returned on
+                                           *      success.
                                            */
 
 /* NuttX file system ioctl definitions **************************************/
@@ -218,23 +236,32 @@
                                            *      buffer address
                                            * OUT: None (ioctl return value provides
                                            *      success/failure indication). */
-#define BIOC_GETPROCFSD _BIOC(0x000A)     /* Get ProcFS data specific to the
+#define BIOC_GETPROCFSD _BIOC(0x000a)     /* Get ProcFS data specific to the
                                            * block device.
                                            * IN:  Pointer to a struct defined for
                                            *      the block to load with it's
                                            *      ProcFS data.
                                            * OUT: None (ioctl return value provides
                                            *      success/failure indication). */
-#define BIOC_DEBUGCMD   _BIOC(0x000B)     /* Send driver specific debug command /
+#define BIOC_DEBUGCMD   _BIOC(0x000b)     /* Send driver specific debug command /
                                            * data to the block device.
                                            * IN:  Pointer to a struct defined for
                                            *      the block with specific debug
                                            *      command and data.
                                            * OUT: None.  */
-#define BIOC_FLUSH      _BIOC(0x000C)     /* Flush write cachee
+#define BIOC_GEOMETRY   _BIOC(0x000c)     /* Used only by BCH to return the
+                                           * geometry of the contained block
+                                           * driver.
+                                           * IN:  Pointer to writable instance
+                                           *      of struct geometry in which
+                                           *      to return geometry.
+                                           * OUT: Data return in user-provided
+                                           *      buffer. */
+#define BIOC_FLUSH      _BIOC(0x000d)     /* Flush the block device write buffer
                                            * IN:  None
-                                           * OUT: None.  */
-#define BIOC_WRITEHEADER _BIOC(0x000D)    /* Write alloc sector header
+                                           * OUT: None (ioctl return value provides
+                                           *      success/failure indication). */
+#define BIOC_WRITEHEADER _BIOC(0x000e)    /* Write alloc sector header
                                            * IN:  Logical sector
                                            * OUT: None.  */
 
@@ -298,6 +325,12 @@
 #define _AUDIOIOCVALID(c) (_IOC_TYPE(c)==_AUDIOIOCBASE)
 #define _AUDIOIOC(nr)     _IOC(_AUDIOIOCBASE,nr)
 
+/* LCD character driver ioctl definitions ***********************************/
+/* (see nuttx/include/lcd/slcd_codec.h */
+
+#define _LCDIOCVALID(c)   (_IOC_TYPE(c)==_LCDIOCBASE)
+#define _LCDIOC(nr)       _IOC(_LCDIOCBASE,nr)
+
 /* Segment LCD driver ioctl definitions *************************************/
 /* (see nuttx/include/lcd/slcd_codec.h */
 
@@ -328,17 +361,11 @@
 #define _TCIOCVALID(c)    (_IOC_TYPE(c)==_TCIOCBASE)
 #define _TCIOC(nr)        _IOC(_TCIOCBASE,nr)
 
-/* Discrete joystick driver ioctl definitions *******************************/
-/* (see nuttx/include/input/djoystick.h */
+/* Joystick driver ioctl definitions ***************************************/
+/* Discrete Joystick (see nuttx/include/input/djoystick.h */
 
-#define _DJOYIOCVALID(c)  (_IOC_TYPE(c)==_DJOYBASE)
-#define _DJOYIOC(nr)      _IOC(_DJOYBASE,nr)
-
-/* Analog joystick driver ioctl definitions *********************************/
-/* (see nuttx/include/input/ajoystick.h */
-
-#define _AJOYIOCVALID(c)  (_IOC_TYPE(c)==_AJOYBASE)
-#define _AJOYIOC(nr)      _IOC(_AJOYBASE,nr)
+#define _JOYIOCVALID(c)   (_IOC_SMASK(c)==_JOYBASE)
+#define _JOYIOC(nr)       _IOC(_JOYBASE,nr)
 
 /* FIFOs and pipe driver ioctl definitions **********************************/
 

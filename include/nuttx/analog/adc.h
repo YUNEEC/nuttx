@@ -8,7 +8,7 @@
  *
  * Derived from include/nuttx/can/can.h
  *
- *   Copyright (C) 2008, 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2009, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,6 +57,7 @@
 #include <semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/spi/spi.h>
+#include <nuttx/i2c/i2c_master.h>
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -227,7 +228,7 @@ extern "C"
  *   driver with the "upper half" ADC device and registers that device so that can
  *   be used by application code.
  *
- * Input parameters:
+ * Input Parameters:
  *   path - The full path to the driver to be registers in the NuttX pseudo-
  *     filesystem.  The recommended convention is to name all PWM drivers
  *     as "/dev/adc", "/dev/adc1", etc.  where the driver path differs only
@@ -257,6 +258,24 @@ int adc_register(FAR const char *path, FAR struct adc_dev_s *dev);
 
 FAR struct adc_dev_s *up_ads1255initialize(FAR struct spi_dev_s *spi,
                                            unsigned int devno);
+
+/****************************************************************************
+ * Name: lmp92001_adc_initialize
+ *
+ * Description:
+ *   Initialize ADC
+ *
+ * Input Parameters:
+ *   I2C Port number
+ *   Device address
+ *
+ * Returned Value:
+ *   Valid LM92001 device structure reference on success; a NULL on failure
+ *
+ ****************************************************************************/
+
+FAR struct adc_dev_s *lmp92001_adc_initialize(FAR struct i2c_master_s *i2c,
+                                              uint8_t addr);
 
 #if defined(__cplusplus)
 }

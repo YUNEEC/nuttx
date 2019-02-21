@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_enumerate.c
  *
- *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015, 2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
 #include <nuttx/usb/hub.h>
@@ -279,7 +280,7 @@ static inline int usbhost_classbind(FAR struct usbhost_hubport_s *hport,
  *      and bound to the hub port, the allocated class instance is returned
  *      into this caller-provided memory location.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -433,7 +434,7 @@ int usbhost_enumerate(FAR struct usbhost_hubport_s *hport,
       goto errout;
     }
 
-  usleep(2*1000);
+  nxsig_usleep(2*1000);
 
   /* Assign the function address to the port */
 
@@ -531,7 +532,7 @@ int usbhost_enumerate(FAR struct usbhost_hubport_s *hport,
 
   /* Some devices may require some delay before initialization */
 
-  usleep(100*1000);
+  nxsig_usleep(100*1000);
 
 #ifdef CONFIG_USBHOST_COMPOSITE
   /* Check if the device attached to the downstream port if a USB composite

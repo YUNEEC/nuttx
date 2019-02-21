@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/power/pm_register.c
  *
- *   Copyright (C) 2011-2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,7 @@
 #include <queue.h>
 #include <assert.h>
 
+#include <nuttx/init.h>
 #include <nuttx/power/pm.h>
 
 #include "pm.h"
@@ -59,12 +60,12 @@
  *   This function is called by a device driver in order to register to
  *   receive power management event callbacks.
  *
- * Input parameters:
+ * Input Parameters:
  *   callbacks - An instance of struct pm_callback_s providing the driver
  *               callback functions.
  *
- * Returned value:
- *    Zero (OK) on success; otherwise a negater errno value is returned.
+ * Returned Value:
+ *    Zero (OK) on success; otherwise a negated errno value is returned.
  *
  ****************************************************************************/
 
@@ -76,11 +77,19 @@ int pm_register(FAR struct pm_callback_s *callbacks)
 
   /* Add the new entry to the end of the list of registered callbacks */
 
-  ret = pm_lock();
-  if (ret == OK)
+  if (OSINIT_OS_READY())
     {
-      sq_addlast(&callbacks->entry, &g_pmglobals.registry);
-      pm_unlock();
+      ret = pm_lock();
+      if (ret == OK)
+        {
+          dq_addlast(&callbacks->entry, &g_pmglobals.registry);
+          pm_unlock();
+        }
+    }
+  else
+    {
+      dq_addlast(&callbacks->entry, &g_pmglobals.registry);
+      ret = OK;
     }
 
   return ret;

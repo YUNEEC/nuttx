@@ -178,15 +178,15 @@ int bcmf_cdc_control_request(FAR struct bcmf_dev_s *priv,
 
   /* Take device control mutex */
 
-  if ((ret = sem_wait(&priv->control_mutex)) != OK)
-   {
+  if ((ret = nxsem_wait(&priv->control_mutex)) < 0)
+    {
       return ret;
-   }
+    }
 
   ret = bcmf_cdc_control_request_unsafe(priv, ifidx, set, cmd,
                                         name, data, len);
 
-  sem_post(&priv->control_mutex);
+  nxsem_post(&priv->control_mutex);
 
   return ret;
 }
@@ -227,7 +227,7 @@ int bcmf_cdc_control_request_unsafe(FAR struct bcmf_dev_s *priv,
     }
 
   ret = bcmf_sem_wait(&priv->control_timeout, BCMF_CONTROL_TIMEOUT_MS);
-  if (ret != OK)
+  if (ret < 0)
     {
       wlerr("Error while waiting for control response %d\n", ret);
       return ret;
@@ -300,7 +300,7 @@ int bcmf_cdc_process_control_frame(FAR struct bcmf_dev_s *priv,
       return -EINVAL;
     }
 
-  // TODO check interface ?
+  /* TODO check interface ? */
 
   if (cdc_header->flags >> BCMF_CONTROL_REQID_SHIFT == priv->control_reqid)
     {
@@ -321,7 +321,7 @@ int bcmf_cdc_process_control_frame(FAR struct bcmf_dev_s *priv,
                  priv->control_rxdata_len);
         }
 
-      sem_post(&priv->control_timeout);
+      nxsem_post(&priv->control_timeout);
       return OK;
     }
 

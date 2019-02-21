@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_pmecc.c
  *
- *   Copyright (C) 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -988,7 +988,7 @@ static int pmecc_pagelayout(uint16_t datasize, uint16_t eccsize)
 #if NAND_NPMECC_BANKS > 1
 void pmecc_initialize(void)
 {
-  sem_init(&g_pmecc.exclsem, 0, 1);
+  nxsem_init(&g_pmecc.exclsem, 0, 1);
 }
 #endif
 
@@ -1240,10 +1240,10 @@ void pmecc_lock(void)
 
   do
     {
-      ret = sem_wait(&g_pmecc.exclsem);
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      ret = nxsem_wait(&g_pmecc.exclsem);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret != OK);
+  while (ret == -EINTR);
 }
 #endif
 
@@ -1264,7 +1264,7 @@ void pmecc_lock(void)
 #if NAND_NPMECC_BANKS > 1
 void pmecc_unlock(void)
 {
-  sem_post(&g_pmecc.exclsem);
+  nxsem_post(&g_pmecc.exclsem);
 }
 #endif
 

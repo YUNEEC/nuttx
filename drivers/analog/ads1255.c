@@ -56,6 +56,7 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/signal.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/analog/adc.h>
 
@@ -281,7 +282,7 @@ static void adc_reset(FAR struct adc_dev_s *dev)
   spi = priv->spi;
 
   adc_lock(spi);
-  usleep(1000);
+  nxsig_usleep(1000);
 
   SPI_SELECT(spi, priv->devno, true);
   SPI_SEND(spi, ADS125X_WREG + 0x03);    /* WRITE SPS REG */
@@ -332,7 +333,7 @@ static int adc_setup(FAR struct adc_dev_s *dev)
       SPI_SEND(spi, priv->mux[0]);
       SPI_SEND(spi, priv->pga);            /* REG2 ADCON PGA=2 */
       SPI_SEND(spi, getspsreg(priv->sps));
-      usleep(1000);
+      nxsig_usleep(1000);
       SPI_SEND(spi, ADS125X_SELFCAL);
       SPI_SELECT(spi, priv->devno, false);
 
@@ -501,7 +502,7 @@ static int adc_interrupt(int irq, void *context, FAR void *arg)
  * Description:
  *   Initialize the selected adc port
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has multiple adc interfaces)
  *
  * Returned Value:

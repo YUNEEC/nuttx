@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/timers/watchdog.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -126,10 +126,9 @@ static int wdog_open(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout;
     }
 
@@ -153,7 +152,7 @@ static int wdog_open(FAR struct file *filep)
   ret = OK;
 
 errout_with_sem:
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
 
 errout:
   return ret;
@@ -177,10 +176,9 @@ static int wdog_close(FAR struct file *filep)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
-      ret = -get_errno();
       goto errout;
     }
 
@@ -193,7 +191,7 @@ static int wdog_close(FAR struct file *filep)
       upper->crefs--;
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   ret = OK;
 
 errout:
@@ -252,7 +250,7 @@ static int wdog_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the device structures */
 
-  ret = sem_wait(&upper->exclsem);
+  ret = nxsem_wait(&upper->exclsem);
   if (ret < 0)
     {
       return ret;
@@ -422,7 +420,7 @@ static int wdog_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       break;
     }
 
-  sem_post(&upper->exclsem);
+  nxsem_post(&upper->exclsem);
   return ret;
 }
 
@@ -441,7 +439,7 @@ static int wdog_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
  *   When this function is called, the "lower half" driver should be in the
  *   disabled state (as if the stop() method had already been called).
  *
- * Input parameters:
+ * Input Parameters:
  *   dev path - The full path to the driver to be registers in the NuttX
  *     pseudo-filesystem.  The recommended convention is to name all watchdog
  *     drivers as "/dev/watchdog0", "/dev/watchdog1", etc.  where the driver
@@ -479,7 +477,7 @@ FAR void *watchdog_register(FAR const char *path,
    * by kmm_zalloc()).
    */
 
-  sem_init(&upper->exclsem, 0, 1);
+  nxsem_init(&upper->exclsem, 0, 1);
   upper->lower = lower;
 
   /* Copy the registration path */
@@ -506,7 +504,7 @@ errout_with_path:
   kmm_free(upper->path);
 
 errout_with_upper:
-  sem_destroy(&upper->exclsem);
+  nxsem_destroy(&upper->exclsem);
   kmm_free(upper);
 
 errout:
@@ -520,7 +518,7 @@ errout:
  *   This function can be called to disable and unregister the watchdog
  *   device driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   handle - This is the handle that was returned by watchdog_register()
  *
  * Returned Value:
@@ -554,7 +552,7 @@ void watchdog_unregister(FAR void *handle)
   /* Then free all of the driver resources */
 
   kmm_free(upper->path);
-  sem_destroy(&upper->exclsem);
+  nxsem_destroy(&upper->exclsem);
   kmm_free(upper);
 }
 

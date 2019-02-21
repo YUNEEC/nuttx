@@ -1,7 +1,8 @@
 /****************************************************************************
  * sched/clock/clock_initialize.c
  *
- *   Copyright (C) 2007, 2009, 2011-2012, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009, 2011-2012, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,46 +60,19 @@
 #endif
 
 /****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* Standard time definitions (in units of seconds) */
-
-#define SEC_PER_MIN  ((time_t)60)
-#define SEC_PER_HOUR ((time_t)60 * SEC_PER_MIN)
-#define SEC_PER_DAY  ((time_t)24 * SEC_PER_HOUR)
-
-#if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_SYSTEM_TIME64) && \
-    defined(CONFIG_CLOCK_MONOTONIC)
-/* Initial system timer ticks value close to maximum 32-bit value, to test
- * 64-bit system-timer after going over 32-bit value. This is to make errors
- * of casting 64-bit system-timer to 32-bit variables more visible.
- */
-
-#  define INITIAL_SYSTEM_TIMER_TICKS \
-    ((uint64_t)(UINT32_MAX - (TICK_PER_SEC * 5)))
-#else
-#  define INITIAL_SYSTEM_TIMER_TICKS 0
-#endif
-
-/****************************************************************************
  * Public Data
  ****************************************************************************/
 
 #ifndef CONFIG_SCHED_TICKLESS
 #ifdef CONFIG_SYSTEM_TIME64
-volatile uint64_t g_system_timer;
+volatile uint64_t g_system_timer = INITIAL_SYSTEM_TIMER_TICKS;
 #else
-volatile uint32_t g_system_timer;
+volatile uint32_t g_system_timer = INITIAL_SYSTEM_TIMER_TICKS;
 #endif
 #endif
 
 #ifndef CONFIG_CLOCK_TIMEKEEPING
 struct timespec   g_basetime;
-
-#ifdef CONFIG_CLOCK_MONOTONIC
-struct timespec   g_monotonic_basetime;
-#endif
 #endif
 
 /****************************************************************************
@@ -117,7 +91,7 @@ struct timespec   g_monotonic_basetime;
 #if defined(CONFIG_RTC_DATETIME)
 /* Initialize the system time using a broken out date/time structure */
 
-static inline int clock_basetime(FAR struct timespec *tp)
+int clock_basetime(FAR struct timespec *tp)
 {
   struct tm rtctime;
   long nsecs = 0;
@@ -145,7 +119,7 @@ static inline int clock_basetime(FAR struct timespec *tp)
 
 /* Initialize the system time using a high-resolution structure */
 
-static inline int clock_basetime(FAR struct timespec *tp)
+int clock_basetime(FAR struct timespec *tp)
 {
   /* Get the complete time from the hi-res RTC. */
 
@@ -156,7 +130,7 @@ static inline int clock_basetime(FAR struct timespec *tp)
 
 /* Initialize the system time using seconds only */
 
-static inline int clock_basetime(FAR struct timespec *tp)
+int clock_basetime(FAR struct timespec *tp)
 {
   /* Get the seconds (only) from the lo-resolution RTC */
 
@@ -168,7 +142,7 @@ static inline int clock_basetime(FAR struct timespec *tp)
 #endif /* CONFIG_RTC_HIRES */
 #else /* CONFIG_RTC */
 
-static inline int clock_basetime(FAR struct timespec *tp)
+int clock_basetime(FAR struct timespec *tp)
 {
   time_t jdn = 0;
 
@@ -196,49 +170,31 @@ static inline int clock_basetime(FAR struct timespec *tp)
  *
  ****************************************************************************/
 
+#ifdef CONFIG_RTC
 static void clock_inittime(void)
 {
   /* (Re-)initialize the time value to match the RTC */
 
 #ifndef CONFIG_CLOCK_TIMEKEEPING
-#ifndef CONFIG_RTC_HIRES
+  struct timespec ts;
+
   clock_basetime(&g_basetime);
-#endif
-#ifndef CONFIG_SCHED_TICKLESS
-  g_system_timer = INITIAL_SYSTEM_TIMER_TICKS;
-  if (g_system_timer > 0)
+  clock_systimespec(&ts);
+
+  /* Adjust base time to hide initial timer ticks. */
+
+  g_basetime.tv_sec  -= ts.tv_sec;
+  g_basetime.tv_nsec -= ts.tv_nsec;
+  while (g_basetime.tv_nsec < 0)
     {
-      struct timespec ts;
-
-      (void)clock_ticks2time((ssystime_t)g_system_timer, &ts);
-
-      /* Adjust base time to hide initial timer ticks. */
-
-      g_basetime.tv_sec  -= ts.tv_sec;
-      g_basetime.tv_nsec -= ts.tv_nsec;
-      while (g_basetime.tv_nsec < 0)
-        {
-          g_basetime.tv_nsec += NSEC_PER_SEC;
-          g_basetime.tv_sec--;
-        }
-
-#ifdef CONFIG_CLOCK_MONOTONIC
-      /* Adjust monotonic clock offset to hide initial timer ticks. */
-
-      g_monotonic_basetime.tv_sec  -= ts.tv_sec;
-      g_monotonic_basetime.tv_nsec -= ts.tv_nsec;
-      while (g_monotonic_basetime.tv_nsec < 0)
-        {
-          g_monotonic_basetime.tv_nsec += NSEC_PER_SEC;
-          g_monotonic_basetime.tv_sec--;
-        }
-#endif /* CONFIG_CLOCK_MONOTONIC */
+      g_basetime.tv_nsec += NSEC_PER_SEC;
+      g_basetime.tv_sec--;
     }
-#endif /* !CONFIG_SCHED_TICKLESS */
 #else
   clock_inittimekeeping();
 #endif
 }
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -260,11 +216,11 @@ void clock_initialize(void)
    */
 
   up_rtc_initialize();
-#endif
 
   /* Initialize the time value to match the RTC */
 
   clock_inittime();
+#endif
 }
 
 /****************************************************************************
@@ -285,10 +241,10 @@ void clock_initialize(void)
  *   Time going backward could have bad consequences if there are ongoing
  *   timers and delays.  So use this interface with care.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -324,18 +280,17 @@ void clock_synchronize(void)
  *   time. If setting system time with RTC would result time going "backward"
  *   then resynchronization is not performed.
  *
- * Parameters:
+ * Input Parameters:
  *   rtc_diff:  amount of time system-time is adjusted forward with RTC
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-#if defined(CONFIG_RTC) && !defined(CONFIG_SCHED_TICKLESS) && \
-    !defined(CONFIG_CLOCK_TIMEKEEPING)
+#if defined(CONFIG_RTC) && !defined(CONFIG_SCHED_TICKLESS)
 void clock_resynchronize(FAR struct timespec *rtc_diff)
 {
   struct timespec rtc_time, bias, curr_ts;
@@ -406,35 +361,10 @@ void clock_resynchronize(FAR struct timespec *rtc_diff)
     }
   else
     {
-      /* Save RTC time as the new base time. */
-
-      g_basetime.tv_sec  = rtc_time.tv_sec;
-      g_basetime.tv_nsec = rtc_time.tv_nsec;
-
-      /* Subtract that bias from the basetime so that when the system
-       * timer is again added to the base time, the result is the current
-       * time relative to basetime.
-       */
-
-      if (g_basetime.tv_nsec < bias.tv_nsec)
-        {
-          g_basetime.tv_nsec += NSEC_PER_SEC;
-          g_basetime.tv_sec--;
-        }
-
-      /* Result could be negative seconds */
-
-      g_basetime.tv_nsec -= bias.tv_nsec;
-      g_basetime.tv_sec  -= bias.tv_sec;
-
-      sinfo("basetime=(%ld,%lu) bias=(%ld,%lu)\n",
-            (long)g_basetime.tv_sec, (unsigned long)g_basetime.tv_nsec,
-            (long)bias.tv_sec, (unsigned long)bias.tv_nsec);
-
       /* Output difference between time at entry and new current time. */
 
-      rtc_diff->tv_sec = (bias.tv_sec + g_basetime.tv_sec) - curr_ts.tv_sec;
-      rtc_diff->tv_nsec = (bias.tv_nsec + g_basetime.tv_nsec) - curr_ts.tv_nsec;
+      rtc_diff->tv_sec  = rtc_time.tv_sec  - curr_ts.tv_sec;
+      rtc_diff->tv_nsec = rtc_time.tv_nsec - curr_ts.tv_nsec;
 
       /* Handle carry to seconds. */
 
@@ -451,29 +381,16 @@ void clock_resynchronize(FAR struct timespec *rtc_diff)
           carry = 0;
         }
 
-      if (carry)
+      if (carry != 0)
         {
           rtc_diff->tv_sec  += carry;
           rtc_diff->tv_nsec -= (carry * NSEC_PER_SEC);
         }
 
-#ifdef CONFIG_CLOCK_MONOTONIC
-      /* Monotonic clock follows wall time since system start-up. Adjust
-       * CLOCK_MONOTONIC same amount as CLOCK_REALTIME.
-       */
+      /* Add the sleep time to correct system timer */
 
-      g_monotonic_basetime.tv_sec  += (uint32_t)rtc_diff->tv_sec;
-      g_monotonic_basetime.tv_nsec += (uint32_t)rtc_diff->tv_nsec;
-
-      /* Handle carry to seconds. */
-
-      if (g_monotonic_basetime.tv_nsec >= NSEC_PER_SEC)
-        {
-          carry = g_monotonic_basetime.tv_nsec / NSEC_PER_SEC;
-          g_monotonic_basetime.tv_sec += carry;
-          g_monotonic_basetime.tv_nsec -= (carry * NSEC_PER_SEC);
-        }
-#endif
+      g_system_timer += SEC2TICK(rtc_diff->tv_sec);
+      g_system_timer += NSEC2TICK(rtc_diff->tv_nsec);
     }
 
 skip:

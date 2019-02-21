@@ -1,7 +1,8 @@
 ############################################################################
 # arch/sim/src/Makefile
 #
-#   Copyright (C) 2007, 2008, 2011-2012, 2014, 2016 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2007, 2008, 2011-2012, 2014, 2016, 2018 Gregory Nutt. All
+#     rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -91,6 +92,10 @@ ifeq ($(CONFIG_ONESHOT),y)
   CSRCS += up_oneshot.c
 endif
 
+ifeq ($(CONFIG_SCHED_CRITMONITOR),y)
+  HOSTSRCS += up_critmon.c
+endif
+
 ifeq ($(CONFIG_NX_LCDDRIVER),y)
   CSRCS += board_lcd.c
 else
@@ -124,7 +129,7 @@ endif
 ifeq ($(CONFIG_SIM_NETDEV),y)
 ifeq ($(CONFIG_NET_ETHERNET),y)
   CSRCS += up_netdriver.c
-  HOSTCFLAGS += -DNETDEV_BUFSIZE=$(CONFIG_NET_ETH_MTU)
+  HOSTCFLAGS += -DNETDEV_BUFSIZE=$(CONFIG_NET_ETH_PKTSIZE)
 ifneq ($(HOSTOS),Cygwin)
   HOSTSRCS += up_tapdev.c up_netdev.c
 ifeq ($(CONFIG_SIM_NET_BRIDGE),y)
@@ -211,7 +216,7 @@ endif
 
 LINKLIBS ?=
 RELLIBS = $(patsubst %.a,%,$(patsubst lib%,-l%,$(LINKLIBS)))
-RELPATHS += -L"$(TOPDIR)/lib"
+RELPATHS += -L"$(TOPDIR)/staging"
 
 # Add the board-specific library and directory
 
@@ -254,6 +259,9 @@ GNU:
 	$(Q) mkdir -p ./GNU
 
 GNU/Linux-names.dat: GNU nuttx-names.dat
+	$(Q) cp nuttx-names.dat $@
+
+Msys-names.dat: GNU nuttx-names.dat
 	$(Q) cp nuttx-names.dat $@
 
 Cygwin-names.dat: nuttx-names.dat

@@ -50,6 +50,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/sensors/bmp180.h>
@@ -162,12 +163,14 @@ static const struct file_operations g_bmp180fops =
   bmp180_close,                 /* close */
   bmp180_read,                  /* read */
   bmp180_write,                 /* write */
-  0,                            /* seek */
-  0,                            /* ioctl */
+  NULL,                         /* seek */
+  NULL                          /* ioctl */
 #ifndef CONFIG_DISABLE_POLL
-  0,                            /* poll */
+  , NULL                        /* poll */
 #endif
-  0                             /* unlink */
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+  , NULL                        /* unlink */
+#endif
 };
 
 /****************************************************************************
@@ -317,7 +320,7 @@ static int bmp180_checkid(FAR struct bmp180_dev_s *priv)
   devid = bmp180_getreg8(priv, BMP180_DEVID);
   sninfo("devid: 0x%02x\n", devid);
 
-  if (devid != (uint16_t) DEVID)
+  if (devid != (uint16_t)DEVID)
     {
       /* ID is not Correct */
 
@@ -402,7 +405,7 @@ static void bmp180_read_press_temp(FAR struct bmp180_dev_s *priv)
 
   /* Wait 5ms */
 
-  usleep(5000);
+  nxsig_usleep(5000);
 
   /* Read temperature */
 
@@ -414,7 +417,7 @@ static void bmp180_read_press_temp(FAR struct bmp180_dev_s *priv)
 
   /* Delay 25.5ms (to OverSampling 8X) */
 
-  usleep(25500);
+  nxsig_usleep(25500);
 
   /* Read pressure */
 
@@ -471,11 +474,13 @@ static int bmp180_getpressure(FAR struct bmp180_dev_s *priv)
 
   /* Calculate true temperature */
 
-  x1 = ((priv->bmp180_utemp - priv->bmp180_cal_ac6) * priv->bmp180_cal_ac5) >> 15;
-  x2 = (priv->bmp180_cal_mc << 11) / (x1 + priv->bmp180_cal_md);
-  b5 = x1 + x2;
+  x1   = ((priv->bmp180_utemp - priv->bmp180_cal_ac6) * priv->bmp180_cal_ac5) >> 15;
+  x2   = (priv->bmp180_cal_mc << 11) / (x1 + priv->bmp180_cal_md);
+  b5   = x1 + x2;
+
   temp = (b5 + 8) >> 4;
   sninfo("Compensated temperature = %d\n", temp);
+  UNUSED(temp);
 
   /* Calculate true pressure */
 

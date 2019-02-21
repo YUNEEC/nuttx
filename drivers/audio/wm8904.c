@@ -3,7 +3,7 @@
  *
  * Audio device driver for Wolfson Microelectronics WM8904 Audio codec.
  *
- *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2018 Gregory Nutt. All rights reserved.
  *   Author:  Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -63,6 +63,8 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/clock.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/signal.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
@@ -93,7 +95,7 @@ static
 static void     wm8904_writereg(FAR struct wm8904_dev_s *priv,
                   uint8_t regaddr, uint16_t regval);
 static void     wm8904_takesem(sem_t *sem);
-#define         wm8904_givesem(s) sem_post(s)
+#define         wm8904_givesem(s) nxsem_post(s)
 
 #ifndef CONFIG_AUDIO_EXCLUDE_VOLUME
 static inline uint16_t wm8904_scalevolume(uint16_t volume, b16_t scale);
@@ -245,7 +247,7 @@ const uint8_t g_fllratio[WM8904_NFLLRATIO] =
 /****************************************************************************
  * Name: wm8904_readreg
  *
- * Description
+ * Description:
  *    Read the specified 16-bit register from the WM8904 device.
  *
  ****************************************************************************/
@@ -418,10 +420,10 @@ static void wm8904_takesem(sem_t *sem)
 
   do
     {
-      ret = sem_wait(sem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(sem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /************************************************************************************
@@ -923,7 +925,7 @@ static void wm8904_setbitrate(FAR struct wm8904_dev_s *priv)
   retries = 5;
   do
     {
-      usleep(5*5000);
+      nxsig_usleep(5*5000);
     }
   while (priv->locked == false && --retries > 0);
 
@@ -946,7 +948,7 @@ static void wm8904_setbitrate(FAR struct wm8904_dev_s *priv)
   retries = 5;
   do
     {
-       usleep(5*5000);
+       nxsig_usleep(5*5000);
     }
   while ((wm8904_readreg(priv, WM8904_INT_STATUS) & WM8904_FLL_LOCK_INT) != 0 ||
           --retries > 0);
@@ -1141,12 +1143,10 @@ static int wm8904_configure(FAR struct audio_lowerhalf_s *dev,
                             FAR const struct audio_caps_s *caps)
 #endif
 {
-#if !defined(CONFIG_AUDIO_EXCLUDE_VOLUME) || !defined(CONFIG_AUDIO_EXCLUDE_TONE)
   FAR struct wm8904_dev_s *priv = (FAR struct wm8904_dev_s *)dev;
-#endif
   int ret = OK;
 
-  DEBUGASSERT(priv && caps);
+  DEBUGASSERT(priv != NULL && caps != NULL);
   audinfo("ac_type: %d\n", caps->ac_type);
 
   /* Process the configure operation */
@@ -1359,11 +1359,11 @@ static void  wm8904_senddone(FAR struct i2s_dev_s *i2s,
    */
 
   msg.msgId = AUDIO_MSG_COMPLETE;
-  ret = mq_send(priv->mq, (FAR const char *)&msg, sizeof(msg),
-                CONFIG_WM8904_MSG_PRIO);
+  ret = nxmq_send(priv->mq, (FAR const char *)&msg, sizeof(msg),
+                  CONFIG_WM8904_MSG_PRIO);
   if (ret < 0)
     {
-      auderr("ERROR: mq_send failed: %d\n", errno);
+      auderr("ERROR: nxmq_send failed: %d\n", ret);
     }
 }
 
@@ -1621,8 +1621,8 @@ static int wm8904_stop(FAR struct audio_lowerhalf_s *dev)
 
   term_msg.msgId = AUDIO_MSG_STOP;
   term_msg.u.data = 0;
-  mq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-          CONFIG_WM8904_MSG_PRIO);
+  (void)nxmq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
+                  CONFIG_WM8904_MSG_PRIO);
 
   /* Join the worker thread */
 
@@ -1737,15 +1737,11 @@ static int wm8904_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
       term_msg.msgId  = AUDIO_MSG_ENQUEUE;
       term_msg.u.data = 0;
 
-      ret = mq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-                    CONFIG_WM8904_MSG_PRIO);
+      ret = nxmq_send(priv->mq, (FAR const char *)&term_msg,
+                      sizeof(term_msg), CONFIG_WM8904_MSG_PRIO);
       if (ret < 0)
         {
-          int errcode = errno;
-          DEBUGASSERT(errcode > 0);
-
-          auderr("ERROR: mq_send failed: %d\n", errcode);
-          UNUSED(errcode);
+          auderr("ERROR: nxmq_send failed: %d\n", ret);
         }
     }
 
@@ -2054,7 +2050,7 @@ static void *wm8904_workerthread(pthread_addr_t pvarg)
 
       /* Wait for messages from our message queue */
 
-      msglen = mq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
+      msglen = nxmq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
 
       /* Handle the case when we return with no message */
 
@@ -2508,7 +2504,7 @@ FAR struct audio_lowerhalf_s *
       priv->i2c        = i2c;
       priv->i2s        = i2s;
 
-      sem_init(&priv->pendsem, 0, 1);
+      nxsem_init(&priv->pendsem, 0, 1);
       dq_init(&priv->pendq);
       dq_init(&priv->doneq);
 
@@ -2537,7 +2533,7 @@ FAR struct audio_lowerhalf_s *
   return NULL;
 
 errout_with_dev:
-  sem_destroy(&priv->pendsem);
+  nxsem_destroy(&priv->pendsem);
   kmm_free(priv);
   return NULL;
 }

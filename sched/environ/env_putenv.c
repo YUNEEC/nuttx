@@ -62,11 +62,11 @@
  *   name does exist, then the value of name in the environment is changed to
  *   value.
  *
- * Parameters:
+ * Input Parameters:
  *   name=value string describing the environment setting to add/modify
  *
- * Return Value:
- *   Zero on sucess
+ * Returned Value:
+ *   Zero on success
  *
  * Assumptions:
  *   Not called from an interrupt handler

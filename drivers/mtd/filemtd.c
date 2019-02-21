@@ -49,6 +49,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/mtd/mtd.h>
 
@@ -96,7 +97,7 @@
 struct file_dev_s
 {
   struct mtd_dev_s mtd;        /* MTD device */
-  int              fd;         /* File descriptor of underlying file */
+  struct file      mtdfile;
   size_t           nblocks;    /* Number of erase blocks */
   size_t           offset;     /* Offset from start of file */
   size_t           erasesize;  /* Offset from start of file */
@@ -115,7 +116,7 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
 
 /* MTD driver methods */
 
-static int filemtd_erase(FAR struct mtd_dev_s *dev, off_t startblock,
+static int     filemtd_erase(FAR struct mtd_dev_s *dev, off_t startblock,
                  size_t nblocks);
 static ssize_t filemtd_bread(FAR struct mtd_dev_s *dev, off_t startblock,
                  size_t nblocks, FAR uint8_t *buf);
@@ -127,7 +128,7 @@ static ssize_t filemtd_byteread(FAR struct mtd_dev_s *dev, off_t offset,
 static ssize_t file_bytewrite(FAR struct mtd_dev_s *dev, off_t offset,
                  size_t nbytes, FAR const uint8_t *buf);
 #endif
-static int filemtd_ioctl(FAR struct mtd_dev_s *dev, int cmd,
+static int     filemtd_ioctl(FAR struct mtd_dev_s *dev, int cmd,
                  unsigned long arg);
 
 /****************************************************************************
@@ -160,9 +161,9 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
         {
           /* Read more data from the file */
 
-          lseek(priv->fd, seekpos, SEEK_SET);
-          buflen = read(priv->fd, buf, sizeof(buf));
-          pout = (FAR uint8_t *) buf;
+          file_seek(&priv->mtdfile, seekpos, SEEK_SET);
+          buflen = file_read(&priv->mtdfile, buf, sizeof(buf));
+          pout   = (FAR uint8_t *) buf;
         }
 
       /* Get the source and destination values */
@@ -187,7 +188,7 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
 #ifdef CONFIG_DEBUG_FEATURES
       if (newvalue != srcvalue)
         {
-          _err("ERROR: Bad write: source=%02x dest=%02x result=%02x\n",
+          ferr("ERROR: Bad write: source=%02x dest=%02x result=%02x\n",
               srcvalue, oldvalue, newvalue);
         }
 #endif
@@ -203,8 +204,8 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
 
       if (buflen == 0)
         {
-          lseek(priv->fd, seekpos, SEEK_SET);
-          write(priv->fd, buf, sizeof(buf));
+          file_seek(&priv->mtdfile, seekpos, SEEK_SET);
+          (void)file_write(&priv->mtdfile, buf, sizeof(buf));
           seekpos += sizeof(buf);
         }
     }
@@ -213,8 +214,8 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
 
   if (buflen != 0)
     {
-      lseek(priv->fd, seekpos, SEEK_SET);
-      write(priv->fd, buf, sizeof(buf));
+      file_seek(&priv->mtdfile, seekpos, SEEK_SET);
+      (void)file_write(&priv->mtdfile, buf, sizeof(buf));
     }
 
   return len;
@@ -226,13 +227,13 @@ static ssize_t filemtd_write(FAR struct file_dev_s *priv, size_t offset,
 
 static ssize_t filemtd_read(FAR struct file_dev_s *priv,
                             FAR unsigned char *buffer, size_t offsetbytes,
-                             unsigned int nbytes)
+                            unsigned int nbytes)
 {
   /* Set the starting location in the file */
 
-  lseek(priv->fd, priv->offset + offsetbytes, SEEK_SET);
+  (void)file_seek(&priv->mtdfile, priv->offset + offsetbytes, SEEK_SET);
 
-  return read(priv->fd, buffer, nbytes);
+  return file_read(&priv->mtdfile, buffer, nbytes);
 }
 
 /****************************************************************************
@@ -240,7 +241,7 @@ static ssize_t filemtd_read(FAR struct file_dev_s *priv,
  ****************************************************************************/
 
 static int filemtd_erase(FAR struct mtd_dev_s *dev, off_t startblock,
-                      size_t nblocks)
+                         size_t nblocks)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
   size_t    nbytes;
@@ -277,11 +278,11 @@ static int filemtd_erase(FAR struct mtd_dev_s *dev, off_t startblock,
 
   /* Then erase the data in the file */
 
-  lseek(priv->fd, priv->offset + offset, SEEK_SET);
+  file_seek(&priv->mtdfile, priv->offset + offset, SEEK_SET);
   memset(buffer, CONFIG_FILEMTD_ERASESTATE, sizeof(buffer));
   while (nbytes)
     {
-      write(priv->fd, buffer, sizeof(buffer));
+      (void)file_write(&priv->mtdfile, buffer, sizeof(buffer));
       nbytes -= sizeof(buffer);
     }
 
@@ -293,7 +294,7 @@ static int filemtd_erase(FAR struct mtd_dev_s *dev, off_t startblock,
  ****************************************************************************/
 
 static ssize_t filemtd_bread(FAR struct mtd_dev_s *dev, off_t startblock,
-                          size_t nblocks, FAR uint8_t *buf)
+                             size_t nblocks, FAR uint8_t *buf)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
   off_t offset;
@@ -324,7 +325,7 @@ static ssize_t filemtd_bread(FAR struct mtd_dev_s *dev, off_t startblock,
 
   /* Then read the data from the file */
 
-  filemtd_read(priv, buf, offset, nbytes);
+  (void)filemtd_read(priv, buf, offset, nbytes);
   return nblocks;
 }
 
@@ -333,7 +334,7 @@ static ssize_t filemtd_bread(FAR struct mtd_dev_s *dev, off_t startblock,
  ****************************************************************************/
 
 static ssize_t filemtd_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
-                          size_t nblocks, FAR const uint8_t *buf)
+                              size_t nblocks, FAR const uint8_t *buf)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
   off_t offset;
@@ -373,7 +374,7 @@ static ssize_t filemtd_bwrite(FAR struct mtd_dev_s *dev, off_t startblock,
  ****************************************************************************/
 
 static ssize_t filemtd_byteread(FAR struct mtd_dev_s *dev, off_t offset,
-                            size_t nbytes, FAR uint8_t *buf)
+                                size_t nbytes, FAR uint8_t *buf)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
 
@@ -386,7 +387,7 @@ static ssize_t filemtd_byteread(FAR struct mtd_dev_s *dev, off_t offset,
      return 0;
    }
 
-  filemtd_read(priv, buf, offset, nbytes);
+  (void)filemtd_read(priv, buf, offset, nbytes);
   return nbytes;
 }
 
@@ -396,7 +397,7 @@ static ssize_t filemtd_byteread(FAR struct mtd_dev_s *dev, off_t offset,
 
 #ifdef CONFIG_MTD_BYTE_WRITE
 static ssize_t file_bytewrite(FAR struct mtd_dev_s *dev, off_t offset,
-                             size_t nbytes, FAR const uint8_t *buf)
+                              size_t nbytes, FAR const uint8_t *buf)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
   off_t maxoffset;
@@ -422,7 +423,8 @@ static ssize_t file_bytewrite(FAR struct mtd_dev_s *dev, off_t offset,
  * Name: filemtd_ioctl
  ****************************************************************************/
 
-static int filemtd_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
+static int filemtd_ioctl(FAR struct mtd_dev_s *dev, int cmd,
+                         unsigned long arg)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *)dev;
   int ret = -EINVAL; /* Assume good command with bad parameters */
@@ -474,24 +476,24 @@ static int filemtd_ioctl(FAR struct mtd_dev_s *dev, int cmd, unsigned long arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: filemtd_initialize
+ * Name: blockmtd_initialize
  *
  * Description:
- *   Create and initialize a FILE MTD device instance.
+ *   Create and initialize a BLOCK MTD device instance.
  *
  * Input Parameters:
- *   path - Path name of the file backing the MTD device
+ *   path - Path name of the block device backing the MTD device
  *
  ****************************************************************************/
 
-FAR struct mtd_dev_s *filemtd_initialize(FAR const char *path, size_t offset,
-                            int16_t sectsize, int32_t erasesize)
+FAR struct mtd_dev_s *blockmtd_initialize(FAR const char *path, size_t offset,
+                                          size_t mtdlen, int16_t sectsize,
+                                          int32_t erasesize)
 {
   FAR struct file_dev_s *priv;
-  struct stat sb;
   size_t nblocks;
-  size_t filelen;
-  int    mode, ret;
+  int mode;
+  int ret;
 
   /* Create an instance of the FILE MTD device state structure */
 
@@ -504,28 +506,19 @@ FAR struct mtd_dev_s *filemtd_initialize(FAR const char *path, size_t offset,
 
   /* Determine the file open mode */
 
-  mode = O_RDOK;
+  mode  = O_RDOK;
 #ifdef CONFIG_FS_WRITABLE
   mode |= O_WROK;
 #endif
 
-  /* Stat the file */
+  /* Try to open the file.  NOTE that block devices will use a character
+   * driver proxy.
+   */
 
-  ret = stat(path, &sb);
+  ret = file_open(&priv->mtdfile, path, mode);
   if (ret < 0)
     {
-      _err("ERROR: Failed to stat %s: %d\n", path, get_errno());
-      return NULL;
-    }
-
-  filelen = sb.st_size;
-
-  /* Try to open the file */
-
-  priv->fd = open(path, mode);
-  if (priv->fd == -1)
-    {
-      ferr("ERROR: Failed to open the FILE MTD file %s\n", path);
+      ferr("ERROR: Failed to open the FILE MTD file %s: %d\n", path, ret);
       kmm_free(priv);
       return NULL;
     }
@@ -554,10 +547,11 @@ FAR struct mtd_dev_s *filemtd_initialize(FAR const char *path, size_t offset,
 
   /* Force the size to be an even number of the erase block size */
 
-  nblocks = (filelen - offset) / priv->erasesize;
+  nblocks = mtdlen / priv->erasesize;
   if (nblocks < 3)
     {
       ferr("ERROR: Need to provide at least three full erase block\n");
+      file_close(&priv->mtdfile);
       kmm_free(priv);
       return NULL;
     }
@@ -574,41 +568,36 @@ FAR struct mtd_dev_s *filemtd_initialize(FAR const char *path, size_t offset,
   priv->mtd.write  = file_bytewrite;
 #endif
   priv->mtd.ioctl  = filemtd_ioctl;
+  priv->mtd.name   = "filemtd";
   priv->offset     = offset;
   priv->nblocks    = nblocks;
-
-  /* Register the MTD with the procfs system if enabled */
-
-#ifdef CONFIG_MTD_REGISTRATION
-  mtd_register(&priv->mtd, "filemtd");
-#endif
 
   return &priv->mtd;
 }
 
 /****************************************************************************
- * Name: filemtd_teardown
+ * Name: blockmtd_teardown
  *
  * Description:
- *   Teardown a previously created filemtd device.
+ *   Teardown a previously created blockmtd device.
  *
  * Input Parameters:
- *   path - Path name of the file backing the MTD device
+ *   dev - Pointer to the mtd driver instance.
  *
  ****************************************************************************/
 
-void filemtd_teardown(FAR struct mtd_dev_s *dev)
+void blockmtd_teardown(FAR struct mtd_dev_s *dev)
 {
   FAR struct file_dev_s *priv;
 
   /* Close the enclosed file */
 
   priv = (FAR struct file_dev_s *) dev;
-  close(priv->fd);
-
-  /* Register the MTD with the procfs system if enabled */
+  file_close(&priv->mtdfile);
 
 #ifdef CONFIG_MTD_REGISTRATION
+  /* Un-register the MTD with the procfs system if enabled */
+
   mtd_unregister(&priv->mtd);
 #endif
 
@@ -618,10 +607,65 @@ void filemtd_teardown(FAR struct mtd_dev_s *dev)
 }
 
 /****************************************************************************
+ * Name: filemtd_initialize
+ *
+ * Description:
+ *   Create and initialize a FILE MTD device instance.
+ *
+ * Input Parameters:
+ *   path - Path name of the file backing the MTD device
+ *
+ ****************************************************************************/
+
+FAR struct mtd_dev_s *filemtd_initialize(FAR const char *path, size_t offset,
+                                         int16_t sectsize, int32_t erasesize)
+{
+  size_t filelen;
+  struct stat sb;
+  int ret;
+
+  /* Stat the file */
+
+  ret = stat(path, &sb);
+  if (ret < 0)
+    {
+      ferr("ERROR: Failed to stat %s: %d\n", path, get_errno());
+      return NULL;
+    }
+
+  filelen = sb.st_size;
+
+  if (offset > filelen)
+    {
+      ferr("ERROR: Offset beyond end of file\n");
+      return NULL;
+    }
+
+  return blockmtd_initialize(path, offset, filelen - offset, sectsize,
+                             erasesize);
+}
+
+/****************************************************************************
+ * Name: filemtd_teardown
+ *
+ * Description:
+ *   Teardown a previously created filemtd device.
+ *
+ * Input Parameters:
+ *   dev - Pointer to the mtd driver instance.
+ *
+ ****************************************************************************/
+
+void filemtd_teardown(FAR struct mtd_dev_s *dev)
+{
+  blockmtd_teardown(dev);
+}
+
+/****************************************************************************
  * Name: filemtd_isfilemtd
  *
  * Description:
- *   Tests if the provided mtd is a filemtd device.
+ *   Tests if the provided mtd is a filemtd or blockmtd device.
  *
  * Input Parameters:
  *   mtd - Pointer to the mtd.
@@ -632,8 +676,5 @@ bool filemtd_isfilemtd(FAR struct mtd_dev_s *dev)
 {
   FAR struct file_dev_s *priv = (FAR struct file_dev_s *) dev;
 
-  if (priv->mtd.erase == filemtd_erase)
-    return 1;
-
-  return 0;
+  return (priv->mtd.erase == filemtd_erase);
 }

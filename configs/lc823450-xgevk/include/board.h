@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/lc823450-xgevk/include/board.h
  *
- *   Copyright (C) 2017 Sony Corporation. All rights reserved.
+ *   Copyright 2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,21 @@
 #define __CONFIGS_LC823450_XGEVK_INCLUDE_BOARD_H
 
 #include <stdint.h>
+
+/************************************************************************************
+ * Pre-processor Definitions
+ ************************************************************************************/
+
+#define LED_STARTED       0  /* N/A */
+#define LED_HEAPALLOCATE  1  /* N/A */
+#define LED_IRQSENABLED   2  /* N/A */
+#define LED_STACKCREATED  3  /* N/A */
+#define LED_INIRQ         4  /* N/A */
+#define LED_SIGNAL        5  /* N/A */
+#define LED_ASSERTION     6  /* N/A */
+#define LED_PANIC         7  /* N/A */
+#define LED_CPU0          8  /* LED0 (D9) */
+#define LED_CPU1          9  /* LED1 (D10) */
 
 /************************************************************************************
  * Public Data

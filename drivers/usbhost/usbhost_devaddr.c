@@ -2,7 +2,7 @@
  * drivers/usbhost/usbhost_devaddr.c
  * Manage USB device addresses
  *
- *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015, 2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,19 +67,24 @@
 
 static void usbhost_takesem(FAR struct usbhost_devaddr_s *devgen)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&devgen->exclsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&devgen->exclsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define usbhost_givesem(devgen) sem_post(&devgen->exclsem)
+#define usbhost_givesem(devgen) nxsem_post(&devgen->exclsem)
 
 /****************************************************************************
  * Name: usbhost_devaddr_allocate
@@ -254,7 +259,7 @@ void usbhost_devaddr_initialize(FAR struct usbhost_roothubport_s *rhport)
   devgen = &rhport->devgen;
 
   memset(devgen, 0, sizeof(struct usbhost_devaddr_s));
-  sem_init(&devgen->exclsem, 0, 1);
+  nxsem_init(&devgen->exclsem, 0, 1);
   devgen->next = 1;
 }
 

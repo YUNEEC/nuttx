@@ -253,25 +253,23 @@ static int local_rx_open(FAR struct local_conn_s *conn, FAR const char *path,
                          bool nonblock)
 {
   int oflags = nonblock ? O_RDONLY | O_NONBLOCK : O_RDONLY;
+  int ret;
 
-  conn->lc_infd = open(path, oflags);
-  if (conn->lc_infd < 0)
+  ret = file_open(&conn->lc_infile, path, oflags);
+  if (ret < 0)
     {
-      int errcode = get_errno();
-      DEBUGASSERT(errcode > 0);
-
       nerr("ERROR: Failed on open %s for reading: %d\n",
-           path, errcode);
+           path, ret);
 
-      /* Map the errcode to something consistent with the return
+      /* Map the error code to something consistent with the return
        * error codes from connect():
        *
-       * If errcode is ENOENT, meaning that the FIFO does exist,
+       * If error is ENOENT, meaning that the FIFO does exist,
        * return EFAULT meaning that the socket structure address is
        * outside the user's address space.
        */
 
-      return errcode == ENOENT ? -EFAULT : -errcode;
+      return ret == -ENOENT ? -EFAULT : ret;
     }
 
   return OK;
@@ -289,25 +287,23 @@ static int local_tx_open(FAR struct local_conn_s *conn, FAR const char *path,
                          bool nonblock)
 {
   int oflags = nonblock ? O_WRONLY | O_NONBLOCK : O_WRONLY;
+  int ret;
 
-  conn->lc_outfd = open(path, oflags);
-  if (conn->lc_outfd < 0)
+  ret = file_open(&conn->lc_outfile, path, oflags);
+  if (ret < 0)
     {
-      int errcode = get_errno();
-      DEBUGASSERT(errcode > 0);
-
       nerr("ERROR: Failed on open %s for writing: %d\n",
-           path, errcode);
+           path, ret);
 
-      /* Map the errcode to something consistent with the return
+      /* Map the error code to something consistent with the return
        * error codes from connect():
        *
-       * If errcode is ENOENT, meaning that the FIFO does exist,
+       * If error is ENOENT, meaning that the FIFO does exist,
        * return EFAULT meaning that the socket structure address is
        * outside the user's address space.
        */
 
-      return errcode == ENOENT ? -EFAULT : -errcode;
+      return ret == -ENOENT ? -EFAULT : ret;
     }
 
   return OK;
@@ -324,23 +320,19 @@ static int local_tx_open(FAR struct local_conn_s *conn, FAR const char *path,
  *
  ****************************************************************************/
 
-static int local_set_policy(int fd, unsigned long policy)
+static int local_set_policy(FAR struct file *filep, unsigned long policy)
 {
   int ret;
 
   /* Set the buffer policy */
 
-  ret = ioctl(fd, PIPEIOC_POLICY, policy);
+  ret = file_ioctl(filep, PIPEIOC_POLICY, policy);
   if (ret < 0)
     {
-      int errcode = get_errno();
-      DEBUGASSERT(errcode > 0);
-
-      nerr("ERROR: Failed to set FIFO buffer policty: %d\n", errcode);
-      return -errcode;
+      nerr("ERROR: Failed to set FIFO buffer policty: %d\n", ret);
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -492,7 +484,7 @@ int local_open_client_rx(FAR struct local_conn_s *client, bool nonblock)
     {
       /* Policy: Free FIFO resources when the last reference is closed */
 
-      ret = local_set_policy(client->lc_infd, 0);
+      ret = local_set_policy(&client->lc_infile, 0);
     }
 
   return ret;
@@ -524,7 +516,7 @@ int local_open_client_tx(FAR struct local_conn_s *client, bool nonblock)
     {
       /* Policy: Free FIFO resources when the last reference is closed */
 
-      ret = local_set_policy(client->lc_outfd, 0);
+      ret = local_set_policy(&client->lc_outfile, 0);
     }
 
   return ret;
@@ -556,7 +548,7 @@ int local_open_server_rx(FAR struct local_conn_s *server, bool nonblock)
     {
       /* Policy: Free FIFO resources when the last reference is closed */
 
-      ret = local_set_policy(server->lc_infd, 0);
+      ret = local_set_policy(&server->lc_infile, 0);
     }
 
   return ret;
@@ -588,7 +580,7 @@ int local_open_server_tx(FAR struct local_conn_s *server, bool nonblock)
     {
       /* Policy: Free FIFO resources when the last reference is closed */
 
-      ret = local_set_policy(server->lc_outfd, 0);
+      ret = local_set_policy(&server->lc_outfile, 0);
     }
 
   return ret;
@@ -620,7 +612,7 @@ int local_open_receiver(FAR struct local_conn_s *conn, bool nonblock)
     {
       /* Policy: Free FIFO resources when the buffer is empty. */
 
-      ret = local_set_policy(conn->lc_infd, 1);
+      ret = local_set_policy(&conn->lc_infile, 1);
     }
 
   return ret;
@@ -653,7 +645,7 @@ int local_open_sender(FAR struct local_conn_s *conn, FAR const char *path,
     {
       /* Policy: Free FIFO resources when the buffer is empty. */
 
-      ret = local_set_policy(conn->lc_outfd, 1);
+      ret = local_set_policy(&conn->lc_outfile, 1);
     }
 
   return ret;

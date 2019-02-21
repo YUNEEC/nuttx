@@ -1,7 +1,7 @@
 /****************************************************************************
  * config/mikroe_stm32f4/src/stm32_appinit.c
  *
- *   Copyright (C) 2012-2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,12 +65,12 @@
 #endif
 #endif
 
-#ifdef CONFIG_STM32_OTGFS
-#  include "stm32_usbhost.h"
+#ifdef CONFIG_AUDIO
+#  include <nuttx/audio/audio.h>
 #endif
 
-#ifdef CONFIG_AUDIO
-#  include "nuttx/audio/audio.h"
+#ifdef CONFIG_STM32_OTGFS
+#  include "stm32_usbhost.h"
 #endif
 
 #include "stm32.h"
@@ -350,6 +350,16 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#ifdef CONFIG_INPUT
+  /* Initialize the touchscreen */
+
+  ret = stm32_tsc_setup(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_tsc_setup failed: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_PWM
   /* Initialize PWM and register the PWM device. */
 
@@ -366,11 +376,10 @@ int board_app_initialize(uintptr_t arg)
   syslog(LOG_INFO, "Initializing TFT LCD module\n");
 
   ret = board_lcd_initialize();
-  if (ret != OK)
+  if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize TFT LCD module\n");
     }
-
 #endif
 
 #ifdef CONFIG_SENSORS_QENCODER

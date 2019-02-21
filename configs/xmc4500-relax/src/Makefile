@@ -48,8 +48,20 @@ else
 CSRCS += xmc4_userleds.c
 endif
 
+ifeq ($(CONFIG_XMC4_USCI_SPI),y)
+CSRCS += xmc4_spi.c
+endif
+
+ifeq ($(CONFIG_SENSORS_MAX6675),y)
+CSRCS += xmc4_max6675.c
+endif
+
 ifeq ($(CONFIG_LIB_BOARDCTL),y)
 CSRCS += xmc4_appinit.c
+endif
+
+ifeq ($(CONFIG_TESTING_OSTEST),y)
+CSRCS += xmc4_ostest.c
 endif
 
 include $(TOPDIR)/configs/Board.mk

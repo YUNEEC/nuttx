@@ -70,6 +70,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <semaphore.h>
 #include <errno.h>
 #include <debug.h>
@@ -78,6 +79,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/spi/spi.h>
+#include <nuttx/power/pm.h>
 
 #include "up_internal.h"
 #include "up_arch.h"
@@ -143,29 +145,37 @@
 
 struct stm32l4_spidev_s
 {
-  struct spi_dev_s spidev;     /* Externally visible part of the SPI interface */
-  uint32_t         spibase;    /* SPIn base address */
-  uint32_t         spiclock;   /* Clocking for the SPI module */
+  struct spi_dev_s spidev;       /* Externally visible part of the SPI interface */
+  uint32_t         spibase;      /* SPIn base address */
+  uint32_t         spiclock;     /* Clocking for the SPI module */
 #ifdef CONFIG_STM32L4_SPI_INTERRUPTS
-  uint8_t          spiirq;     /* SPI IRQ number */
+  uint8_t          spiirq;       /* SPI IRQ number */
 #endif
 #ifdef CONFIG_STM32L4_SPI_DMA
-  volatile uint8_t rxresult;   /* Result of the RX DMA */
-  volatile uint8_t txresult;   /* Result of the RX DMA */
-  uint16_t         rxch;       /* The RX DMA channel number */
-  uint16_t         txch;       /* The TX DMA channel number */
-  DMA_HANDLE       rxdma;      /* DMA channel handle for RX transfers */
-  DMA_HANDLE       txdma;      /* DMA channel handle for TX transfers */
-  sem_t            rxsem;      /* Wait for RX DMA to complete */
-  sem_t            txsem;      /* Wait for TX DMA to complete */
-  uint32_t         txccr;      /* DMA control register for TX transfers */
-  uint32_t         rxccr;      /* DMA control register for RX transfers */
+  volatile uint8_t rxresult;     /* Result of the RX DMA */
+  volatile uint8_t txresult;     /* Result of the RX DMA */
+#ifdef CONFIG_SPI_TRIGGER
+  bool             defertrig;    /* Flag indicating that trigger should be deferred */
+  bool             trigarmed;    /* Flag indicating that the trigger is armed */
 #endif
-  sem_t            exclsem;    /* Held while chip is selected for mutual exclusion */
-  uint32_t         frequency;  /* Requested clock frequency */
-  uint32_t         actual;     /* Actual clock frequency */
-  uint8_t          nbits;      /* Width of word in bits (4 through 16) */
-  uint8_t          mode;       /* Mode 0,1,2,3 */
+  uint16_t         rxch;         /* The RX DMA channel number */
+  uint16_t         txch;         /* The TX DMA channel number */
+  DMA_HANDLE       rxdma;        /* DMA channel handle for RX transfers */
+  DMA_HANDLE       txdma;        /* DMA channel handle for TX transfers */
+  sem_t            rxsem;        /* Wait for RX DMA to complete */
+  sem_t            txsem;        /* Wait for TX DMA to complete */
+  uint32_t         txccr;        /* DMA control register for TX transfers */
+  uint32_t         rxccr;        /* DMA control register for RX transfers */
+#endif
+  bool             initialized;  /* Has SPI interface been initialized */
+  sem_t            exclsem;      /* Held while chip is selected for mutual exclusion */
+  uint32_t         frequency;    /* Requested clock frequency */
+  uint32_t         actual;       /* Actual clock frequency */
+  uint8_t          nbits;        /* Width of word in bits (4 through 16) */
+  uint8_t          mode;         /* Mode 0,1,2,3 */
+#ifdef CONFIG_PM
+  struct pm_callback_s pm_cb;    /* PM callbacks */
+#endif
 };
 
 /************************************************************************************
@@ -211,6 +221,9 @@ static int         spi_hwfeatures(FAR struct spi_dev_s *dev,
 static uint16_t    spi_send(FAR struct spi_dev_s *dev, uint16_t wd);
 static void        spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
                                 FAR void *rxbuffer, size_t nwords);
+#ifdef CONFIG_SPI_TRIGGER
+static int         spi_trigger(FAR struct spi_dev_s *dev);
+#endif
 #ifndef CONFIG_SPI_EXCHANGE
 static void        spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
                                 size_t nwords);
@@ -221,6 +234,13 @@ static void        spi_recvblock(FAR struct spi_dev_s *dev, FAR void *rxbuffer,
 /* Initialization */
 
 static void        spi_bus_initialize(FAR struct stm32l4_spidev_s *priv);
+
+/* PM interface */
+
+#ifdef CONFIG_PM
+static int         spi_pm_prepare(FAR struct pm_callback_s *cb, int domain,
+                                  enum pm_state_e pmstate);
+#endif
 
 /************************************************************************************
  * Private Data
@@ -248,6 +268,9 @@ static const struct spi_ops_s g_spi1ops =
   .sndblock          = spi_sndblock,
   .recvblock         = spi_recvblock,
 #endif
+#ifdef CONFIG_SPI_TRIGGER
+  .trigger           = spi_trigger,
+#endif
 #ifdef CONFIG_SPI_CALLBACK
   .registercallback  = stm32l4_spi1register,  /* Provided externally */
 #else
@@ -267,6 +290,9 @@ static struct stm32l4_spidev_s g_spi1dev =
   /* lines must be configured in board.h */
   .rxch     = DMACHAN_SPI1_RX,
   .txch     = DMACHAN_SPI1_TX,
+#endif
+#ifdef CONFIG_PM
+  .pm_cb.prepare = spi_pm_prepare,
 #endif
 };
 #endif
@@ -293,6 +319,9 @@ static const struct spi_ops_s g_spi2ops =
   .sndblock          = spi_sndblock,
   .recvblock         = spi_recvblock,
 #endif
+#ifdef CONFIG_SPI_TRIGGER
+  .trigger           = spi_trigger,
+#endif
 #ifdef CONFIG_SPI_CALLBACK
   .registercallback  = stm32l4_spi2register,  /* provided externally */
 #else
@@ -311,6 +340,9 @@ static struct stm32l4_spidev_s g_spi2dev =
 #ifdef CONFIG_STM32L4_SPI_DMA
   .rxch     = DMACHAN_SPI2_RX,
   .txch     = DMACHAN_SPI2_TX,
+#endif
+#ifdef CONFIG_PM
+  .pm_cb.prepare = spi_pm_prepare,
 #endif
 };
 #endif
@@ -337,6 +369,9 @@ static const struct spi_ops_s g_spi3ops =
   .sndblock          = spi_sndblock,
   .recvblock         = spi_recvblock,
 #endif
+#ifdef CONFIG_SPI_TRIGGER
+  .trigger           = spi_trigger,
+#endif
 #ifdef CONFIG_SPI_CALLBACK
   .registercallback  = stm32l4_spi3register,  /* provided externally */
 #else
@@ -355,6 +390,9 @@ static struct stm32l4_spidev_s g_spi3dev =
 #ifdef CONFIG_STM32L4_SPI_DMA
   .rxch     = DMACHAN_SPI3_RX,
   .txch     = DMACHAN_SPI3_TX,
+#endif
+#ifdef CONFIG_PM
+  .pm_cb.prepare = spi_pm_prepare,
 #endif
 };
 #endif
@@ -576,18 +614,23 @@ static inline bool spi_16bitmode(FAR struct stm32l4_spidev_s *priv)
 #ifdef CONFIG_STM32L4_SPI_DMA
 static void spi_dmarxwait(FAR struct stm32l4_spidev_s *priv)
 {
+  int ret;
+
   /* Take the semaphore (perhaps waiting).  If the result is zero, then the DMA
    * must not really have completed???
    */
 
-  while (sem_wait(&priv->rxsem) != 0 || priv->rxresult == 0)
+  do
     {
-      /* The only case that an error should occur here is if the wait was awakened
-       * by a signal.
+      ret = nxsem_wait(&priv->rxsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR || priv->rxresult == 0);
 }
 #endif
 
@@ -602,18 +645,23 @@ static void spi_dmarxwait(FAR struct stm32l4_spidev_s *priv)
 #ifdef CONFIG_STM32L4_SPI_DMA
 static void spi_dmatxwait(FAR struct stm32l4_spidev_s *priv)
 {
+  int ret;
+
   /* Take the semaphore (perhaps waiting).  If the result is zero, then the DMA
    * must not really have completed???
    */
 
-  while (sem_wait(&priv->txsem) != 0 || priv->txresult == 0)
+  do
     {
-      /* The only case that an error should occur here is if the wait was awakened
-       * by a signal.
+      ret = nxsem_wait(&priv->txsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR || priv->txresult == 0);
 }
 #endif
 
@@ -628,7 +676,7 @@ static void spi_dmatxwait(FAR struct stm32l4_spidev_s *priv)
 #ifdef CONFIG_STM32L4_SPI_DMA
 static inline void spi_dmarxwakeup(FAR struct stm32l4_spidev_s *priv)
 {
-  (void)sem_post(&priv->rxsem);
+  (void)nxsem_post(&priv->rxsem);
 }
 #endif
 
@@ -643,7 +691,7 @@ static inline void spi_dmarxwakeup(FAR struct stm32l4_spidev_s *priv)
 #ifdef CONFIG_STM32L4_SPI_DMA
 static inline void spi_dmatxwakeup(FAR struct stm32l4_spidev_s *priv)
 {
-  (void)sem_post(&priv->txsem);
+  (void)nxsem_post(&priv->txsem);
 }
 #endif
 
@@ -870,25 +918,31 @@ static void spi_modifycr(uint32_t addr, FAR struct stm32l4_spidev_s *priv,
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct stm32l4_spidev_s *priv = (FAR struct stm32l4_spidev_s *)dev;
+  int ret;
 
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+          ret = nxsem_wait(&priv->exclsem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
-  return OK;
+
+  return ret;
 }
 
 /************************************************************************************
@@ -1147,8 +1201,11 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
 #ifdef CONFIG_SPI_HWFEATURES
 static int spi_hwfeatures(FAR struct spi_dev_s *dev, spi_hwfeatures_t features)
 {
-#ifdef CONFIG_SPI_BITORDER
+#if defined(CONFIG_SPI_BITORDER) || defined(CONFIG_SPI_TRIGGER)
   FAR struct stm32l4_spidev_s *priv = (FAR struct stm32l4_spidev_s *)dev;
+#endif
+
+#ifdef CONFIG_SPI_BITORDER
   uint16_t setbits;
   uint16_t clrbits;
 
@@ -1171,12 +1228,23 @@ static int spi_hwfeatures(FAR struct spi_dev_s *dev, spi_hwfeatures_t features)
   spi_modifycr(STM32L4_SPI_CR1_OFFSET, priv, setbits, clrbits);
   spi_modifycr(STM32L4_SPI_CR1_OFFSET, priv, SPI_CR1_SPE, 0);
 
+  features &= ~HWFEAT_LSBFIRST;
+#endif
+
+#ifdef CONFIG_SPI_TRIGGER
+/* Turn deferred trigger mode on or off.  Only applicable for DMA mode. If a
+ * transfer is deferred then the DMA will not actually be triggered until a
+ * subsequent call to SPI_TRIGGER to set it off. The thread will be waiting
+ * on the transfer completing as normal.
+ */
+
+  priv->defertrig = ((features & HWFEAT_TRIGGER) != 0);
+  features &= ~HWFEAT_TRIGGER;
+#endif
+
   /* Other H/W features are not supported */
 
-  return ((features & ~HWFEAT_LSBFIRST) == 0) ? OK : -ENOSYS;
-#else
-  return -ENOSYS;
-#endif
+  return (features == 0) ? OK : -ENOSYS;
 }
 #endif
 
@@ -1392,18 +1460,77 @@ static void spi_exchange(FAR struct spi_dev_s *dev, FAR const void *txbuffer,
       spi_dmarxsetup(priv, rxbuffer, &rxdummy, nwords);
       spi_dmatxsetup(priv, txbuffer, &txdummy, nwords);
 
+#ifdef CONFIG_SPI_TRIGGER
+      /* Is deferred triggering in effect? */
+
+      if (!priv->defertrig)
+        {
+          /* No.. Start the DMAs */
+
+          spi_dmarxstart(priv);
+          spi_dmatxstart(priv);
+        }
+      else
+        {
+          /* Yes.. indicated that we are ready to be started */
+
+          priv->trigarmed = true;
+        }
+#else
       /* Start the DMAs */
 
       spi_dmarxstart(priv);
       spi_dmatxstart(priv);
+#endif
 
       /* Then wait for each to complete */
 
       spi_dmarxwait(priv);
       spi_dmatxwait(priv);
+
+#ifdef CONFIG_SPI_TRIGGER
+      priv->trigarmed = false;
+#endif
     }
 }
 #endif /* CONFIG_STM32L4_SPI_DMA */
+
+/****************************************************************************
+ * Name: spi_trigger
+ *
+ * Description:
+ *   Trigger a previously configured DMA transfer.
+ *
+ * Input Parameters:
+ *   dev      - Device-specific state data
+ *
+ * Returned Value:
+ *   OK       - Trigger was fired
+ *   ENOTSUP  - Trigger not fired due to lack of DMA support
+ *   EIO      - Trigger not fired because not previously primed
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SPI_TRIGGER
+static int spi_trigger(FAR struct spi_dev_s *dev)
+{
+#ifdef CONFIG_STM32L4_SPI_DMA
+  FAR struct stm32_spidev_s *priv = (FAR struct stm32_spidev_s *)dev;
+
+  if (!priv->trigarmed)
+    {
+      return -EIO;
+    }
+
+  spi_dmarxstart(priv);
+  spi_dmatxstart(priv);
+
+  return OK;
+#else
+  return -ENOSYS;
+#endif
+}
+#endif
 
 /****************************************************************************
  * Name: spi_sndblock
@@ -1460,12 +1587,87 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *rxbuffer, size_t 
 #endif
 
 /************************************************************************************
+ * Name: spi_pm_prepare
+ *
+ * Description:
+ *   Request the driver to prepare for a new power state. This is a
+ *   warning that the system is about to enter into a new power state.  The
+ *   driver should begin whatever operations that may be required to enter
+ *   power state.  The driver may abort the state change mode by returning
+ *   a non-zero value from the callback function.
+ *
+ * Input Parameters:
+ *   cb      - Returned to the driver.  The driver version of the callback
+ *             structure may include additional, driver-specific state
+ *             data at the end of the structure.
+ *   domain  - Identifies the activity domain of the state change
+ *   pmstate - Identifies the new PM state
+ *
+ * Returned Value:
+ *   0 (OK) means the event was successfully processed and that the driver
+ *   is prepared for the PM state change.  Non-zero means that the driver
+ *   is not prepared to perform the tasks needed achieve this power setting
+ *   and will cause the state change to be aborted.  NOTE:  The prepare
+ *   method will also be recalled when reverting from lower back to higher
+ *   power consumption modes (say because another driver refused a lower
+ *   power state change).  Drivers are not permitted to return non-zero
+ *   values when reverting back to higher power consumption modes!
+ *
+ ************************************************************************************/
+
+#ifdef CONFIG_PM
+static int spi_pm_prepare(FAR struct pm_callback_s *cb, int domain,
+                          enum pm_state_e pmstate)
+{
+  struct stm32l4_spidev_s *priv =
+      (struct stm32l4_spidev_s *)((char *)cb -
+                                    offsetof(struct stm32l4_spidev_s, pm_cb));
+  int sval;
+
+  /* Logic to prepare for a reduced power state goes here. */
+
+  switch (pmstate)
+    {
+    case PM_NORMAL:
+    case PM_IDLE:
+      break;
+
+    case PM_STANDBY:
+    case PM_SLEEP:
+      /* Check if exclusive lock for SPI bus is held. */
+
+      if (nxsem_getvalue(&priv->exclsem, &sval) < 0)
+        {
+          DEBUGASSERT(false);
+          return -EINVAL;
+        }
+
+      if (sval <= 0)
+        {
+          /* Exclusive lock is held, do not allow entry to deeper PM states. */
+
+          return -EBUSY;
+        }
+
+      break;
+
+    default:
+      /* Should not get here */
+
+      break;
+    }
+
+  return OK;
+}
+#endif
+
+/************************************************************************************
  * Name: spi_bus_initialize
  *
  * Description:
  *   Initialize the selected SPI bus in its default state (Master, 8-bit, mode 0, etc.)
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv   - private SPI device structure
  *
  * Returned Value:
@@ -1477,6 +1679,9 @@ static void spi_bus_initialize(FAR struct stm32l4_spidev_s *priv)
 {
   uint16_t setbits;
   uint16_t clrbits;
+#ifdef CONFIG_PM
+  int ret;
+#endif
 
   /* Configure CR1 and CR2. Default configuration:
    *   Mode 0:                        CR1.CPHA=0 and CR1.CPOL=0
@@ -1510,20 +1715,20 @@ static void spi_bus_initialize(FAR struct stm32l4_spidev_s *priv)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
 
 #ifdef CONFIG_STM32L4_SPI_DMA
   /* Initialize the SPI semaphores that is used to wait for DMA completion */
 
-  sem_init(&priv->rxsem, 0, 0);
-  sem_init(&priv->txsem, 0, 0);
+  nxsem_init(&priv->rxsem, 0, 0);
+  nxsem_init(&priv->txsem, 0, 0);
 
   /* These semaphores are used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->rxsem, SEM_PRIO_NONE);
-  sem_setprotocol(&priv->txsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->rxsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->txsem, SEM_PRIO_NONE);
 
   /* Get DMA channels.  NOTE: stm32l4_dmachannel() will always assign the DMA channel.
    * if the channel is not available, then stm32l4_dmachannel() will block and wait
@@ -1543,6 +1748,14 @@ static void spi_bus_initialize(FAR struct stm32l4_spidev_s *priv)
   /* Enable spi */
 
   spi_modifycr(STM32L4_SPI_CR1_OFFSET, priv, SPI_CR1_SPE, 0);
+
+#ifdef CONFIG_PM
+  /* Register to receive power management callbacks */
+
+  ret = pm_register(&priv->pm_cb);
+  DEBUGASSERT(ret == OK);
+  UNUSED(ret);
+#endif
 }
 
 /************************************************************************************
@@ -1555,7 +1768,7 @@ static void spi_bus_initialize(FAR struct stm32l4_spidev_s *priv)
  * Description:
  *   Initialize the selected SPI bus
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple SPI interfaces)
  *
  * Returned Value:
@@ -1578,7 +1791,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
 
       /* Only configure if the bus is not already configured */
 
-      if ((spi_getreg(priv, STM32L4_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
+      if (!priv->initialized)
         {
           /* Configure SPI1 pins: SCK, MISO, and MOSI */
 
@@ -1589,6 +1802,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
           /* Set up default configuration: Master, 8-bit, etc. */
 
           spi_bus_initialize(priv);
+          priv->initialized = true;
         }
     }
   else
@@ -1602,7 +1816,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
 
       /* Only configure if the bus is not already configured */
 
-      if ((spi_getreg(priv, STM32L4_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
+      if (!priv->initialized)
         {
           /* Configure SPI2 pins: SCK, MISO, and MOSI */
 
@@ -1613,6 +1827,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
           /* Set up default configuration: Master, 8-bit, etc. */
 
           spi_bus_initialize(priv);
+          priv->initialized = true;
         }
     }
   else
@@ -1626,7 +1841,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
 
       /* Only configure if the bus is not already configured */
 
-      if ((spi_getreg(priv, STM32L4_SPI_CR1_OFFSET) & SPI_CR1_SPE) == 0)
+      if (!priv->initialized)
         {
           /* Configure SPI3 pins: SCK, MISO, and MOSI */
 
@@ -1637,6 +1852,7 @@ FAR struct spi_dev_s *stm32l4_spibus_initialize(int bus)
           /* Set up default configuration: Master, 8-bit, etc. */
 
           spi_bus_initialize(priv);
+          priv->initialized = true;
         }
     }
   else

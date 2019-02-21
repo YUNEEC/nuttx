@@ -1,5 +1,4 @@
 /****************************************************************************
-
  * arch/arm/src/stm32l4/stm32l4_comp.c
  *
  *   Copyright (c) 2017 Gregory Nutt. All rights reserved.
@@ -38,7 +37,6 @@
  ****************************************************************************/
 
 /****************************************************************************
-
  * Included Files
  ****************************************************************************/
 
@@ -57,7 +55,7 @@
 #include <errno.h>
 
 #if !(defined(CONFIG_STM32L4_STM32L4X3) || defined(CONFIG_STM32L4_STM32L4X5) || \
-      defined(CONFIG_STM32L4_STM32L4X6))
+      defined(CONFIG_STM32L4_STM32L4X6) || defined(CONFIG_STM32L4_STM32L4XR))
 #  error "Unrecognized STM32 chip"
 #endif
 
@@ -107,7 +105,7 @@ static struct stm32l4_comp_config_s g_comp1priv =
     .rising     = true,
     .falling    = false
   },
-  .inp          = STM32L4_COMP_INP_PIN_3,
+  .inp          = STM32L4_COMP_INP_PIN_2,
   .inm          = STM32L4_COMP_INM_VREF,
   .hyst         = STM32L4_COMP_HYST_LOW,
   .speed        = STM32L4_COMP_SPEED_MEDIUM,
@@ -304,7 +302,7 @@ static int comp_bind(FAR struct comp_dev_s *dev,
  * Description:
  *   Enable/disable comparator
  *
- * Parameters:
+ * Input Parameters:
  *  cmp - comparator
  *  cfg - enable/disable flag
  *
@@ -339,10 +337,10 @@ static int stm32l4_exti_comp_isr(int irq, void *context, FAR void *arg)
  * Description:
  *   Configure comparator and I/Os used as comparators inputs
  *
- * Parameters:
+ * Input Parameters:
  *  cfg - configuration
  *
- * Returns:
+ * Returned Value:
  *  0 on success, a negated errno value on failure
  *
  ****************************************************************************/
@@ -430,7 +428,8 @@ static int stm32l4_compconfig(FAR const struct comp_dev_s *dev)
 
   case STM32L4_COMP_INM_PIN_2:
       stm32l4_configgpio(cmp == STM32L4_COMP1 ? GPIO_COMP1_INM_2 : GPIO_COMP2_INM_2);
-#if defined(CONFIG_STM32L4_STM32L4X5) || defined(CONFIG_STM32L4_STM32L4X6)
+#if defined(CONFIG_STM32L4_STM32L4X5) || defined(CONFIG_STM32L4_STM32L4X6) || \
+    defined(CONFIG_STM32L4_STM32L4XR)
       regval |= COMP_CSR_INMSEL_PIN2;
 #else
       regval |= COMP_CSR_INMSEL_INMESEL;

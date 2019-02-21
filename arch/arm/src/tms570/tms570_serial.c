@@ -499,7 +499,7 @@ static int tms570_interrupt(int irq, void *context, FAR void *arg)
           case SCI_INTVECT_TIMEOUT: /* Timeout interrupt */
 
           default:
-            PANIC();
+            DEBUGPANIC();
         }
     }
 
@@ -860,7 +860,7 @@ void up_serialinit(void)
   tms570_disableallints(TTYS1_DEV.priv, NULL);
 #endif
 
-#ifdef HAVE_SERIAL_CONSOLE
+#ifdef CONSOLE_DEV
   /* Configure whichever one is the console.  NOTE: This was already done
    * in tms570_lowsetup().
    */

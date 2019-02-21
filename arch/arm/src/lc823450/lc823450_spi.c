@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_spi.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2016,2017 Sony Video & Sound Products Inc.
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
@@ -149,26 +149,31 @@ static struct lc823450_spidev_s g_spidev =
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct lc823450_spidev_s *priv = (FAR struct lc823450_spidev_s *)dev;
+  int ret;
 
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+         ret = nxsem_wait(&priv->exclsem);
+
+          /* The only case that an error should occur here is if the wait was
+           * awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 #endif
 
@@ -320,7 +325,7 @@ static void spi_setbits(FAR struct spi_dev_s *dev, int nbits)
 static void spi_dma_callback(DMA_HANDLE hdma, void *arg, int result)
 {
   sem_t *waitsem = (sem_t *)arg;
-  sem_post(waitsem);
+  nxsem_post(waitsem);
 }
 #endif /* CONFIG_LC823450_SPI_DMA */
 
@@ -409,7 +414,7 @@ static void spi_sndblock(FAR struct spi_dev_s *dev, FAR const void *buffer,
 
       modifyreg32(LC823450_SPI_SMD, 0, SPI_SMD_WTR);
 
-      while (sem_wait(&priv->dma_wait) != 0);
+      while (nxsem_wait(&priv->dma_wait) < 0);
       nwords -= len;
       buffer += len;
     }
@@ -507,7 +512,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  * Description:
  *   Initialize the selected SPI port.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple SPI interfaces)
  *
  * Returned Value:
@@ -537,7 +542,7 @@ FAR struct spi_dev_s *lc823450_spibus_initialize(int port)
       modifyreg32(MRSTCNTAPB, 0, MRSTCNTAPB_PORT5_RSTB);
 
 #ifndef CONFIG_SPI_OWNBUS
-      sem_init(&priv->exclsem, 0, 1);
+      nxsem_init(&priv->exclsem, 0, 1);
 #endif
 
       /* Initialize SPI mode. It must be done before starting SPI transfer */
@@ -556,7 +561,7 @@ FAR struct spi_dev_s *lc823450_spibus_initialize(int port)
       lc823450_spiinitialize();
 
 #ifdef CONFIG_LC823450_SPI_DMA
-      sem_init(&priv->dma_wait, 0, 0);
+      nxsem_init(&priv->dma_wait, 0, 0);
       priv->hdma = lc823450_dmachannel(DMA_CHANNEL_SIOTX);
       lc823450_dmarequest(priv->hdma, DMA_REQUEST_SIOTX);
 

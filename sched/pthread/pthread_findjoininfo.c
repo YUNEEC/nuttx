@@ -54,11 +54,11 @@
  * Description:
  *   Find a join structure in a local data set.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The that the pid is (or was) a member of of
  *   pid - The ID of the pthread
  *
- * Return Value:
+ * Returned Value:
  *   None or pointer to the found entry.
  *
  * Assumptions:

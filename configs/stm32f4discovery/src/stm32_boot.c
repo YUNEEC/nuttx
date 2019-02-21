@@ -1,7 +1,7 @@
-/************************************************************************************
+/****************************************************************************
  * configs/stm32f4discovery/src/stm32_boot.c
  *
- *   Copyright (C) 2011-2012, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,11 +31,11 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************************
+/****************************************************************************
  * Included Files
- ************************************************************************************/
+ ****************************************************************************/
 
 #include <nuttx/config.h>
 
@@ -45,27 +45,40 @@
 #include <arch/board/board.h>
 
 #include "up_arch.h"
+#include "itm.h"
+
+#include "stm32.h"
 #include "stm32f4discovery.h"
 
-/************************************************************************************
+/****************************************************************************
  * Public Functions
- ************************************************************************************/
+ ****************************************************************************/
 
-/************************************************************************************
+/****************************************************************************
  * Name: stm32_boardinitialize
  *
  * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
+ *   All STM32 architectures must provide the following entry point.  This
+ *   entry point is called early in the initialization -- after all memory
+ *   has been configured and mapped but before any devices have been
+ *   initialized.
  *
- ************************************************************************************/
+ ****************************************************************************/
 
 void stm32_boardinitialize(void)
 {
+#ifdef CONFIG_SCHED_CRITMONITOR
+  /* Make sure the high speed cycle counter is running.  It will be started
+   * automatically only if a debugger is connected.
+   */
+
+  putreg32(0xc5acce55, ITM_LAR);
+  modifyreg32(DWT_CTRL, 0, DWT_CTRL_CYCCNTENA_MASK);
+#endif
+
 #if defined(CONFIG_STM32_SPI1) || defined(CONFIG_STM32_SPI2) || defined(CONFIG_STM32_SPI3)
-  /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak function
-   * stm32_spidev_initialize() has been brought into the link.
+  /* Configure SPI chip selects if 1) SPI is not disabled, and 2) the weak
+   * function stm32_spidev_initialize() has been brought into the link.
    */
 
   if (stm32_spidev_initialize)
@@ -94,15 +107,6 @@ void stm32_boardinitialize(void)
     {
       stm32_netinitialize();
     }
-#endif
-
-#ifdef CONFIG_CANUTILS_LIBUAVCAN
-  (void)stm32_configgpio(GPIO_CAN1_RX);
-  (void)stm32_configgpio(GPIO_CAN1_TX);
-#  if CONFIG_LIBUAVCAN_STM32_NUM_IFACES > 1
-  (void)stm32_configgpio(GPIO_CAN2_RX);
-  (void)stm32_configgpio(GPIO_CAN2_TX);
-#  endif
 #endif
 
 #ifdef CONFIG_ARCH_LEDS

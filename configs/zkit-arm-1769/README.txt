@@ -8,9 +8,6 @@ Contents
 ^^^^^^^^
 
   ZKit-ARM LPC1769 Board
-  Development Environment
-  GNU Toolchain Options
-  NuttX buildroot Toolchain
   LEDs
   ZKit-ARM Configuration Options
   Configurations
@@ -139,147 +136,6 @@ USB Device
       P1.25/MCOA1/MAT1.1          |  LCD-RST       LCD Reset (RSTB) - Resets Everything in LCD
       ----------------------------+--------------- -------------------------------------------
 
-Development Environment
-^^^^^^^^^^^^^^^^^^^^^^^
-
-  Either Linux or Cygwin on Windows can be used for the development environment.
-  The source has been built only using the GNU toolchain (see below).  Other
-  toolchains will likely cause problems. Testing was performed using the Cygwin
-  environment.
-
-GNU Toolchain Options
-^^^^^^^^^^^^^^^^^^^^^
-
-  The NuttX make system has been modified to support the following different
-  toolchain options.
-
-  1. The Code Red GNU toolchain
-  2. The CodeSourcery GNU toolchain,
-  3. The devkitARM GNU toolchain,
-  4. The NuttX buildroot Toolchain (see below).
-
-  All testing has been conducted using the Code Red toolchain and the
-  make system is setup to default to use the Code Red Linux toolchain.  To use
-  the other toolchain, you simply need add one of the following configuration
-  options to your .config (or defconfig) file:
-
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y : CodeSourcery under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=y     : devkitARM under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y     : NuttX buildroot under Linux or Cygwin (default)
-    CONFIG_ARMV7M_TOOLCHAIN_CODEREDW=y      : Code Red toolchain under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODEREDL=y      : Code Red toolchain under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_ATOLLIC=y       : The Atollic toolchain
-
-  NOTE: the CodeSourcery (for Windows), devkitARM, and Code Red (for Windoes)
-  are Windows native toolchains.  The CodeSourcey (for Linux), Code Red (for Linux)
-  and NuttX buildroot toolchains are Cygwin and/or Linux native toolchains. There
-  are several limitations to using a Windows based toolchain in a Cygwin
-  environment.  The three biggest are:
-
-  1. The Windows toolchain cannot follow Cygwin paths.  Path conversions are
-     performed automatically in the Cygwin makefiles using the 'cygpath' utility
-     but you might easily find some new path problems.  If so, check out 'cygpath -w'
-
-  2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
-     problems for the Windows tools by copying directories instead of linking them.
-     But this can also cause some confusion for you:  For example, you may edit
-     a file in a "linked" directory and find that your changes had no effect.
-     That is because you are building the copy of the file in the "fake" symbolic
-     directory.  If you use a Windows toolchain, you should get in the habit of
-     making like this:
-
-       make clean_context all
-
-     An alias in your .bashrc file might make that less painful.
-
-  NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
-  level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
-  -Os.
-
-  NOTE 2: The devkitARM toolchain includes a version of MSYS make.  Make sure that
-  the paths to Cygwin's /bin and /usr/bin directories appear BEFORE the devkitARM
-  path or will get the wrong version of make.
-
-NuttX buildroot Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  A GNU GCC-based toolchain is assumed.  The PATH variable should be modified to
-  point to the correct path to the Cortex-M3 GCC toolchain (if different from the
-  default in your PATH variable).
-
-  If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  Bitbucket download site (https://bitbucket.org/nuttx/nuttx/downloads/).
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh zkit-arm-1769/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-defconfig-4.3.3 .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that your PATH variable includes the path to the newly built
-     binaries.
-
-  See the file configs/README.txt in the buildroot source tree.  That has more
-  detailed PLUS some special instructions that you will need to follow if you
-  are building a Cortex-M3 toolchain for Cygwin under Windows.
-
-  NOTE: The cortexm3-defconfig-4.3.3 produces an older-style is OABI toolchain.
-  There is another configuration, cortexm3-eabi-defconfig-4.6.3, that will
-  build a newer, EABI, toolchain.  Unfortunately, the 4.6.3 EABI toolchain is
-  not compatible with the NXFLAT tools.  See the top-level TODO file (under
-  "Binary loaders") for more information about this problem. If you plan to
-  use NXFLAT, please do not use the GCC 4.6.3 EABI toochain; instead use the
-  GCC 4.3.3 OABI toolchain.
-
-NXFLAT Toolchain
-^^^^^^^^^^^^^^^^
-
-  If you are *not* using the NuttX buildroot toolchain and you want to use
-  the NXFLAT tools, then you will still have to build a portion of the buildroot
-  tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX Bitbucket download site
-  (https://bitbucket.org/nuttx/nuttx/downloads/).
-
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh zkit-arm-1769/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-defconfig-nxflat .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     NXFLAT binaries.
-
 LEDs
 ^^^^
 
@@ -382,13 +238,6 @@ ZKit-ARM Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
     Individual subsystems can be enabled:
       CONFIG_LPC17_MAINOSC=y
       CONFIG_LPC17_PLL0=y
@@ -442,36 +291,40 @@ ZKit-ARM Configuration Options
 
     CONFIG_CAN_EXTID - Enables support for the 29-bit extended ID.  Default
       Standard 11-bit IDs.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN2 is defined.
-    CONFIG_CAN1_DIVISOR - CAN1 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN2_DIVISOR - CAN2 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 = the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_LPC17_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN1
+      is defined.
+    CONFIG_LPC17_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN2
+      is defined.
+    CONFIG_LPC17_CAN1_DIVISOR - CAN1 is clocked at CCLK divided by this
+      number. (the CCLK frequency is divided by this number to get the CAN
+      clock). Options = {1,2,4,6}. Default: 4.
+    CONFIG_LPC17_CAN2_DIVISOR - CAN2 is clocked at CCLK divided by this
+      number.  (the CCLK frequency is divided by this number to get the CAN
+      clock).  Options = {1,2,4,6}. Default: 4.
+    CONFIG_LPC17_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 6
+    CONFIG_LPC17_CAN_TSEG2 = the number of CAN time quanta in segment 2.
+      Default: 7
 
   LPC17xx specific PHY/Ethernet device driver settings.  These setting
   also require CONFIG_NET and CONFIG_LPC17_ETHERNET.
 
     CONFIG_ETH0_PHY_KS8721 - Selects Micrel KS8721 PHY
-    CONFIG_PHY_AUTONEG - Enable auto-negotion
-    CONFIG_PHY_SPEED100 - Select 100Mbit vs. 10Mbit speed.
-    CONFIG_PHY_FDUPLEX - Select full (vs. half) duplex
+    CONFIG_LPC17_PHY_AUTONEG - Enable auto-negotion
+    CONFIG_LPC17_PHY_SPEED100 - Select 100Mbit vs. 10Mbit speed.
+    CONFIG_LPC17_PHY_FDUPLEX - Select full (vs. half) duplex
 
-    CONFIG_NET_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
-    CONFIG_NET_NTXDESC - Configured number of Tx descriptors. Default: 18
-    CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
-    CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
+    CONFIG_LPC17_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
+    CONFIG_LPC17_ETH_NTXDESC - Configured number of Tx descriptors. Default: 18
+    CONFIG_LPC17_ETH_NRXDESC - Configured number of Rx descriptors. Default: 18
+    CONFIG_LPC17_ETH_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
       CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
       Also needs CONFIG_DEBUG_FEATURES.
-    CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
+    CONFIG_LPC17_ETH_HASH - Enable receipt of near-perfect match frames.
     CONFIG_LPC17_MULTICAST - Enable receipt of multicast (and unicast) frames.
-      Automatically set if CONFIG_NET_IGMP is selected.
+      Automatically set if CONFIG_NET_MCASTGROUP is selected.
 
   LPC17xx USB Device Configuration
 
@@ -494,17 +347,17 @@ ZKit-ARM Configuration Options
 
   LPC17xx USB Host Configuration (the ZKit-ARM does not support USB Host)
 
-    CONFIG_USBHOST_OHCIRAM_SIZE
+    CONFIG_LPC17_OHCIRAM_SIZE
       Total size of OHCI RAM (in AHB SRAM Bank 1)
-    CONFIG_USBHOST_NEDS
+    CONFIG_LP17_USBHOST_NEDS
       Number of endpoint descriptors
-    CONFIG_USBHOST_NTDS
+    CONFIG_LP17_USBHOST_NTDS
       Number of transfer descriptors
-    CONFIG_USBHOST_TDBUFFERS
+    CONFIG_LPC17_USBHOST_TDBUFFERS
       Number of transfer descriptor buffers
-    CONFIG_USBHOST_TDBUFSIZE
+    CONFIG_LPC17_USBHOST_TDBUFSIZE
       Size of one transfer descriptor buffer
-    CONFIG_USBHOST_IOBUFSIZE
+    CONFIG_LPC17_USBHOST_IOBUFSIZE
       Size of one end-user I/O buffer.  This can be zero if the
       application can guarantee that all end-user I/O buffers
       reside in AHB SRAM.
@@ -515,9 +368,7 @@ Configurations
 Each ZKit-ARM configuration is maintained in a sudirectory and can be
 selected as follow:
 
-    cd tools
-    ./configure.sh zkit-arm-1769/<subdir>
-    cd -
+    tools/configure.sh zkit-arm-1769/<subdir>
 
 Where <subdir> is one of the following:
 

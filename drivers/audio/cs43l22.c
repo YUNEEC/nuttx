@@ -2,7 +2,7 @@
  * drivers/audio/cs43l22.c
  * Audio device driver for Cirrus logic CS43L22 Audio codec.
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Taras Drozdovskiy <t.drozdovskiy@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,6 +53,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/clock.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/i2c/i2c_master.h>
@@ -76,7 +77,7 @@ uint8_t cs43l22_readreg(FAR struct cs43l22_dev_s *priv, uint8_t regaddr);
 static void cs43l22_writereg(FAR struct cs43l22_dev_s *priv, uint8_t regaddr,
                              uint8_t regval);
 static void cs43l22_takesem(sem_t * sem);
-#define     cs43l22_givesem(s) sem_post(s)
+#define     cs43l22_givesem(s) nxsem_post(s)
 
 #ifndef CONFIG_AUDIO_EXCLUDE_VOLUME
 static inline uint16_t cs43l22_scalevolume(uint16_t volume, b16_t scale);
@@ -208,7 +209,7 @@ static const struct audio_ops_s g_audioops =
 /****************************************************************************
  * Name: cs43l22_readreg
  *
- * Description
+ * Description:
  *    Read the specified 16-bit register from the CS43L22 device.
  *
  ****************************************************************************/
@@ -369,10 +370,10 @@ static void cs43l22_takesem(sem_t * sem)
 
   do
     {
-      ret = sem_wait(sem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(sem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 }
 
 /************************************************************************************
@@ -725,12 +726,10 @@ cs43l22_configure(FAR struct audio_lowerhalf_s *dev,
                   FAR const struct audio_caps_s *caps)
 #endif
 {
-#if !defined(CONFIG_AUDIO_EXCLUDE_VOLUME) || !defined(CONFIG_AUDIO_EXCLUDE_TONE)
   FAR struct cs43l22_dev_s *priv = (FAR struct cs43l22_dev_s *)dev;
-#endif
   int ret = OK;
 
-  DEBUGASSERT(priv && caps);
+  DEBUGASSERT(priv != NULL && caps != NULL);
   audinfo("ac_type: %d\n", caps->ac_type);
 
   /* Process the configure operation */
@@ -963,11 +962,11 @@ cs43l22_senddone(FAR struct i2s_dev_s *i2s,
    */
 
   msg.msgId = AUDIO_MSG_COMPLETE;
-  ret = mq_send(priv->mq, (FAR const char *)&msg, sizeof(msg),
-                CONFIG_CS43L22_MSG_PRIO);
+  ret = nxmq_send(priv->mq, (FAR const char *)&msg, sizeof(msg),
+                  CONFIG_CS43L22_MSG_PRIO);
   if (ret < 0)
     {
-      auderr("ERROR: mq_send failed: %d\n", errno);
+      auderr("ERROR: nxmq_send failed: %d\n", ret);
     }
 }
 
@@ -1205,8 +1204,8 @@ static int cs43l22_start(FAR struct audio_lowerhalf_s *dev)
 /****************************************************************************
  * Name: cs43l22_stop
  *
- * Description: Stop the configured operation (audio streaming, volume
- *              disabled, etc.).
+ * Description:
+ *   Stop the configured operation (audio streaming, volume disabled, etc.).
  *
  ****************************************************************************/
 
@@ -1225,8 +1224,8 @@ static int cs43l22_stop(FAR struct audio_lowerhalf_s *dev)
 
   term_msg.msgId = AUDIO_MSG_STOP;
   term_msg.u.data = 0;
-  mq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-          CONFIG_CS43L22_MSG_PRIO);
+  (void)nxmq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
+                  CONFIG_CS43L22_MSG_PRIO);
 
   /* Join the worker thread */
 
@@ -1243,7 +1242,8 @@ static int cs43l22_stop(FAR struct audio_lowerhalf_s *dev)
 /****************************************************************************
  * Name: cs43l22_pause
  *
- * Description: Pauses the playback.
+ * Description:
+ *   Pauses the playback.
  *
  ****************************************************************************/
 
@@ -1272,7 +1272,8 @@ static int cs43l22_pause(FAR struct audio_lowerhalf_s *dev)
 /****************************************************************************
  * Name: cs43l22_resume
  *
- * Description: Resumes the playback.
+ * Description:
+ *   Resumes the playback.
  *
  ****************************************************************************/
 
@@ -1305,7 +1306,8 @@ static int cs43l22_resume(FAR struct audio_lowerhalf_s *dev)
 /****************************************************************************
  * Name: cs43l22_enqueuebuffer
  *
- * Description: Enqueue an Audio Pipeline Buffer for playback/ processing.
+ * Description:
+ *   Enqueue an Audio Pipeline Buffer for playback/ processing.
  *
  ****************************************************************************/
 
@@ -1341,15 +1343,11 @@ static int cs43l22_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
       term_msg.msgId  = AUDIO_MSG_ENQUEUE;
       term_msg.u.data = 0;
 
-      ret = mq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-                    CONFIG_CS43L22_MSG_PRIO);
+      ret = nxmq_send(priv->mq, (FAR const char *)&term_msg,
+                      sizeof(term_msg), CONFIG_CS43L22_MSG_PRIO);
       if (ret < 0)
         {
-          int errcode = errno;
-          DEBUGASSERT(errcode > 0);
-
-          auderr("ERROR: mq_send failed: %d\n", errcode);
-          UNUSED(errcode);
+          auderr("ERROR: nxmq_send failed: %d\n", ret);
         }
     }
 
@@ -1359,7 +1357,8 @@ static int cs43l22_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
 /****************************************************************************
  * Name: cs43l22_cancelbuffer
  *
- * Description: Called when an enqueued buffer is being cancelled.
+ * Description:
+ *   Called when an enqueued buffer is being cancelled.
  *
  ****************************************************************************/
 
@@ -1373,7 +1372,8 @@ static int cs43l22_cancelbuffer(FAR struct audio_lowerhalf_s *dev,
 /****************************************************************************
  * Name: cs43l22_ioctl
  *
- * Description: Perform a device ioctl
+ * Description:
+ *   Perform a device ioctl
  *
  ****************************************************************************/
 
@@ -1427,7 +1427,8 @@ static int cs43l22_ioctl(FAR struct audio_lowerhalf_s *dev, int cmd,
 /****************************************************************************
  * Name: cs43l22_reserve
  *
- * Description: Reserves a session (the only one we have).
+ * Description:
+ *   Reserves a session (the only one we have).
  *
  ****************************************************************************/
 
@@ -1472,7 +1473,8 @@ static int cs43l22_reserve(FAR struct audio_lowerhalf_s *dev)
 /****************************************************************************
  * Name: cs43l22_release
  *
- * Description: Releases the session (the only one we have).
+ * Description:
+ *   Releases the session (the only one we have).
  *
  ****************************************************************************/
 
@@ -1602,7 +1604,7 @@ static void *cs43l22_workerthread(pthread_addr_t pvarg)
 
       /* Wait for messages from our message queue */
 
-      msglen = mq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
+      msglen = nxmq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
 
       /* Handle the case when we return with no message */
 
@@ -1920,7 +1922,7 @@ FAR struct audio_lowerhalf_s *cs43l22_initialize(FAR struct i2c_master_s *i2c,
       priv->i2c        = i2c;
       priv->i2s        = i2s;
 
-      sem_init(&priv->pendsem, 0, 1);
+      nxsem_init(&priv->pendsem, 0, 1);
       dq_init(&priv->pendq);
       dq_init(&priv->doneq);
 
@@ -1953,7 +1955,7 @@ FAR struct audio_lowerhalf_s *cs43l22_initialize(FAR struct i2c_master_s *i2c,
   return NULL;
 
 errout_with_dev:
-  sem_destroy(&priv->pendsem);
+  nxsem_destroy(&priv->pendsem);
   kmm_free(priv);
   return NULL;
 }

@@ -20,6 +20,13 @@ config NET_TCP_NO_STACK
 
 if NET_TCP && !NET_TCP_NO_STACK
 
+config NET_TCP_KEEPALIVE
+	bool "TCP/IP Keep-alive support"
+	default n
+	select NET_TCPPROTO_OPTIONS
+	---help---
+		Enable support for the SO_KEEPALIVE socket option
+
 config NET_TCPURGDATA
 	bool "Urgent data"
 	default n
@@ -27,33 +34,6 @@ config NET_TCPURGDATA
 		Determines if support for TCP urgent data notification should be
 		compiled in. Urgent data (out-of-band data) is a rarely used TCP feature
 		that is very seldom would be required.
-
-config NET_TCP_REASSEMBLY
-	bool "TCP reassembly"
-	default n
-	depends on EXPERIMENTAL
-	---help---
-		Enable support for IP packet reassembly of fragmented IP packets.
-
-		This features requires an additional amount of RAM to hold the
-		reassembly buffer and the reassembly code size is approximately 700
-		bytes.  The reassembly buffer is of the same size as the d_buf buffer
-		(configured by CONFIG_NET_xxx_MTU).
-
-		Note: IP packet reassembly is not heavily tested (and, hence,
-		EXPERIMENTAL).
-
-if NET_TCP_REASSEMBLY
-
-config NET_TCP_REASS_MAXAGE
-	int "IP fragment timeout"
-	default 200
-	---help---
-		The maximum time an IP fragment should wait in the reassembly buffer
-		before it is dropped.  Units are deci-seconds, the range of the timer
-		is 8-bits.  Default: 20 seconds.
-
-endif # NET_TCP_REASSEMBLY
 
 config NET_TCP_CONNS
 	int "Number of TCP/IP connections"
@@ -67,9 +47,22 @@ config NET_MAX_LISTENPORTS
 	---help---
 		Maximum number of listening TCP/IP ports (all tasks).  Default: 20
 
+config TCP_NOTIFIER
+	bool "Support TCP notifications"
+	default n
+	depends on SCHED_LPWORK
+	select WQUEUE_NOTIFIER
+	---help---
+		Enable building of TCP notifier logic that will execute a worker
+		function on the low priority work queue when read-ahead data
+		is available or when a TCP connection is lost.  This is is a general
+		purpose notifier, but was developed specifically to support poll()
+		logic where the poll must wait for these events.
+
 config NET_TCP_READAHEAD
 	bool "Enable TCP/IP read-ahead buffering"
 	default y
+	select NET_READAHEAD
 	select MM_IOB
 	---help---
 		Read-ahead buffers allows buffering of TCP/IP packets when there is no
@@ -85,12 +78,10 @@ config NET_TCP_READAHEAD
 		These settings are critical to the reasonable operation of read-
 		ahead buffering.
 
-if NET_TCP_READAHEAD
-endif # NET_TCP_READAHEAD
-
 config NET_TCP_WRITE_BUFFERS
 	bool "Enable TCP/IP write buffering"
 	default n
+	select NET_WRITE_BUFFERS
 	select MM_IOB
 	---help---
 		Write buffers allows buffering of ongoing TCP/IP packets, providing
@@ -105,7 +96,7 @@ config NET_TCP_NWRBCHAINS
 	int "Number of pre-allocated I/O buffer chain heads"
 	default 8
 	---help---
-		These tiny nodes are used as "containers" to support queueing of
+		These tiny nodes are used as "containers" to support queuing of
 		TCP write buffers.  This setting will limit the number of TCP write
 		operations that can be "in-flight" at any give time.  So a good
 		choice for this value would be the same as the maximum number of
@@ -155,6 +146,16 @@ config NET_TCPBACKLOG
 	---help---
 		Incoming connections pend in a backlog until accept() is called.
 		The size of the backlog is selected when listen() is called.
+
+if NET_TCPBACKLOG
+
+config NET_TCPBACKLOG_CONNS
+	int "TCP backlog conns threshold"
+	default 8
+	---help---
+		Maximum number of TCP backlog connections (all tasks).
+
+endif # NET_TCPBACKLOG
 
 config NET_TCP_SPLIT
 	bool "Enable packet splitting"

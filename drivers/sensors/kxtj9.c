@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/sensors/kxtj9.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * This driver derives from the Motorola Moto Z MDK:
@@ -48,6 +48,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/sensors/kxtj9.h>
@@ -303,7 +304,7 @@ static void kxtj9_soft_reset(FAR struct kxtj9_dev_s *priv)
 
   /* Delay 10ms for the accel parts to re-initialize */
 
-  usleep(10000);
+  nxsig_usleep(10000);
 }
 
 /****************************************************************************
@@ -344,9 +345,9 @@ static int kxtj9_configure(FAR struct kxtj9_dev_s *priv, uint8_t odr)
 
   do
     {
-      ret = sem_wait(&priv->exclsem);
+      ret = nxsem_wait(&priv->exclsem);
     }
-  while (ret < 0 && errno == EINTR);
+  while (ret == -EINTR);
 
   kxtj9_soft_reset(priv);
   kxtj9_set_mode_standby(priv);
@@ -377,7 +378,7 @@ static int kxtj9_configure(FAR struct kxtj9_dev_s *priv, uint8_t odr)
   priv->int_ctrl = KXTJ9_IEN | KXTJ9_IEA | KXTJ9_IEL;
   kxtj9_reg_write(priv, INT_CTRL1, priv->int_ctrl);
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return 0;
 }
 
@@ -397,9 +398,9 @@ static int kxtj9_enable(FAR struct kxtj9_dev_s *priv, bool on)
 
   do
     {
-      ret = sem_wait(&priv->exclsem);
+      ret = nxsem_wait(&priv->exclsem);
     }
-  while (ret < 0 && errno == EINTR);
+  while (ret == -EINTR);
 
   if (!on && priv->power_enabled)
     {
@@ -423,7 +424,7 @@ static int kxtj9_enable(FAR struct kxtj9_dev_s *priv, bool on)
       sninfo("KXTJ9 in operating mode\n");
     }
 
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 
@@ -444,9 +445,9 @@ static int kxtj9_read_sensor_data(FAR struct kxtj9_dev_s *priv,
 
   do
     {
-      ret = sem_wait(&priv->exclsem);
+      ret = nxsem_wait(&priv->exclsem);
     }
-  while (ret < 0 && errno == EINTR);
+  while (ret == -EINTR);
 
   kxtj9_reg_read(priv, XOUT_L, (uint8_t *)acc_data, 6);
 
@@ -459,7 +460,7 @@ static int kxtj9_read_sensor_data(FAR struct kxtj9_dev_s *priv,
   /* Read INT_REL to clear interrupt status */
 
   kxtj9_reg_read(priv, INT_REL, &data, 1);
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
 
   /* Feed sensor data to entropy pool */
 
@@ -670,7 +671,7 @@ int kxtj9_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
 
   priv->i2c     = i2c;
   priv->address = address;
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
 
   /* Register the character driver */
 

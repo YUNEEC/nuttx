@@ -151,6 +151,16 @@
 #  undef CONFIG_UART5_SERIAL_CONSOLE
 #  undef CONFIG_UART6_SERIAL_CONSOLE
 #  define HAVE_SERIAL_CONSOLE 1
+#elif defined(CONFIG_NO_SERIAL_CONSOLE)
+#  undef CONFIG_UART0_SERIAL_CONSOLE
+#  undef CONFIG_UART1_SERIAL_CONSOLE
+#  undef CONFIG_UART2_SERIAL_CONSOLE
+#  undef CONFIG_UART3_SERIAL_CONSOLE
+#  undef CONFIG_UART4_SERIAL_CONSOLE
+#  undef CONFIG_UART5_SERIAL_CONSOLE
+#  undef CONFIG_UART6_SERIAL_CONSOLE
+#  undef CONFIG_UART7_SERIAL_CONSOLE
+#  undef HAVE_SERIAL_CONSOLE
 #else
 #  warning "No valid CONFIG_UARTn_SERIAL_CONSOLE Setting"
 #  undef CONFIG_UART0_SERIAL_CONSOLE
@@ -188,14 +198,14 @@ extern "C"
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_lowsetup
+ * Name: tiva_lowsetup
  *
  * Description:
  *   Called at the very beginning of _start.  Performs low level initialization.
  *
  ****************************************************************************/
 
-void up_lowsetup(void);
+void tiva_lowsetup(void);
 
 #if defined(__cplusplus)
 }

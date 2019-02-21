@@ -14,14 +14,13 @@ choice
 		Virtual COM Port:
 
 		Advantage: Use the ST-Link as a console. No Extra wiring
-		neded.
+		needed.
 
-		Disdvantage: Not the best choice for initanl bring up.
+		Disdvantage: Not the best choice for initial bring up.
 
 		ARDUINO Connector:
 
-		Advantage: You have a shield so it is
-		easy.
+		Advantage: You have a shield so it is easy.
 
 		Disdvantage: You loose the use of the
 		other functions on PC6, PC7
@@ -40,12 +39,24 @@ choice
 				STM32F7
 			MORPHO   FUNCTION  GPIO
 			-------- --------- -----
-			CN12-64  USART8_RX PE0
-			CN11-61  USART8_TX PE1
+			CN12-64  UART8_RX  PE0
+			CN11-61  UART8_TX  PE1
 			-------- --------- -----
 
+					OR
+
+		Morpho Connector UART4:
+
+				STM32F7
+			MORPHO   FUNCTION  GPIO
+			-------- --------- -----
+			CN11-30  UART4_RX  PA0
+			CN11-28  UART4_TX  PA1
+			-------- --------- -----
+			Note: SB13 must be removed to disable Ethernet.
+
 config NUCLEO_CONSOLE_ARDUINO
-	bool "ARDUINO Connector"
+	bool "Arduino Connector"
 	select STM32F7_USART6
 	select USART6_SERIALDRIVER
 	select USART6_SERIAL_CONSOLE
@@ -62,6 +73,12 @@ config NUCLEO_CONSOLE_MORPHO
 	select UART8_SERIALDRIVER
 	select UART8_SERIAL_CONSOLE
 
+config NUCLEO_CONSOLE_MORPHO_UART4
+	bool "Morpho Connector UART4"
+	select STM32F7_UART4
+	select UART4_SERIALDRIVER
+	select UART4_SERIAL_CONSOLE
+
 config NUCLEO_CONSOLE_NONE
 	bool "No Console"
 
@@ -71,7 +88,7 @@ config NUCLEO_SPI_TEST
 	bool "Enable SPI test"
 	default n
 	---help---
-		Enable Spi test - initalize and configure SPI to send
+		Enable Spi test - initialize and configure SPI to send
 		NUCLEO_SPI_TEST_MESSAGE text. The text is sent on the
 		selected SPI Buses with the configured parameters.
 		Note the CS lines will not be asserted.

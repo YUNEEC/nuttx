@@ -310,47 +310,21 @@
  * if we set aside more DMA channels/streams.
  *
  * SDIO DMA
- *   DMAMAP_SDIO_1 = Channel 4, Stream 3
- *   DMAMAP_SDIO_2 = Channel 4, Stream 6
+ *   DMAMAP_SDIO_1      = Channel 4, Stream 3
+ *   DMAMAP_SDIO_2      = Channel 4, Stream 6
  */
 
 #define DMAMAP_SDIO       DMAMAP_SDIO_1
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-/************************************************************************************
- * Name: stm32_boardinitialize
+/* USART6
  *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
+ *   DMAMAP_USART6_RX_1 = Channel 5, Stream1
+ *   DMAMAP_USART6_RX_2 = Channel 5, Stream2
+ *   DMAMAP_USART6_TX_1 = Channel 5, Stream6
+ *   DMAMAP_USART6_TX_2 = Channel 5, Stream7
+ */
 
-void stm32_boardinitialize(void);
+#define DMAMAP_USART6_RX  DMAMAP_USART6_RX_1
+#define DMAMAP_USART6_TX  DMAMAP_USART6_TX_1
 
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif /* __CONFIGS_OLIMEX_STM32_P407_INCLUDE_BOARD_H */

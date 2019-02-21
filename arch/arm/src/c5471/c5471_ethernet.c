@@ -1,7 +1,8 @@
 /****************************************************************************
  * arch/arm/src/c5471/c5471_ethernet.c
  *
- *   Copyright (C) 2007, 2009-2010, 2014-2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2009-2010, 2014-2015, 2017-2018 Gregory Nutt. All
+ *     rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Based one a C5471 Linux driver and released under this BSD license with
@@ -82,18 +83,18 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Work queue support is required in this configuration (CONFIG_SCHED_WORKQUEUE)
-#else
-
-  /* Use the low priority work queue if possible */
-
-#  if defined(CONFIG_C5471_HPWORK)
-#    define ETHWORK HPWORK
-#  elif defined(CONFIG_C5471_LPWORK)
-#    define ETHWORK LPWORK
-#  else
-#    error Neither CONFIG_C5471_HPWORK nor CONFIG_C5471_LPWORK defined
-#  endif
 #endif
+
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
+
+#define ETHWORK LPWORK
 
 /* CONFIG_C5471_NET_NINTERFACES determines the number of physical interfaces
  * that will be supported.
@@ -301,7 +302,7 @@
 
 /* A single packet buffer is used */
 
-static uint8_t g_pktbuf[MAX_NET_DEV_MTU + CONFIG_NET_GUARDSIZE];
+static uint8_t g_pktbuf[MAX_NETDEV_PKTSIZE + CONFIG_NET_GUARDSIZE];
 
 /* The c5471_driver_s encapsulates all state information for a single c5471
  * hardware interface
@@ -420,7 +421,7 @@ static int c5471_ifdown(struct net_driver_s *dev);
 static void c5471_txavail_work(FAR void *arg);
 static int c5471_txavail(struct net_driver_s *dev);
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 static int c5471_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -439,7 +440,7 @@ static void c5471_macassign(struct c5471_driver_s *priv);
 /****************************************************************************
  * Name: c5471_dumpbuffer
  *
- * Description
+ * Description:
  *   Debug only
  *
  ****************************************************************************/
@@ -461,7 +462,7 @@ static inline void c5471_dumpbuffer(const char *msg, const uint8_t *buffer,
 /****************************************************************************
  * Name: c5471_mdtxbit
  *
- * Description
+ * Description:
  *   A helper routine used when serially communicating with the c547X's
  *   external ethernet transeiver device. GPIO pins are connected to the
  *   transeiver's MDCLK and MDIO pins and are used to accomplish the serial
@@ -528,7 +529,7 @@ static void c5471_mdtxbit (int bit_state)
 /****************************************************************************
  * Name: c5471_mdrxbit
  *
- * Description
+ * Description:
  *    A helper routine used when serially communicating with the c547X's
  *    external ethernet transeiver device. GPIO pins are connected to the
  *    transeiver's MDCLK and MDIO pins and are used to accomplish the serial
@@ -589,7 +590,7 @@ static int c5471_mdrxbit (void)
 /****************************************************************************
  * Name: c5471_mdwrite
  *
- * Description
+ * Description:
  *    A helper routine used when serially communicating with the c547X's
  *    external ethernet transeiver device. GPIO pins are connected to the
  *    transeiver's MDCLK and MDIO pins and are used to accomplish the serial
@@ -651,7 +652,7 @@ static void c5471_mdwrite (int adr, int reg, int data)
 /****************************************************************************
  * Name: c5471_mdread
  *
- * Description
+ * Description:
  *    A helper routine used when serially communicating with the c547X's
  *    external ethernet transeiver device. GPIO pins are connected to the
  *    transeiver's MDCLK and MDIO pins and are used to accomplish the serial
@@ -716,7 +717,7 @@ static int c5471_mdread (int adr, int reg)
 /****************************************************************************
  * Name: c5471_phyinit
  *
- * Description
+ * Description:
  *   The c547X EVM board uses a Lucent LU3X31T-T64 transeiver device to
  *   handle the physical layer (PHY). It's a h/w block that on the one end
  *   offers a Media Independent Interface (MII) which is connected to the
@@ -820,7 +821,7 @@ static int c5471_phyinit (void)
 /****************************************************************************
  * Name: c5471_inctxcpu
  *
- * Description
+ * Description:
  *
  ****************************************************************************/
 
@@ -843,7 +844,7 @@ static inline void c5471_inctxcpu(struct c5471_driver_s *priv)
 /****************************************************************************
  * Name: c5471_incrxcpu
  *
- * Description
+ * Description:
  *
  ****************************************************************************/
 
@@ -870,7 +871,7 @@ static inline void c5471_incrxcpu(struct c5471_driver_s *priv)
  *   Start hardware transmission.  Called either from the txdone interrupt
  *   handling or from watchdog based polling.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1004,7 +1005,7 @@ static int c5471_transmit(struct c5471_driver_s *priv)
  *   2. When the preceding TX packet send timesout and the interface is reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1046,19 +1047,22 @@ static int c5471_txpoll(struct net_driver_s *dev)
         }
 #endif /* CONFIG_NET_IPv6 */
 
-      /* Send the packet */
-
-      c5471_transmit(priv);
-
-      /* Check if the ESM has let go of the RX descriptor giving us access
-       * rights to submit another Ethernet frame.
-       */
-
-      if ((EIM_TXDESC_OWN_HOST & getreg32(priv->c_rxcpudesc)) != 0)
+      if (!devif_loopback(&priv->c_dev))
         {
-          /* No, then return non-zero to terminate the poll */
+          /* Send the packet */
 
-          return 1;
+          c5471_transmit(priv);
+
+          /* Check if the ESM has let go of the RX descriptor giving us access
+           * rights to submit another Ethernet frame.
+           */
+
+          if ((EIM_TXDESC_OWN_HOST & getreg32(priv->c_rxcpudesc)) != 0)
+            {
+              /* No, then return non-zero to terminate the poll */
+
+              return 1;
+            }
         }
     }
 
@@ -1075,7 +1079,7 @@ static int c5471_txpoll(struct net_driver_s *dev)
  * Description:
  *   An interrupt was received indicating that the last RX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1177,7 +1181,7 @@ static void c5471_rxstatus(struct c5471_driver_s *priv)
  * Description:
  *   An interrupt was received indicating the availability of a new RX packet
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1224,7 +1228,7 @@ static void c5471_receive(struct c5471_driver_s *priv)
 
       /* Check if the received packet will fit within the network packet buffer */
 
-      if (packetlen < (CONFIG_NET_ETH_MTU + 4))
+      if (packetlen < (CONFIG_NET_ETH_PKTSIZE + 4))
         {
           /* Get the packet memory from words #2 and #3 of descriptor */
 
@@ -1285,7 +1289,7 @@ static void c5471_receive(struct c5471_driver_s *priv)
    * to the network for processing.
    */
 
-  if (packetlen > 0 && packetlen < CONFIG_NET_ETH_MTU)
+  if (packetlen > 0 && packetlen < CONFIG_NET_ETH_PKTSIZE)
     {
       /* Set amount of data in priv->c_dev.d_len. */
 
@@ -1420,7 +1424,7 @@ static void c5471_receive(struct c5471_driver_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1517,7 +1521,7 @@ static void c5471_txstatus(struct c5471_driver_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1544,7 +1548,7 @@ static void c5471_txdone(struct c5471_driver_s *priv)
  * Description:
  *   Perform interrupt related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() was called.
  *
  * Returned Value:
@@ -1624,7 +1628,7 @@ static void c5471_interrupt_work(FAR void *arg)
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -1673,7 +1677,7 @@ static int c5471_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1714,7 +1718,7 @@ static void c5471_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1750,7 +1754,7 @@ static void c5471_txtimeout_expiry(int argc, wdparm_t arg, ...)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1790,7 +1794,7 @@ static void c5471_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1818,7 +1822,7 @@ static void c5471_poll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1882,7 +1886,7 @@ static int c5471_ifup(struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1935,7 +1939,7 @@ static int c5471_ifdown(struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -1980,7 +1984,7 @@ static void c5471_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2017,7 +2021,7 @@ static int c5471_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -2028,7 +2032,7 @@ static int c5471_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct c5471_driver_s *priv = (FAR struct c5471_driver_s *)dev->d_private;
@@ -2047,7 +2051,7 @@ static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -2058,7 +2062,7 @@ static int c5471_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int c5471_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   FAR struct c5471_driver_s *priv = (FAR struct c5471_driver_s *)dev->d_private;
@@ -2073,7 +2077,7 @@ static int c5471_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 /****************************************************************************
  * Name: c5471_eimreset
  *
- * Description
+ * Description:
  *   The C547x docs states that a module should generally be reset according
  *   to the following algorithm:
  *
@@ -2121,7 +2125,7 @@ static void c5471_eimreset (struct c5471_driver_s *priv)
 /****************************************************************************
  * Name: c5471_eimconfig
  *
- * Description
+ * Description:
  *    Assumes that all registers are currently in the power-up reset state.
  *    This routine then modifies that state to provide our specific ethernet
  *    configuration.
@@ -2332,7 +2336,7 @@ static void c5471_eimconfig(struct c5471_driver_s *priv)
 /****************************************************************************
  * Name: c5471_reset
  *
- * Description
+ * Description:
  *
  ****************************************************************************/
 
@@ -2352,7 +2356,7 @@ static void c5471_reset(struct c5471_driver_s *priv)
 /****************************************************************************
  * Name: c5471_macassign
  *
- * Description
+ * Description:
  *    Set the mac address of our CPU ether port so that when the SWITCH
  *    receives packets from the PROMISCUOUS ENET0 it will switch them to the
  *    CPU port and cause a packet arrival event on the Switch's CPU TX queue
@@ -2410,7 +2414,7 @@ static void c5471_macassign(struct c5471_driver_s *priv)
  * Description:
  *   Initialize the Ethernet driver
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -2441,13 +2445,13 @@ void up_netinitialize(void)
   g_c5471[0].c_dev.d_ifup    = c5471_ifup;      /* I/F down callback */
   g_c5471[0].c_dev.d_ifdown  = c5471_ifdown;    /* I/F up (new IP address) callback */
   g_c5471[0].c_dev.d_txavail = c5471_txavail;   /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   g_c5471[0].c_dev.d_addmac  = c5471_addmac;    /* Add multicast MAC address */
   g_c5471[0].c_dev.d_rmmac   = c5471_rmmac;     /* Remove multicast MAC address */
 #endif
   g_c5471[0].c_dev.d_private = (void *)g_c5471; /* Used to recover private state from dev */
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmissions */
 
   g_c5471[0].c_txpoll        = wd_create();     /* Create periodic poll timer */
   g_c5471[0].c_txtimeout     = wd_create();     /* Create TX timeout timer */

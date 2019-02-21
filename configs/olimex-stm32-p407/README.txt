@@ -13,6 +13,7 @@ Contents
   o Board Support
   o microSD Card Interface
   o OTGFS Host
+  o Protect Mode Build
   o Configurations
 
 Board Support
@@ -20,7 +21,7 @@ Board Support
 
 The following peripherals are available in this configuration.
 
- - LEDs:       Show the sytem status
+ - LEDs:       Show the system status
 
  - Buttons:    TAMPER-button, WKUP-button, J1-Joystick (consists of RIGHT-,
                UP-, LEFT-, DOWN-, and CENTER-button).
@@ -43,9 +44,9 @@ The following peripherals are available in this configuration.
 
  - LCD:        Nokia 6610. This is similar the Nokia 6100 LCD used on other
                Olimex boards.  There is a driver for that LCD at
-               drivers/lcd/nokia6100.c, however, it is not properly
-               integrated.  It uses a 9-bit SPI interface which is difficult
-               to get working properly.
+               Obsoleted/nuttx/drivers/lcd/nokia6100.c, however, it was removed
+               because it was not properly integrated.  It uses a 9-bit SPI
+               interface which is difficult to get working properly.
 
 - External     Support is included for the onboard SRAM.  It uses SRAM
   SRAM:        settings from another board that might need to be tweaked.
@@ -98,7 +99,7 @@ microSD Card Interface
     Device Drivers -> MMC/SD Driver Support
       CONFIG_MMCSD=y                           : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                    : One slot per driver instance
-      # CONFIG_MMCSD_HAVECARDDETECT is not set : No card-detect GPIO
+      # CONFIG_MMCSD_HAVE_CARDDETECT is not set : No card-detect GPIO
       # CONFIG_MMCSD_MMCSUPPORT is not set     : Interferes with some SD cards
       # CONFIG_MMCSD_SPI is not set            : No SPI-based MMC/SD support
       CONFIG_MMCSD_SDIO=y                      : SDIO-based MMC/SD support
@@ -227,8 +228,96 @@ OTGFS Host
   flaky.  Sometimes the LEDs become very bright (indicating that it is being
   swamped with interrupts).  Data input is not clean with apps/examples/hidkbd:
   There are missing characters and sometimes duplicated characters.  This implies
-  some logic issues, probably in drivers/usbhost/usbhost_hidkbd, with polling and
-  data filtering.
+  some logic issues, probably in drivers/usbhost/usbhost_hidkbd.c, with polling
+  and data filtering.
+
+Protected Mode Build
+====================
+
+  The "protected" mode build uses the Cormtex-M4 MPU to separate the FLASH and
+  SRAM into kernel-mode and user-mode regions.  The kernel mode regions are
+  then protected from any errant or mischievous behavior from user-space
+  applications.
+
+  Common notes for all protected mode builds follow:
+
+  1. It is recommends to use a special make command; not just 'make' but make
+     with the following two arguments:
+
+       make pass1 pass2
+
+     In the normal case (just 'make'), make will attempt to build both user-
+     and kernel-mode blobs more or less interleaved.  That actual works!
+     However, for me it is very confusing so I prefer the above make command:
+     Make the user-space binaries first (pass1), then make the kernel-space
+     binaries (pass2)
+
+  2. At the end of the build, there will be several files in the top-level
+     NuttX build directory:
+
+       PASS1:
+         nuttx_user.elf    - The pass1 user-space ELF file
+         nuttx_user.hex    - The pass1 Intel HEX format file (selected in defconfig)
+         User.map          - Symbols in the user-space ELF file
+
+       PASS2:
+         nuttx             - The pass2 kernel-space ELF file
+         nuttx.hex         - The pass2 Intel HEX file (selected in defconfig)
+         System.map        - Symbols in the kernel-space ELF file
+
+       The J-Link programmer will except files in .hex, .mot, .srec, and .bin
+       formats.
+
+  3. Combining .hex files.  If you plan to use the .hex files with your
+     debugger or FLASH utility, then you may need to combine the two hex
+     files into a single .hex file.  Here is how you can do that.
+
+     a. The 'tail' of the nuttx.hex file should look something like this
+        (with my comments added):
+
+          $ tail nuttx.hex
+          # 00, data records
+          ...
+          :10 9DC0 00 01000000000800006400020100001F0004
+          :10 9DD0 00 3B005A0078009700B500D400F300110151
+          :08 9DE0 00 30014E016D0100008D
+          # 05, Start Linear Address Record
+          :04 0000 05 0800 0419 D2
+          # 01, End Of File record
+          :00 0000 01 FF
+
+        Use an editor such as vi to remove the 05 and 01 records.
+
+     b. The 'head' of the nuttx_user.hex file should look something like
+        this (again with my comments added):
+
+          $ head nuttx_user.hex
+          # 04, Extended Linear Address Record
+          :02 0000 04 0801 F1
+          # 00, data records
+          :10 8000 00 BD89 01084C800108C8110208D01102087E
+          :10 8010 00 0010 00201C1000201C1000203C16002026
+          :10 8020 00 4D80 01085D80010869800108ED83010829
+          ...
+
+        Nothing needs to be done here.  The nuttx_user.hex file should
+        be fine.
+
+     c. Combine the edited nuttx.hex and un-edited nuttx_user.hex
+        file to produce a single combined hex file:
+
+        $ cat nuttx.hex nuttx_user.hex >combined.hex
+
+     Then use the combined.hex file with the to write the FLASH image. With
+     GDB this would be:
+
+       gdb> mon reset
+       gdb> mon halt
+       gdb> mon clrbp
+       gdb> load combined.hex
+
+     If you do this a lot, you will probably want to invest a little time
+     to develop a tool to automate these steps.
 
 Configurations
 ==============
@@ -238,9 +327,7 @@ Information Common to All Configurations
 Each Olimex STM32-P407 configuration is maintained in a sub-directory and can be
 selected as follow:
 
-    cd tools
-    ./configure.sh olimex-stm32-p407/<subdir>
-    cd -
+    tools/configure.sh olimex-stm32-p407/<subdir>
 
 Where <subdir> is one of the configuration sub-directories listed in the
 following section.
@@ -287,93 +374,135 @@ Configuration sub-directories
 The <subdir> that is provided above as an argument to the tools/configure.sh
 must be is one of the following.
 
+  dhtxx:
+
+    Configuration added by Abdelatif Guettouche for testing the the DHTxx
+    sensor.  This configuration expects this setup:
+
+      DHTXX_PIN_OUTPUT   PG9
+      DHTXX_PIN_INPUT    PG9
+
+    The STM32 free-running timer is also required.
+
+  hidkbd
+  
+     This is another NSH configuration that supports a USB HID Keyboard
+     device and the HID keyboard example at apps/examples/hidkbd.
+
+    STATUS:
+      2018-10-07:  Not all keyboards will connect successfully. I have not
+        looked into the details but it may be that those keyboards are not
+        compatible with the driver (which only accepts "boot" keyboards).
+        Also, when typing input into the HID keyboard, characters are often
+        missing and sometimes duplicated.  This is like some issue with the
+        read logic of drivers/usbhost_hidkbc.c.
+
+  kelf:
+
+    This is a protected mode version of the apps/examples/elf test of
+    loadable ELF programs.  This version is unique because the ELF programs
+    are loaded into user space.
+
+    NOTES:
+
+    1. See build recommendations and instructions for combining the .hex
+       files under the section entitled "Protected Mode Build" above.
+
+    2. Unlike other versions of apps/examples/elf configurations, the test
+       ELF programs are not provided internally on a ROMFS or CROMFS file
+       system.  This is due to the fact that those file systems are built in
+       user space and there is no mechanism in the build system to easily
+       get them into the kernel space.
+
+       Instead, the programs must be copied to a USB FLASH drive from your
+       host PC.  The programs can be found at apps/examples/elf/tests/romfs.
+       All of those files should be copied to the USB FLASH drive.  The
+       apps/example/elf will wait on power up until the USB FLASH drive
+       has been inserted and initialized.
+
+  kmodule:
+
+    This is a protected mode version of the apps/examples/module test of
+    loadable ELF kernel modules.  This version is unique because the ELF
+    programs are loaded into the protected kernel space.
+
+    NOTES:
+
+    1. See build recommendations and instructions for combining the .hex
+       files under the section entitled "Protected Mode Build" above.
+
+    2. Unlike other versions of apps/examples/module configurations, the test
+       ELF modules are not provided internally on a ROMFS or CROMFS file
+       system.  This is due to the fact that those file systems are built in
+       user space and there is no mechanism in the build system to easily
+       get them into the kernel space.
+
+       Instead, the module(s) must be copied to a USB FLASH drive from your
+       host PC.  The module(s) can be found at apps/examples/module/driver/fsroot.
+       All of those file(s) should be copied to the USB FLASH drive.  Like the
+       kelf configuration, the logic in apps/example/module will wait on power
+       up until the USB FLASH drive has been inserted and initialized.
+
+    STATUS:
+      2018-08-07:  After some struggle, the configuration appears to be
+        working correctly.
+
   knsh:
 
     This is identical to the nsh configuration below except that NuttX
     is built as a PROTECTED mode, monolithic module and the user applications
     are built separately.
 
-    It is recommends to use a special make command; not just 'make' but make
-    with the following two arguments:
-
-        make pass1 pass2
-
-    In the normal case (just 'make'), make will attempt to build both user-
-    and kernel-mode blobs more or less interleaved.  That actual works!
-    However, for me it is very confusing so I prefer the above make command:
-    Make the user-space binaries first (pass1), then make the kernel-space
-    binaries (pass2)
-
     NOTES:
 
-    1. At the end of the build, there will be several files in the top-level
-       NuttX build directory:
+    1. See build recommendations and instructions for combining the .hex
+       files under the section entitled "Protected Mode Build" above.
 
-       PASS1:
-         nuttx_user.elf    - The pass1 user-space ELF file
-         nuttx_user.hex    - The pass1 Intel HEX format file (selected in defconfig)
-         User.map          - Symbols in the user-space ELF file
+  module:
 
-       PASS2:
-         nuttx             - The pass2 kernel-space ELF file
-         nuttx.hex         - The pass2 Intel HEX file (selected in defconfig)
-         System.map        - Symbols in the kernel-space ELF file
+    A simple stripped down NSH configuration that was used for testing NuttX
+    OS modules using the test at apps/examples/module.  Key difference from
+    the nsh configuration include these additions to the configuration file:
 
-       The J-Link programmer will except files in .hex, .mot, .srec, and .bin
-       formats.
+      CONFIG_BOARDCTL_OS_SYMTAB=y
+      CONFIG_EXAMPLES_MODULE=y
+      CONFIG_EXAMPLES_MODULE_BUILTINFS=y
+      CONFIG_EXAMPLES_MODULE_DEVMINOR=0
+      CONFIG_EXAMPLES_MODULE_DEVPATH="/dev/ram0"
+      CONFIG_FS_ROMFS=y
+      CONFIG_LIBC_ARCH_ELF=y
+      CONFIG_MODULE=y
+      CONFIG_LIBC_MODLIB=y
+      CONFIG_MODLIB_MAXDEPEND=2
+      CONFIG_MODLIB_ALIGN_LOG2=2
+      CONFIG_MODLIB_BUFFERSIZE=128
+      CONFIG_MODLIB_BUFFERINCR=32
 
-    2. Combining .hex files.  If you plan to use the .hex files with your
-       debugger or FLASH utility, then you may need to combine the two hex
-       files into a single .hex file.  Here is how you can do that.
+     The could be followed may be added for testing shared libraries in the
+     FLAT build using apps/examples/sotest (assuming that you also have SD
+     card support enabled and that the SD card is mount at /mnt/sdcard):
 
-       a. The 'tail' of the nuttx.hex file should look something like this
-          (with my comments added):
+      CONFIG_LIBC_DLLFCN=y
+      CONFIG_EXAMPLES_SOTEST=y
+      CONFIG_EXAMPLES_SOTEST_BINDIR="/mnt/sdcard"
 
-            $ tail nuttx.hex
-            # 00, data records
-            ...
-            :10 9DC0 00 01000000000800006400020100001F0004
-            :10 9DD0 00 3B005A0078009700B500D400F300110151
-            :08 9DE0 00 30014E016D0100008D
-            # 05, Start Linear Address Record
-            :04 0000 05 0800 0419 D2
-            # 01, End Of File record
-            :00 0000 01 FF
+    NOTE: You must always have:
 
-          Use an editor such as vi to remove the 05 and 01 records.
+      CONFIG_STM32_CCMEXCLUDE=y
 
-       b. The 'head' of the nuttx_user.hex file should look something like
-          this (again with my comments added):
+    because code cannot be executed from CCM memory.
 
-            $ head nuttx_user.hex
-            # 04, Extended Linear Address Record
-            :02 0000 04 0801 F1
-            # 00, data records
-            :10 8000 00 BD89 01084C800108C8110208D01102087E
-            :10 8010 00 0010 00201C1000201C1000203C16002026
-            :10 8020 00 4D80 01085D80010869800108ED83010829
-            ...
-
-          Nothing needs to be done here.  The nuttx_user.hex file should
-          be fine.
-
-       c. Combine the edited nuttx.hex and un-edited nuttx_user.hex
-          file to produce a single combined hex file:
-
-          $ cat nuttx.hex nuttx_user.hex >combined.hex
-
-       Then use the combined.hex file with the to write the FLASH image.
-       If you do this a lot, you will probably want to invest a little time
-       to develop a tool to automate these steps.
+    STATUS:
+    2018-06-01: Configuration added.  Works perfectly.
 
   nsh:
 
     This is the NuttShell (NSH) using the NSH startup logic at
-    apps/examples/nsh.
+    apps/examples/nsh
 
     NOTES:
 
-    1. USB host support for USB FLASH sticks is enbabled.  See the notes
+    1. USB host support for USB FLASH sticks is enabled.  See the notes
        above under "OTGFS Host".
 
        STATUS: I have seen this work with some FLASH sticks but not with
@@ -415,6 +544,89 @@ must be is one of the following.
          CONFIG_EXAMPLES_SOTEST_DEVMINOR=1
          CONFIG_EXAMPLES_SOTEST_DEVPATH="/dev/ram1"
 
+  zmodem:
+
+    This configuration was used to test the zmodem utilities at
+    apps/system/zmodem.  Two serial ports are used in this configuration:
+
+      1. USART6 (RS232_1) is the serial console (because it does not support
+         hardware flow control). It is configured 115200 8N1.
+      2. USART3 (RS232_2) is the zmodem port and does require that hardware
+         flow control be enabled for use.  It is configured 9600 8N1.
+
+    On the target these will correspond to /dev/ttyS0 and /dev/ttyS1,
+    respectively.
+
+    It is possible to configure a system without hardware flow control and
+    using the same USART for both the serial console and for zmodem.
+    However, you would have to take extreme care with buffering and data
+    throughput considerations to assure that there is no Rx data overrun.
+
+    General usage instructions:
+
+    1. Common Setup
+
+      [on target]
+      nsh> mount -t vfat /dev/sda /mnt
+
+      [on Linux host]
+      $ sudo stty -F /dev/ttyS0 9600
+      $ sudo stty -F /dev/ttyS0 crtscts *
+      $ sudo stty -F /dev/ttyS0 raw
+      $ sudo stty -F /dev/ttyS0
+
+      * Because hardware flow control will be enabled on the target side
+        in this configuration.
+
+    2. Host-to-Target File Transfer
+
+      [on target]
+      nsh> rz
+
+      [on host]
+      $ sudo sz <filename> [-l nnnn] </dev/ttyS0 >/dev/ttyS0
+
+    Where <filename> is the file that you want to transfer. If -l nnnn is
+    not specified, then there will likely be packet buffer overflow errors.
+    nnnn should be set to a strictly less than CONFIG_SYSTEM_ZMODEM_PKTBUFSIZE.
+    All testing was performed with -l 512.
+
+    If you are using the NuttX implementation of rz and sz on the Linux host,
+    then the last command simplifies to just:
+
+      [on host]
+      $ cp README.txt /tmp/.
+      $ sudo ./sz -d /dev/ttyS1 README.txt
+
+    Assuming that /dev/ttyS0 is the serial and /dev/ttyS1 is the zmodem port
+    on the Linux host as well.  NOTE:  By default, files will be transferred
+    to and from the /tmp directory only.
+
+    Refer to the README file at apps/examples/zmodem for detailed information
+    about building rz/sz for the host and about zmodem usage in general.
+
+    3. Target-to-Host File Transfer
+
+      [on host]
+      $ rz </dev/ttyS0 >/dev/ttyS0
+
+    The transferred file will end up in the current directory.
+
+    If you are using the NuttX implementation of rz and sz on the Linux host,
+    then the last command simplifies to just:
+
+      [on host]
+      $ ./rz
+
+    The transferred file will lie in the /tmp directory.
+
+    Thn on the target side:
+
+      [on target]
+      nsh sz <filename>
+
+    Where <filename> is the file that you want to transfer.
+
 STATUS
 ======
 
@@ -427,7 +639,17 @@ STATUS
   feature configurations.
 
   CCM memory is not included in the heap (CONFIG_STM32_CCMEXCLUDE=y) because
-  it does not suport DMA, leaving only 128KiB for program usage.
+  it does not support DMA, leaving only 128KiB for program usage.
 
-2107-01-23:  Added the knsh configuration and support for the PROTECTED
+2017-01-23:  Added the knsh configuration and support for the PROTECTED
   build mode.
+
+2018-05-27:  Added the zmodem configuration.  Verified correct operation
+  with host-to-target transfers (using Linux sz command).  There appears
+  to be a problem using the NuttX sz command running on the host???
+
+2018-05-28:  Verified correct operation with target-to-host transfers (using
+  Linux rz command).  There appears to be a problem using the NuttX rz
+  command running on the host???
+
+2018-06-01: Added the module configuration.  Works perfectly.

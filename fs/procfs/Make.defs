@@ -1,7 +1,7 @@
 ############################################################################
 # fs/procfs/Make.defs
 #
-#   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2013, 2016-2017 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,11 +38,20 @@ ifeq ($(CONFIG_FS_PROCFS),y)
 
 ASRCS +=
 CSRCS += fs_procfs.c fs_procfsutil.c fs_procfsproc.c fs_procfsuptime.c
-CSRCS += fs_procfscpuload.c fs_procfskmm.c
+CSRCS += fs_procfscpuload.c fs_procfsmeminfo.c fs_procfsversion.c
+
+ifeq ($(CONFIG_SCHED_CRITMONITOR),y)
+CSRCS += fs_procfscritmon.c
+endif
 
 # Include procfs build support
 
 DEPPATH += --dep-path procfs
 VPATH += :procfs
+
+# To ensure version information is newest,
+# add fs_procfsversion to phony target for force rebuild
+
+.PHONY: fs_procfsversion$(OBJEXT)
 
 endif

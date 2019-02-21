@@ -7,12 +7,6 @@ Contents
 ^^^^^^^^
 
   Olimex LPC1766-STK development board
-  Development Environment
-  GNU Toolchain Options
-  IDEs
-  NuttX EABI "buildroot" Toolchain
-  NuttX OABI "buildroot" Toolchain
-  NXFLAT Toolchain
   LEDs
   Serial Console
   Using OpenOCD and GDB with an FT2232 JTAG emulator
@@ -163,188 +157,19 @@ Olimex LPC1766-STK development board
   MISO0 and MOSI0 are join via a 1K ohm resistor so the LCD appears to be
   write only.
 
-Development Environment
-^^^^^^^^^^^^^^^^^^^^^^^
+  STATUS:  The LCD driver was never properly integrated.  It was awkward
+  to use because it relied on a 9-bit SPI inteface (the 9th bit being
+  the command/data bit which is normally a discrete input).  All support
+  for the Nokia 6100 was removed on May 19, 2018.  That obsoleted
+  driver can be viewed in the nuttx/drivers/lcd and configs/olimex-lpc1766stk
+  directories of the Obsoleted repository.
 
-  Either Linux or Cygwin on Windows can be used for the development environment.
-  The source has been built only using the GNU toolchain (see below).  Other
-  toolchains will likely cause problems. Testing was performed using the Cygwin
-  environment.
-
-GNU Toolchain Options
-^^^^^^^^^^^^^^^^^^^^^
-
-  The NuttX make system has been modified to support the following different
-  toolchain options.
-
-  1. The CodeSourcery GNU toolchain,
-  2. The devkitARM GNU toolchain,
-  3. The NuttX buildroot Toolchain (see below).
-
-  All testing has been conducted using the NuttX buildroot toolchain.  However,
-  the make system is setup to default to use the devkitARM toolchain.  To use
-  the CodeSourcery or devkitARM toolchain, you simply need add one of the
-  following configuration options to your .config (or defconfig) file:
-
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYW=y   : CodeSourcery under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_CODESOURCERYL=y   : CodeSourcery under Linux
-    CONFIG_ARMV7M_TOOLCHAIN_DEVKITARM=y       : devkitARM under Windows
-    CONFIG_ARMV7M_TOOLCHAIN_BUILDROOT=y       : NuttX buildroot under Linux or Cygwin (default)
-
-  NOTE: the CodeSourcery (for Windows)and devkitARM are Windows native toolchains.
-  The CodeSourcey (for Linux) and NuttX buildroot toolchains are Cygwin and/or
-  Linux native toolchains. There are several limitations to using a Windows based
-  toolchain in a Cygwin environment.  The three biggest are:
-
-  1. The Windows toolchain cannot follow Cygwin paths.  Path conversions are
-     performed automatically in the Cygwin makefiles using the 'cygpath' utility
-     but you might easily find some new path problems.  If so, check out 'cygpath -w'
-
-  2. Windows toolchains cannot follow Cygwin symbolic links.  Many symbolic links
-     are used in Nuttx (e.g., include/arch).  The make system works around these
-     problems for the Windows tools by copying directories instead of linking them.
-     But this can also cause some confusion for you:  For example, you may edit
-     a file in a "linked" directory and find that your changes had no effect.
-     That is because you are building the copy of the file in the "fake" symbolic
-     directory.  If you use a Windows toolchain, you should get in the habit of
-     making like this:
-
-       make clean_context all
-
-     An alias in your .bashrc file might make that less painful.
-
-  NOTE 1: The CodeSourcery toolchain (2009q1) does not work with default optimization
-  level of -Os (See Make.defs).  It will work with -O0, -O1, or -O2, but not with
-  -Os.
-
-  NOTE 2: The devkitARM toolchain includes a version of MSYS make.  Make sure that
-  the paths to Cygwin's /bin and /usr/bin directories appear BEFORE the devkitARM
-  path or will get the wrong version of make.
-
-IDEs
-^^^^
-
-  NuttX is built using command-line make.  It can be used with an IDE, but some
-  effort will be required to create the project.
-
-  Makefile Build
-  --------------
-  Under Eclipse, it is pretty easy to set up an "empty makefile project" and
-  simply use the NuttX makefile to build the system.  That is almost for free
-  under Linux.  Under Windows, you will need to set up the "Cygwin GCC" empty
-  makefile project in order to work with Windows (Google for "Eclipse Cygwin" -
-  there is a lot of help on the internet).
-
-  Native Build
-  ------------
-  Here are a few tips before you start that effort:
-
-  1) Select the toolchain that you will be using in your .config file
-  2) Start the NuttX build at least one time from the Cygwin command line
-     before trying to create your project.  This is necessary to create
-     certain auto-generated files and directories that will be needed.
-  3) Set up include pathes:  You will need include/, arch/arm/src/lpc17xx,
-     arch/arm/src/common, arch/arm/src/armv7-m, and sched/.
-  4) All assembly files need to have the definition option -D __ASSEMBLY__
-     on the command line.
-
-  Startup files will probably cause you some headaches.  The NuttX startup file
-  is arch/arm/src/lpc17x/lpc17_vectors.S.
-
-NuttX EABI "buildroot" Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  A GNU GCC-based toolchain is assumed.  The PATH environment variable should
-  be modified to point to the correct path to the Cortex-M3 GCC toolchain (if
-  different from the default in your PATH variable).
-
-  If you have no Cortex-M3 toolchain, one can be downloaded from the NuttX
-  Bitbucket download site (https://bitbucket.org/nuttx/buildroot/downloads/).
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh olimex-lpc1766stk/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-eabi-defconfig-4.6.3 .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     binaries.
-
-  See the file configs/README.txt in the buildroot source tree.  That has more
-  details PLUS some special instructions that you will need to follow if you
-  are building a Cortex-M3 toolchain for Cygwin under Windows.
-
-  NOTE:  Unfortunately, the 4.6.3 EABI toolchain is not compatible with the
-  the NXFLAT tools.  See the top-level TODO file (under "Binary loaders") for
-  more information about this problem. If you plan to use NXFLAT, please do not
-  use the GCC 4.6.3 EABI toochain; instead use the GCC 4.3.3 OABI toolchain.
-  See instructions below.
-
-NuttX OABI "buildroot" Toolchain
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  The older, OABI buildroot toolchain is also available.  To use the OABI
-  toolchain:
-
-  1. When building the buildroot toolchain, either (1) modify the cortexm3-eabi-defconfig-4.6.3
-     configuration to use EABI (using 'make menuconfig'), or (2) use an exising OABI
-     configuration such as cortexm3-defconfig-4.3.3
-
-  2. Modify the Make.defs file to use the OABI conventions:
-
-    +CROSSDEV = arm-nuttx-elf-
-    +ARCHCPUFLAGS = -mtune=cortex-m3 -march=armv7-m -mfloat-abi=soft
-    +NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-gotoff.ld -no-check-sections
-    -CROSSDEV = arm-nuttx-eabi-
-    -ARCHCPUFLAGS = -mcpu=cortex-m3 -mthumb -mfloat-abi=soft
-    -NXFLATLDFLAGS2 = $(NXFLATLDFLAGS1) -T$(TOPDIR)/binfmt/libnxflat/gnu-nxflat-pcrel.ld -no-check-sections
-
-NXFLAT Toolchain
-^^^^^^^^^^^^^^^^
-
-  If you are *not* using the NuttX buildroot toolchain and you want to use
-  the NXFLAT tools, then you will still have to build a portion of the buildroot
-  tools -- just the NXFLAT tools.  The buildroot with the NXFLAT tools can
-  be downloaded from the NuttX Bitbucket download site
-  (https://bitbucket.org/nuttx/nuttx/downloads/).
-
-  This GNU toolchain builds and executes in the Linux or Cygwin environment.
-
-  1. You must have already configured Nuttx in <some-dir>/nuttx.
-
-     cd tools
-     ./configure.sh lpcxpresso-lpc1768/<sub-dir>
-
-  2. Download the latest buildroot package into <some-dir>
-
-  3. unpack the buildroot tarball.  The resulting directory may
-     have versioning information on it like buildroot-x.y.z.  If so,
-     rename <some-dir>/buildroot-x.y.z to <some-dir>/buildroot.
-
-  4. cd <some-dir>/buildroot
-
-  5. cp configs/cortexm3-defconfig-nxflat .config
-
-  6. make oldconfig
-
-  7. make
-
-  8. Make sure that the PATH variable includes the path to the newly built
-     NXFLAT binaries.
+  The obsoleted driver attempted to created the 9th bit on-they-flay in the
+  data by expanding the 8-bit data to 16-bits with the 9th bit managed.  I
+  no longer believe that is the correct technical approach.  I now believe
+  that the best solution would be to provide custom management of the 9th
+  data bit inside of the low-level MCU driver, the LPC17 SPI driver in thisi
+  case, via a configration option on the low-level driver.
 
 LEDs
 ^^^^
@@ -684,13 +509,6 @@ Olimex LPC1766-STK Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
     Individual subsystems can be enabled:
 
       CONFIG_LPC17_MAINOSC=y
@@ -745,36 +563,40 @@ Olimex LPC1766-STK Configuration Options
 
     CONFIG_CAN_EXTID - Enables support for the 29-bit extended ID.  Default
       Standard 11-bit IDs.
-    CONFIG_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN1 is defined.
-    CONFIG_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN2 is defined.
-    CONFIG_CAN1_DIVISOR - CAN1 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN2_DIVISOR - CAN2 is clocked at CCLK divided by this number.
-      (the CCLK frequency is divided by this number to get the CAN clock).
-      Options = {1,2,4,6}. Default: 4.
-    CONFIG_CAN_TSEG1 - The number of CAN time quanta in segment 1. Default: 6
-    CONFIG_CAN_TSEG2 - the number of CAN time quanta in segment 2. Default: 7
+    CONFIG_LPC17_CAN1_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN1
+      is defined.
+    CONFIG_LPC17_CAN2_BAUD - CAN1 BAUD rate.  Required if CONFIG_LPC17_CAN2
+      is defined.
+    CONFIG_LPC17_CAN1_DIVISOR - CAN1 is clocked at CCLK divided by this
+      number. (the CCLK frequency is divided by this number to get the CAN
+      clock). Options = {1,2,4,6}. Default: 4.
+    CONFIG_LPC17_CAN2_DIVISOR - CAN2 is clocked at CCLK divided by this
+      number.  (the CCLK frequency is divided by this number to get the CAN
+      clock).  Options = {1,2,4,6}. Default: 4.
+    CONFIG_LPC17_CAN_TSEG1 - The number of CAN time quanta in segment 1.
+      Default: 6
+    CONFIG_LPC17_CAN_TSEG2 = the number of CAN time quanta in segment 2.
+      Default: 7
 
   LPC17xx specific PHY/Ethernet device driver settings.  These setting
   also require CONFIG_NET and CONFIG_LPC17_ETHERNET.
 
     CONFIG_ETH0_PHY_KS8721 - Selects Micrel KS8721 PHY
-    CONFIG_PHY_AUTONEG - Enable auto-negotion
-    CONFIG_PHY_SPEED100 - Select 100Mbit vs. 10Mbit speed.
-    CONFIG_PHY_FDUPLEX - Select full (vs. half) duplex
+    CONFIG_LPC17_PHY_AUTONEG - Enable auto-negotion
+    CONFIG_LPC17_PHY_SPEED100 - Select 100Mbit vs. 10Mbit speed.
+    CONFIG_LPC17_PHY_FDUPLEX - Select full (vs. half) duplex
 
-    CONFIG_NET_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
-    CONFIG_NET_NTXDESC - Configured number of Tx descriptors. Default: 18
-    CONFIG_NET_NRXDESC - Configured number of Rx descriptors. Default: 18
-    CONFIG_NET_WOL - Enable Wake-up on Lan (not fully implemented).
+    CONFIG_LPC17_EMACRAM_SIZE - Size of EMAC RAM.  Default: 16Kb
+    CONFIG_LPC17_ETH_NTXDESC - Configured number of Tx descriptors. Default: 18
+    CONFIG_LPC17_ETH_NRXDESC - Configured number of Rx descriptors. Default: 18
+    CONFIG_LPC17_ETH_WOL - Enable Wake-up on Lan (not fully implemented).
     CONFIG_NET_REGDEBUG - Enabled low level register debug.  Also needs
       CONFIG_DEBUG_FEATURES.
     CONFIG_NET_DUMPPACKET - Dump all received and transmitted packets.
       Also needs CONFIG_DEBUG_FEATURES.
-    CONFIG_NET_HASH - Enable receipt of near-perfect match frames.
+    CONFIG_LPC17_ETH_HASH - Enable receipt of near-perfect match frames.
     CONFIG_LPC17_MULTICAST - Enable receipt of multicast (and unicast) frames.
-      Automatically set if CONFIG_NET_IGMP is selected.
+      Automatically set if CONFIG_NET_MCASTGROUP is selected.
 
   LPC17xx USB Device Configuration
 
@@ -796,17 +618,17 @@ Olimex LPC1766-STK Configuration Options
       Define if the hardware  implementation does not support the LED output
 
   LPC17xx USB Host Configuration
-    CONFIG_USBHOST_OHCIRAM_SIZE
+    CONFIG_LPC17_OHCIRAM_SIZE
       Total size of OHCI RAM (in AHB SRAM Bank 1)
-    CONFIG_USBHOST_NEDS
+    CONFIG_LP17_USBHOST_NEDS
       Number of endpoint descriptors
-    CONFIG_USBHOST_NTDS
+    CONFIG_LP17_USBHOST_NTDS
       Number of transfer descriptors
-    CONFIG_USBHOST_TDBUFFERS
+    CONFIG_LPC17_USBHOST_TDBUFFERS
       Number of transfer descriptor buffers
-    CONFIG_USBHOST_TDBUFSIZE
+    CONFIG_LPC17_USBHOST_TDBUFSIZE
       Size of one transfer descriptor buffer
-    CONFIG_USBHOST_IOBUFSIZE
+    CONFIG_LPC17_USBHOST_IOBUFSIZE
       Size of one end-user I/O buffer.  This can be zero if the
       application can guarantee that all end-user I/O buffers
       reside in AHB SRAM.
@@ -820,9 +642,7 @@ USB host operations.  To make these modifications, do the following:
 1. First configure to build the NSH configuration from the top-level
    NuttX directory:
 
-     cd tools
      ./configure olimex-lpc1766stk/nsh
-     cd ..
 
 2. Modify the top-level .config file to enable USB host using:
 
@@ -862,9 +682,7 @@ Common Configuration Notes
   1. Each Olimex LPC1766-STK configuration is maintained in a
      sub-directory and can be selected as follow:
 
-       cd tools
-       ./configure.sh olimex-lpc1766stk/<subdir>
-       cd -
+       tools/configure.sh olimex-lpc1766stk/<subdir>
 
      Where <subdir> is one of the sub-directories identified in the following
      paragraphs.
@@ -928,8 +746,28 @@ Configuration Sub-Directories
        CONFIG_DEBUG_INFO=y
        CONFIG_DEBUG_FTPC=y
 
+  hidkbd:
+    This configuration directory supports a variant of an NSH configuration.
+    It is set up to perform the HID keyboard test at apps/examples/hidkbd.
+
+    NOTES:
+
+    1. Default platform/toolchain: This is how the build is configured by
+       be default.  These options can easily be re-confured, however.
+
+       CONFIG_HOST_LINUX=y                     : Linux
+       CONFIG_ARMV7M_TOOLCHAIN_EABIL=y         : Generic EABI toolchain
+
+    STATUS:
+      2018-10-07:  Not all keyboards will connect successfully. I have not
+        looked into the details but it may be that those keyboards are not
+        compatible with the driver (which only accepts "boot" keyboards).
+        Also, when typing input into the HID keyboard, characters are often
+        missing and sometimes duplicated.  This is like some issue with the
+        read logic of drivers/usbhost_hidkbc.c.
+
   hidmouse:
-    This configuration directory supports a variant of an NSH configution.
+    This configuration directory supports a variant of an NSH configuration.
     It is set up to perform the touchscreen test at apps/examples/touchscreen
     using a USB HIB mouse instead a touchsceen device.
 
@@ -991,14 +829,6 @@ Configuration Sub-Directories
 
        CONFIG_FAT_LFN=y                    : Enables long file name support
 
-  nx:
-    An example using the NuttX graphics system (NX).  This example uses
-    the Nokia 6100 LCD driver.
-
-    NOTES:
-
-    1. The Nokia 6100 driver does not work on this board as of this writing.
-
   slip-httpd:
     This configuration is identical to the thttpd configuration except that
     it uses the SLIP data link layer via a serial driver instead of the
@@ -1020,7 +850,7 @@ Configuration Sub-Directories
        use the UART1 hardware flow control yet.
 
        NOTE: The Linux slip module hard-codes its MTU size to 296.  So you
-       might as well set CONFIG_NET_ETH_MTU to 296 as well.
+       might as well set CONFIG_NET_ETH_PKTSIZE to 296 as well.
 
     4. After turning over the line to the SLIP driver, you must configure
        the network interface. Again, you do this using the standard
@@ -1130,7 +960,7 @@ Configuration Sub-Directories
        In principle, Zmodem transfers could be performed on the any serial
        device, including the console device.  However, only the LPC17xx
        UART1 supports hardware flow control which is required for Zmodem
-       trasnfers.  Also, this configuration permits debug output on the
+       transfers.  Also, this configuration permits debug output on the
        serial console while the transfer is in progress without interfering
        with the file transfer.
 
@@ -1211,6 +1041,7 @@ Configuration Sub-Directories
 
          $ sudo stty -F /dev/ttyS0 2400     # Select 2400 BAUD
          $ sudo stty -F /dev/ttyS0 crtscts  # Enables CTS/RTS handshaking *
+         $ sudo stty -F /dev/ttyS0 raw      # Puts the TTY in raw mode
          $ sudo stty -F /dev/ttyS0          # Show the TTY configuration
 
          * Only is hardware flow control is enabled.  It is *not* in this
@@ -1257,6 +1088,7 @@ Configuration Sub-Directories
 
          $ sudo stty -F /dev/ttyS0 2400     # Select 2400 BAUD
          $ sudo stty -F /dev/ttyS0 crtscts  # Enables CTS/RTS handshaking *
+         $ sudo stty -F /dev/ttyS0 raw      # Puts the TTY in raw mode
          $ sudo stty -F /dev/ttyS0          # Show the TTY configuration
 
          * Only is hardware flow control is enabled.  It is *not* in this
@@ -1273,7 +1105,12 @@ Configuration Sub-Directories
 
        Then use the sz command on Linux to send the file to the target:
 
-         $ sudo sz <filename> t </dev/ttyS0 >/dev/ttyS0
+         $ sudo sz <filename> [-l nnnn] </dev/ttyS0 >/dev/ttyS0
+
+       Where <filename> is the file that you want to send. If -l nnnn is not
+       specified, then there will likely be packet buffer overflow errors.
+       nnnn should be set to a value less than or equal to
+       CONFIG_SYSTEM_ZMODEM_PKTBUFSIZE
 
        Where <filename> is the file that you want to send.
 
@@ -1322,11 +1159,15 @@ Configuration Sub-Directories
         best thing to do would be to use the matching NuttX sz on the Linux
         host side.
 
-    2013-7-16. More Testing against the NuttX rz/sz on Both Ends.
+      2013-7-16. More Testing against the NuttX rz/sz on Both Ends.
 
-      The NuttX sz/rz commands have been modified so that they can be
-      built and executed under Linux.  In this case, there are no
-      transfer problems at all in either direction and with large or
-      small files.  This configuration could probably run at much higher
-      serial speeds and with much smaller buffers (although that has not
-      been verified as of this writing).
+        The NuttX sz/rz commands have been modified so that they can be
+        built and executed under Linux.  In this case, there are no
+        transfer problems at all in either direction and with large or
+        small files.  This configuration could probably run at much higher
+        serial speeds and with much smaller buffers (although that has not
+        been verified as of this writing).
+
+        CONCLUSION:  You really do need proper hardware flow control to
+        use zmodem.  That is not currently implemented in the LPC17xx
+        family.

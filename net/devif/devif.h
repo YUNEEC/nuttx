@@ -74,7 +74,8 @@
  *   TCP_NEWDATA      IN: Set to indicate that the peer has sent us new data.
  *   UDP_NEWDATA     OUT: Cleared (only) by the socket layer logic to indicate
  *   PKT_NEWDATA          that the new data was consumed, suppressing further
- *   IEEE802154_NEWDATA   attempts to process the new data.
+ *   BLUETOOTH_NEWDATA    attempts to process the new data.
+ *   IEEE802154_NEWDATA
  *
  *   TCP_SNDACK       IN: Not used; always zero
  *                   OUT: Set by the socket layer if the new data was consumed
@@ -87,8 +88,8 @@
  *   TCP_POLL        IN:  Used for polling the socket layer.  This is provided
  *   UDP_POLL             periodically from the drivers to support (1) timed
  *   PKT_POLL             operations, and (2) to check if the socket layer has
- *   IEEE802154_POLL      data that it wants to send.  These are socket oriented
- *                        callbacks where the context depends on the specific
+ *   BLUETOOTH_POLL       data that it wants to send.  These are socket oriented
+ *   IEEE802154_POLL      callbacks where the context depends on the specific
  *                        set
  *                   OUT: Not used
  *
@@ -177,6 +178,7 @@
 #define TCP_ACKDATA        (1 << 0)
 #define TCP_NEWDATA        (1 << 1)
 #define UDP_NEWDATA        TCP_NEWDATA
+#define BLUETOOTH_NEWDATA  TCP_NEWDATA
 #define IEEE802154_NEWDATA TCP_NEWDATA
 #define PKT_NEWDATA        TCP_NEWDATA
 #define WPAN_NEWDATA       TCP_NEWDATA
@@ -186,6 +188,7 @@
 #define TCP_POLL           (1 << 4)
 #define UDP_POLL           TCP_POLL
 #define PKT_POLL           TCP_POLL
+#define BLUETOOTH_POLL     TCP_POLL
 #define IEEE802154_POLL    TCP_POLL
 #define WPAN_POLL          TCP_POLL
 #define TCP_BACKLOG        (1 << 5)
@@ -286,7 +289,7 @@ extern "C"
 #define EXTERN extern
 #endif
 
-#if defined(CONFIG_NET_IPv4) && defined(CONFIG_NET_TCP_REASSEMBLY)
+#ifdef CONFIG_NET_IPv4_REASSEMBLY
 /* Reassembly timer (units: deci-seconds) */
 
 EXTERN uint8_t g_reassembly_timer;
@@ -294,7 +297,7 @@ EXTERN uint8_t g_reassembly_timer;
 
 /* Time of last poll */
 
-EXTERN systime_t g_polltime;
+EXTERN clock_t g_polltime;
 
 /****************************************************************************
  * Public Function Prototypes
@@ -306,10 +309,10 @@ EXTERN systime_t g_polltime;
  * Description:
  *   Perform initialization of the network device interface layer
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -400,7 +403,7 @@ void devif_dev_callback_free(FAR struct net_driver_s *dev,
  * Description:
  *   Execute a list of callbacks.
  *
- * Input parameters:
+ * Input Parameters:
  *   dev - The network device state structure associated with the network
  *     device that initiated the callback event.
  *   pvconn - Holds a reference to the TCP connection structure or the UDP
@@ -409,7 +412,7 @@ void devif_dev_callback_free(FAR struct net_driver_s *dev,
  *   flags - The bit set of events to be notified.
  *   list - The list to traverse in performing the notifications
  *
- * Returned value:
+ * Returned Value:
  *   The updated flags as modified by the callback functions.
  *
  * Assumptions:
@@ -426,7 +429,7 @@ uint16_t devif_conn_event(FAR struct net_driver_s *dev, FAR void *pvconn,
  * Description:
  *   Execute a list of callbacks using the device event chain.
  *
- * Input parameters:
+ * Input Parameters:
  *   dev - The network device state structure associated with the network
  *     device that initiated the callback event.
  *   pvconn - Holds a reference to the TCP connection structure or the UDP
@@ -434,7 +437,7 @@ uint16_t devif_conn_event(FAR struct net_driver_s *dev, FAR void *pvconn,
  *     connection or UDP port.
  *   flags - The bit set of events to be notified.
  *
- * Returned value:
+ * Returned Value:
  *   The updated flags as modified by the callback functions.
  *
  * Assumptions:

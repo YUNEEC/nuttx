@@ -89,7 +89,7 @@ Development Environment
 
   Several possible development environments may be used:
 
-  - Linux or OSX native
+  - Linux or macOS native
   - Cygwin unders Windows
   - MinGW + MSYS under Windows
   - Windows native (with GNUMake from GNUWin32).
@@ -189,8 +189,7 @@ NuttX EABI "buildroot" Toolchain
 
   1.  You must have already configured Nuttx in <some-dir>/nuttx.
 
-      cd tools
-      ./configure.sh sama5d3-xplained/<sub-dir>
+      tools/configure.sh sama5d3-xplained/<sub-dir>
 
   2.  Download the latest buildroot package into <some-dir>
 
@@ -240,8 +239,7 @@ NXFLAT Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh sama5d3-xplained/<sub-dir>
+     tools/configure.sh sama5d3-xplained/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -813,14 +811,13 @@ Networking
   Networking Support
     CONFIG_NET=y                         : Enable Neworking
     CONFIG_NET_SOCKOPTS=y                : Enable socket operations
-    CONFIG_NET_ETH_MTU=562               : Maximum packet size (MTU) 1518 is more standard
-    CONFIG_NET_ETH_TCP_RECVWNDO=562      : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_ETH_PKTSIZE=562           : Maximum packet size 1518 is more standard
     CONFIG_NET_TCP=y                     : Enable TCP/IP networking
     CONFIG_NET_TCPBACKLOG=y              : Support TCP/IP backlog
     CONFIG_NET_TCP_READAHEAD_BUFSIZE=562 : Read-ahead buffer size
     CONFIG_NET_UDP=y                     : Enable UDP networking
     CONFIG_NET_ICMP=y                    : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y               : Needed for NSH ping command
+    CONFIG_NET_ICMP_SOCKET=y             : Needed for NSH ping command
                                          : Defaults should be okay for other options
   Device drivers -> Network Device/PHY Support
     CONFIG_NETDEVICES=y                  : Enabled PHY selection
@@ -1129,7 +1126,7 @@ HSMCI Card Slots
       CONFIG_MMCSD=y                        : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
       CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
-      CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
+      CONFIG_MMCSD_HAVE_CARDDETECT=y         : Supports card-detect PIOs
       CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
       CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
       CONFIG_MMCSD_SDIO=y                   : SDIO-based MMC/SD support
@@ -2854,13 +2851,6 @@ SAMA5D3-Xplained Configuration Options
 
   CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-  CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-  cause a 100 second delay during boot-up.  This 100 second delay
-  serves no purpose other than it allows you to calibrate
-  CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-  the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-  the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     CONFIG_SAMA5_DBGU        - Debug Unit
@@ -2978,9 +2968,7 @@ Configurations
   Each SAMA5D3-Xplained configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh sama5d3-xplained/<subdir>
-    cd -
+    tools/configure.sh sama5d3-xplained/<subdir>
 
   Before building, make sure that the PATH environment variable include the
   correct path to the directory than holds your toolchain binaries.

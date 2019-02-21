@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc31xx/lpc31_ehci.c
  *
- *   Copyright (C) 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/wqueue.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
@@ -430,7 +431,7 @@ static int ehci_wait_usbsts(uint32_t maskbits, uint32_t donebits,
 /* Semaphores ******************************************************************/
 
 static void lpc31_takesem(sem_t *sem);
-#define lpc31_givesem(s) sem_post(s);
+#define lpc31_givesem(s) nxsem_post(s);
 
 /* Allocators ******************************************************************/
 
@@ -1013,16 +1014,21 @@ static int ehci_wait_usbsts(uint32_t maskbits, uint32_t donebits,
 
 static void lpc31_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -2081,7 +2087,7 @@ static struct lpc31_qtd_s *lpc31_qtd_statusphase(uint32_t tokenbits)
  *
  * Assumption:  The caller holds the EHCI exclsem.
  *
- * Returned value:
+ * Returned Value:
  *   Zero (OK) is returned on success; a negated errno value is return on
  *   any failure.
  *
@@ -2362,7 +2368,7 @@ errout_with_qh:
  *
  * Assumption:  The caller holds the EHCI exclsem.
  *
- * Returned value:
+ * Returned Value:
  *   Zero (OK) is returned on success; a negated errno value is return on
  *   any failure.
  *
@@ -2469,7 +2475,7 @@ errout_with_qh:
  *   complete, but will be re-acquired when before returning.  The state of
  *   EHCI resources could be very different upon return.
  *
- * Returned value:
+ * Returned Value:
  *   On success, this function returns the number of bytes actually transferred.
  *   For control transfers, this size includes the size of the control request
  *   plus the size of the data (which could be short); For bulk transfers, this
@@ -2549,7 +2555,7 @@ static ssize_t lpc31_transfer_wait(struct lpc31_epinfo_s *epinfo)
  *   callback - The function to be called when the completes
  *   arg - An arbitrary argument that will be provided with the callback.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -2602,7 +2608,7 @@ static inline int lpc31_ioc_async_setup(struct lpc31_rhport_s *rhport,
  *   epinfo - The IN or OUT endpoint descriptor for the device endpoint on
  *      which the transfer was performed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -3191,7 +3197,7 @@ static inline void lpc31_portsc_bottomhalf(void)
 static inline void lpc31_syserr_bottomhalf(void)
 {
   usbhost_trace1(EHCI_TRACE1_SYSERR_INTR, 0);
-  PANIC();
+  DEBUGPANIC();
 }
 
 /****************************************************************************
@@ -3422,8 +3428,8 @@ static int lpc31_ehci_interrupt(int irq, FAR void *context, FAR void *arg)
  *   hport - The location to return the hub port descriptor that detected the
  *      connection related event.
  *
- * Returned Values:
- *   Zero (OK) is returned on success when a device in connected or
+ * Returned Value:
+ *   Zero (OK) is returned on success when a device is connected or
  *   disconnected. This function will not return until either (1) a device is
  *   connected or disconnect to/from any hub port or until (2) some failure
  *   occurs.  On a failure, a negated errno value is returned indicating the
@@ -3524,7 +3530,7 @@ static int lpc31_wait(FAR struct usbhost_connection_s *conn,
  *   hport - The descriptor of the hub port that has the newly connected
  *      device.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -3564,7 +3570,7 @@ static int lpc31_rh_enumerate(FAR struct usbhost_connection_s *conn,
    * reset for 50Msec, not wait 50Msec before resetting.
    */
 
-  usleep(100*1000);
+  nxsig_usleep(100*1000);
 
   /* Paragraph 2.3.9:
    *
@@ -3667,7 +3673,7 @@ static int lpc31_rh_enumerate(FAR struct usbhost_connection_s *conn,
    * 50 ms."
    */
 
-  usleep(50*1000);
+  nxsig_usleep(50*1000);
 
   regval  = lpc31_getreg(regaddr);
   regval &= ~EHCI_PORTSC_RESET;
@@ -3688,7 +3694,7 @@ static int lpc31_rh_enumerate(FAR struct usbhost_connection_s *conn,
    */
 
   while ((lpc31_getreg(regaddr) & EHCI_PORTSC_RESET) != 0);
-  usleep(200*1000);
+  nxsig_usleep(200*1000);
 
   /* EHCI Paragraph 4.2.2:
    *
@@ -3833,7 +3839,7 @@ static int lpc31_enumerate(FAR struct usbhost_connection_s *conn,
  *   maxpacketsize - The maximum number of bytes that can be sent to or
  *    received from the endpoint in a single data packet
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -3876,7 +3882,7 @@ static int lpc31_ep0configure(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep
  *   ep - A memory location provided by the caller in which to receive the
  *      allocated endpoint descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -3937,8 +3943,8 @@ static int lpc31_epalloc(FAR struct usbhost_driver_s *drvr,
    * priority inheritance enabled.
    */
 
-  sem_init(&epinfo->iocsem, 0, 0);
-  sem_setprotocol(&epinfo->iocsem, SEM_PRIO_NONE);
+  nxsem_init(&epinfo->iocsem, 0, 0);
+  nxsem_setprotocol(&epinfo->iocsem, SEM_PRIO_NONE);
 
   /* Success.. return an opaque reference to the endpoint information structure
    * instance
@@ -3959,7 +3965,7 @@ static int lpc31_epalloc(FAR struct usbhost_driver_s *drvr,
  *      the class create() method.
  *   ep - The endpint to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4004,7 +4010,7 @@ static int lpc31_epfree(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep)
  *   maxlen - The address of a memory location provided by the caller in which
  *      to return the maximum size of the allocated buffer memory.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4049,7 +4055,7 @@ static int lpc31_alloc(FAR struct usbhost_driver_s *drvr,
  *      to the class create() method.
  *   buffer - The address of the allocated buffer memory to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4086,7 +4092,7 @@ static int lpc31_free(FAR struct usbhost_driver_s *drvr, FAR uint8_t *buffer)
  *     return the allocated buffer memory address.
  *   buflen - The size of the buffer required.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4125,7 +4131,7 @@ static int lpc31_ioalloc(FAR struct usbhost_driver_s *drvr, FAR uint8_t **buffer
  *      the class create() method.
  *   buffer - The address of the allocated buffer memory to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4170,7 +4176,7 @@ static int lpc31_iofree(FAR struct usbhost_driver_s *drvr, FAR uint8_t *buffer)
  *   NOTE: On an IN transaction, req and buffer may refer to the same allocated
  *   memory.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4271,7 +4277,7 @@ static int lpc31_ctrlout(FAR struct usbhost_driver_s *drvr, usbhost_ep_t ep0,
  *     (IN endpoint).  buffer must have been allocated using DRVR_ALLOC
  *   buflen - The length of the data to be sent or received.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, a non-negative value is returned that indicates the number
  *   of bytes successfully transferred.  On a failure, a negated errno value is
  *   returned that indicates the nature of the failure:
@@ -4381,7 +4387,7 @@ errout_with_sem:
  *   arg - The arbitrary parameter that will be passed to the callback function
  *     when the transfer completes.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -4474,7 +4480,7 @@ errout_with_sem:
  *   ep - The IN or OUT endpoint descriptor for the device endpoint on which an
  *      asynchronous transfer should be transferred.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure.
  *
@@ -4671,7 +4677,7 @@ errout_with_sem:
  *      related event
  *   connected - True: device connected; false: device disconnected
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure.
  *
@@ -4722,7 +4728,7 @@ static int lpc31_connect(FAR struct usbhost_driver_s *drvr,
  *   hport - The port from which the device is being disconnected.  Might be a port
  *      on a hub.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -4920,18 +4926,18 @@ FAR struct usbhost_connection_s *lpc31_ehci_initialize(int controller)
 
   /* Initialize the EHCI state data structure */
 
-  sem_init(&g_ehci.exclsem, 0, 1);
-  sem_init(&g_ehci.pscsem,  0, 0);
+  nxsem_init(&g_ehci.exclsem, 0, 1);
+  nxsem_init(&g_ehci.pscsem,  0, 0);
 
   /* The pscsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&g_ehci.pscsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&g_ehci.pscsem, SEM_PRIO_NONE);
 
   /* Initialize EP0 */
 
-  sem_init(&g_ehci.ep0.iocsem, 0, 1);
+  nxsem_init(&g_ehci.ep0.iocsem, 0, 1);
 
   /* Initialize the root hub port structures */
 
@@ -4970,8 +4976,8 @@ FAR struct usbhost_connection_s *lpc31_ehci_initialize(int controller)
        * should not have priority inheritance enabled.
        */
 
-      sem_init(&rhport->ep0.iocsem, 0, 0);
-      sem_setprotocol(&rhport->iocsem, SEM_PRIO_NONE);
+      nxsem_init(&rhport->ep0.iocsem, 0, 0);
+      nxsem_setprotocol(&rhport->iocsem, SEM_PRIO_NONE);
 
       /* Initialize the public port representation */
 

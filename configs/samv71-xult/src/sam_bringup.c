@@ -54,7 +54,6 @@
 #include <nuttx/drivers/drivers.h>
 #include <nuttx/drivers/ramdisk.h>
 #include <nuttx/fs/nxffs.h>
-#include <nuttx/binfmt/elf.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/video/fb.h>
 
@@ -507,6 +506,16 @@ int sam_bringup(void)
     }
 #endif
 
+#ifdef HAVE_MAXTOUCH
+  /* Initialize the touchscreen */
+
+  ret = sam_tsc_setup(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: sam_tsc_setup failed: %d\n", ret);
+    }
+#endif
+
 #ifdef HAVE_WM8904
   /* Configure WM8904 audio */
 
@@ -537,18 +546,6 @@ int sam_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: sam_mrf24j40_initialize() failed: %d\n", ret);
-    }
-#endif
-
-#ifdef HAVE_ELF
-  /* Initialize the ELF binary loader */
-
-  ret = elf_initialize();
-  if (ret < 0)
-    {
-      syslog(LOG_ERR,
-             "ERROR: Initialization of the ELF loader failed: %d\n",
-             ret);
     }
 #endif
 

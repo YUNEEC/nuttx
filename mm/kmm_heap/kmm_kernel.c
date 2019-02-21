@@ -56,10 +56,10 @@
  * Description:
  *   Check if an address lies in the kernel heap.
  *
- * Parameters:
+ * Input Parameters:
  *   mem - The address to check
  *
- * Return Value:
+ * Returned Value:
  *   true if the address is a member of the kernel heap.  false if not
  *   not.  If the address is not a member of the kernel heap, then it
  *   must be a member of the user-space heap (unchecked)

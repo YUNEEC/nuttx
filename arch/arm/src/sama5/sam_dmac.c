@@ -1,7 +1,7 @@
 /****************************************************************************
- * arch/arm/src/sama5/sam3u_dmac.c
+ * arch/arm/src/sama5/sam_dmac.c
  *
- *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -487,21 +487,26 @@ static struct sam_dmac_s g_dmac1 =
 
 static void sam_takechsem(struct sam_dmac_s *dmac)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&dmac->chsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&dmac->chsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givechsem(struct sam_dmac_s *dmac)
 {
-  (void)sem_post(&dmac->chsem);
+  (void)nxsem_post(&dmac->chsem);
 }
 
 /****************************************************************************
@@ -514,21 +519,26 @@ static inline void sam_givechsem(struct sam_dmac_s *dmac)
 
 static void sam_takedsem(struct sam_dmac_s *dmac)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&dmac->dsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&dmac->dsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givedsem(struct sam_dmac_s *dmac)
 {
-  (void)sem_post(&dmac->dsem);
+  (void)nxsem_post(&dmac->dsem);
 }
 
 /****************************************************************************
@@ -1879,8 +1889,8 @@ void sam_dmainitialize(struct sam_dmac_s *dmac)
 
   /* Initialize semaphores */
 
-  sem_init(&dmac->chsem, 0, 1);
-  sem_init(&dmac->dsem, 0, SAM_NDMACHAN);
+  nxsem_init(&dmac->chsem, 0, 1);
+  nxsem_init(&dmac->dsem, 0, SAM_NDMACHAN);
 }
 
 /****************************************************************************
@@ -1888,7 +1898,7 @@ void sam_dmainitialize(struct sam_dmac_s *dmac)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_dmainitialize
+ * Name: up_dma_initialize
  *
  * Description:
  *   Initialize the DMA subsystem
@@ -1898,7 +1908,7 @@ void sam_dmainitialize(struct sam_dmac_s *dmac)
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
 #ifdef CONFIG_SAMA5_DMAC0
   dmainfo("Initialize DMAC0\n");

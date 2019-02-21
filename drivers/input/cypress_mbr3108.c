@@ -47,8 +47,9 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/i2c/i2c_master.h>
 
 #include <nuttx/input/cypress_mbr3108.h>
 
@@ -265,7 +266,7 @@ static int mbr3108_i2c_write(FAR struct mbr3108_dev_s *dev, uint8_t reg,
     {
       .frequency = CONFIG_MBR3108_I2C_FREQUENCY,
       .addr      = dev->addr,
-      .flags     = I2C_M_NORESTART,
+      .flags     = I2C_M_NOSTART,
       .buffer    = (void *)buf,
       .length    = buflen
     }
@@ -424,7 +425,7 @@ static int mbr3108_save_check_crc(FAR struct mbr3108_dev_s *dev)
       return ret;
     }
 
-  usleep(MBR3108_CMD_MSECS_CHECK_CONFIG_CRC * 1000);
+  nxsig_usleep(MBR3108_CMD_MSECS_CHECK_CONFIG_CRC * 1000);
 
   ret = mbr3108_check_cmd_status(dev);
   if (ret != 0)
@@ -448,7 +449,7 @@ static int mbr3108_software_reset(FAR struct mbr3108_dev_s *dev)
       return ret;
     }
 
-  usleep(MBR3108_CMD_MSECS_SOFTWARE_RESET * 1000);
+  nxsig_usleep(MBR3108_CMD_MSECS_SOFTWARE_RESET * 1000);
 
   ret = mbr3108_check_cmd_status(dev);
   if (ret != 0)
@@ -492,7 +493,7 @@ static int mbr3108_clear_latched(FAR struct mbr3108_dev_s *dev)
       return ret;
     }
 
-  usleep(MBR3108_CMD_MSECS_CLEAR_LATCHED * 1000);
+  nxsig_usleep(MBR3108_CMD_MSECS_CLEAR_LATCHED * 1000);
 
   ret = mbr3108_check_cmd_status(dev);
   if (ret != 0)
@@ -751,7 +752,7 @@ static ssize_t mbr3108_read(FAR struct file *filep, FAR char *buffer,
   DEBUGASSERT(inode && inode->i_private);
   priv = inode->i_private;
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       return ret;
@@ -780,7 +781,7 @@ static ssize_t mbr3108_read(FAR struct file *filep, FAR char *buffer,
   priv->int_pending = false;
   leave_critical_section(flags);
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret < 0 ? ret : outlen;
 }
 
@@ -803,7 +804,7 @@ static ssize_t mbr3108_write(FAR struct file *filep, FAR const char *buffer,
       return -EINVAL;
     }
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       return ret;
@@ -861,7 +862,7 @@ static ssize_t mbr3108_write(FAR struct file *filep, FAR const char *buffer,
     }
 
 out:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   return ret < 0 ? ret : buflen;
 }
@@ -879,10 +880,19 @@ static int mbr3108_open(FAR struct file *filep)
   DEBUGASSERT(inode && inode->i_private);
   priv = inode->i_private;
 
-  while (sem_wait(&priv->devsem) != 0)
+  do
     {
-      assert(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   use_count = priv->cref + 1;
   if (use_count == 1)
@@ -897,7 +907,7 @@ static int mbr3108_open(FAR struct file *filep)
 
       /* Let chip to power up before probing */
 
-      usleep(100 * 1000);
+      nxsig_usleep(100 * 1000);
 
       /* Check that device exists on I2C. */
 
@@ -935,7 +945,7 @@ static int mbr3108_open(FAR struct file *filep)
     }
 
 out_sem:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -944,6 +954,7 @@ static int mbr3108_close(FAR struct file *filep)
   FAR struct inode *inode;
   FAR struct mbr3108_dev_s *priv;
   int use_count;
+  int ret;
 
   DEBUGASSERT(filep);
   inode = filep->f_inode;
@@ -951,10 +962,19 @@ static int mbr3108_close(FAR struct file *filep)
   DEBUGASSERT(inode && inode->i_private);
   priv = inode->i_private;
 
-  while (sem_wait(&priv->devsem) != 0)
+  do
     {
-      assert(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   use_count = priv->cref - 1;
   if (use_count == 0)
@@ -981,7 +1001,7 @@ static int mbr3108_close(FAR struct file *filep)
       priv->cref = use_count;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   return 0;
 }
@@ -1002,7 +1022,7 @@ static void mbr3108_poll_notify(FAR struct mbr3108_dev_s *priv)
           mbr3108_dbg("Report events: %02x\n", fds->revents);
 
           fds->revents |= POLLIN;
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 }
@@ -1022,7 +1042,7 @@ static int mbr3108_poll(FAR struct file *filep, FAR struct pollfd *fds,
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct mbr3108_dev_s *)inode->i_private;
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       return ret;
@@ -1084,7 +1104,7 @@ static int mbr3108_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 out:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -1136,7 +1156,7 @@ int cypress_mbr3108_register(FAR const char *devpath,
   priv->board = board_config;
   priv->sensor_conf = sensor_conf;
 
-  sem_init(&priv->devsem, 0, 1);
+  nxsem_init(&priv->devsem, 0, 1);
 
   ret = register_driver(devpath, &g_mbr3108_fileops, 0666, priv);
   if (ret < 0)

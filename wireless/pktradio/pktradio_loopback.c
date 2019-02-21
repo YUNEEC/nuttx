@@ -168,7 +168,7 @@ static int  lo_ifup(FAR struct net_driver_s *dev);
 static int  lo_ifdown(FAR struct net_driver_s *dev);
 static void lo_txavail_work(FAR void *arg);
 static int  lo_txavail(FAR struct net_driver_s *dev);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int  lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 static int  lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -221,7 +221,7 @@ static void lo_addr2ip(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[4]  = 0;
   dev->d_ipv6addr[5]  = HTONS(0x00ff);
   dev->d_ipv6addr[6]  = HTONS(0xfe00);
-  dev->d_ipv6addr[7]  = (uint16_t)g_mac_addr[0] << 8 ^ 0x0200;
+  dev->d_ipv6addr[7]  = (uint16_t)g_mac_addr[0] << 8;
 
 #elif CONFIG_PKTRADIO_ADDRLEN == 2
   /* Set the IP address based on the 2 byte address */
@@ -230,7 +230,6 @@ static void lo_addr2ip(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[5]  = HTONS(0x00ff);
   dev->d_ipv6addr[6]  = HTONS(0xfe00);
   dev->d_ipv6addr[7]  = (uint16_t)g_mac_addr[0] << 8 | (uint16_t)g_mac_addr[1];
-  dev->d_ipv6addr[7] ^= 0x0200;
 
 #elif CONFIG_PKTRADIO_ADDRLEN == 8
   /* Set the IP address based on the 8-byte address */
@@ -239,7 +238,6 @@ static void lo_addr2ip(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[5]  = (uint16_t)g_mac_addr[2] << 8 | (uint16_t)g_mac_addr[3];
   dev->d_ipv6addr[6]  = (uint16_t)g_mac_addr[4] << 8 | (uint16_t)g_mac_addr[5];
   dev->d_ipv6addr[7]  = (uint16_t)g_mac_addr[6] << 8 | (uint16_t)g_mac_addr[7];
-  dev->d_ipv6addr[4] ^= 0x0200;
 #endif
 }
 
@@ -292,7 +290,7 @@ static inline void lo_netmask(FAR struct net_driver_s *dev)
  *   a callback from devif_poll() or devif_timer().  devif_poll() will be
  *   called only during normal TX polling.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -381,7 +379,7 @@ static int lo_loopback(FAR struct net_driver_s *dev)
  * Description:
  *   Perform loopback of received framelist.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -409,7 +407,7 @@ static void lo_loopback_work(FAR void *arg)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -450,7 +448,7 @@ static void lo_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -487,7 +485,7 @@ static void lo_poll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -537,7 +535,7 @@ static int lo_ifup(FAR struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -569,7 +567,7 @@ static int lo_ifdown(FAR struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -592,6 +590,7 @@ static void lo_txavail_work(FAR void *arg)
   if (priv->lo_bifup)
     {
       /* If so, then poll the network for new XMIT data */
+
 #ifdef CONFIG_NET_6LOWPAN
       /* Make sure the our single packet buffer is attached */
 
@@ -614,7 +613,7 @@ static void lo_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -659,7 +658,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -670,12 +669,12 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
 #if CONFIG_PKTRADIO_ADDRLEN == 1
   ninfo("MAC: %02x\n", mac[0]);
-  
+
 #elif CONFIG_PKTRADIO_ADDRLEN == 2
   ninfo("MAC: %02x:%02x\n", mac[0], mac[1]);
 
@@ -697,7 +696,7 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -708,12 +707,12 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
 #if CONFIG_PKTRADIO_ADDRLEN == 1
   ninfo("MAC: %02x\n", mac[0]);
-  
+
 #elif CONFIG_PKTRADIO_ADDRLEN == 2
   ninfo("MAC: %02x:%02x\n", mac[0], mac[1]);
 
@@ -734,7 +733,7 @@ static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Handle network IOCTL commands directed to this device.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *   cmd - The IOCTL command
  *   arg - The argument for the IOCTL command
@@ -848,7 +847,7 @@ static int lo_ioctl(FAR struct net_driver_s *dev, int cmd,
  * Description:
  *   Calculate the MAC header length given the frame meta-data.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev    - The networkd device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
@@ -871,7 +870,7 @@ static int lo_get_mhrlen(FAR struct radio_driver_s *netdev,
  * Description:
  *   Requests the transfer of a list of frames to the MAC.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev    - The networkd device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
@@ -943,7 +942,7 @@ static int lo_req_data(FAR struct radio_driver_s *netdev,
  *   run time.  This information is provided to the 6LoWPAN network via the
  *   following structure.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev     - The network device to be queried
  *   properties - Location where radio properities will be returned.
  *
@@ -994,7 +993,7 @@ static int lo_properties(FAR struct radio_driver_s *netdev,
  * Description:
  *   Initialize and register the Ieee802.15.4 MAC loopback network driver.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -1025,7 +1024,7 @@ int pktradio_loopback(void)
   dev->d_ifup         = lo_ifup;          /* I/F up (new IP address) callback */
   dev->d_ifdown       = lo_ifdown;        /* I/F down callback */
   dev->d_txavail      = lo_txavail;       /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   dev->d_addmac       = lo_addmac;        /* Add multicast MAC address */
   dev->d_rmmac        = lo_rmmac;         /* Remove multicast MAC address */
 #endif

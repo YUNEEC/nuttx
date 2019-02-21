@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_cpuidlestack.c
  *
- *   Copyright (C) 2016-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2016,2017 Sony Video & Sound Products Inc.
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
@@ -82,7 +82,7 @@
  *   - adj_stack_ptr: Adjusted stack_alloc_ptr for HW.  The initial value of
  *     the stack pointer.
  *
- * Inputs:
+ * Input Parameters:
  *   - cpu:         CPU index that indicates which CPU the IDLE task is
  *                  being created for.
  *   - tcb:         The TCB of new CPU IDLE task

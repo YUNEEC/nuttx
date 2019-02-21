@@ -101,7 +101,7 @@
 #define GETUINT16(ptr,index) \
   ((((uint16_t)((ptr)[index])) << 8) | ((uint16_t)(((ptr)[(index) + 1]))))
 
-/* PUT 16-bit data:  source in host order, result in newtwork order */
+/* PUT 16-bit data:  source in host order, result in network order */
 
 #define PUTHOST16(ptr,index,value) \
   do \
@@ -109,11 +109,11 @@
       (ptr)[index]     = ((uint16_t)(value) >> 8) & 0xff; \
       (ptr)[index + 1] = (uint16_t)(value) & 0xff; \
     } \
-  while(0)
+  while (0)
 
 /* Return values ************************************************************/
 
-/* Sucessful return values from header compression logic */
+/* Successful return values from header compression logic */
 
 #define COMPRESS_HDR_INLINE     0 /* L2 header not compressed */
 #define COMPRESS_HDR_ELIDED     1 /* L2 header compressed */
@@ -122,6 +122,7 @@
 
 #define REASS_POOL_PREALLOCATED 0
 #define REASS_POOL_DYNAMIC      1
+#define REASS_POOL_RADIO        2
 
 /* Debug ********************************************************************/
 
@@ -259,7 +260,7 @@ struct iob_s;               /* Forward reference */
  *
  * Input Parameters:
  *   dev     - The IEEE802.15.4 MAC network driver interface.
- *   list    - Head of callback list for send interrupt
+ *   list    - Head of callback list for send event handler
  *   ipv6hdr - IPv6 header followed by UDP or ICMPv6 header.
  *   buf     - Data to send
  *   len     - Length of data to send
@@ -318,7 +319,7 @@ int sixlowpan_meta_data(FAR struct radio_driver_s *radio,
  *   determine what the size of the IEEE802.15.4 header will be.  No frame
  *   buffer is required to make this determination.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *   meta  - obfuscated meta data that describes the MAC header
  *
@@ -340,7 +341,7 @@ int sixlowpan_frame_hdrlen(FAR struct radio_driver_s *radio,
  *   new incoming frame and the network responds with an outgoing packet.  It
  *   submits any new outgoing frame to the MAC.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *   meta  - Obfuscated metadata that describes the MAC header
  *   frame - The IOB containing the frame to be submitted.
@@ -359,7 +360,7 @@ int sixlowpan_frame_submit(FAR struct radio_driver_s *radio,
  *
  * Description:
  *   Process an outgoing UDP or TCP packet.  This function is called from
- *   send interrupt logic when a TX poll is received.  It formates the
+ *   the send event handler when a TX poll is received.  It formates the
  *   list of frames to be sent by the IEEE802.15.4 MAC driver.
  *
  *   The payload data is in the caller 'buf' and is of length 'buflen'.
@@ -470,7 +471,7 @@ int sixlowpan_compresshdr_hc06(FAR struct radio_driver_s *radio,
  *   decompression, g_frame_hdrlen and g_uncompressed_hdrlen are set to the
  *   appropriate values
  *
- * Input Parmeters:
+ * Input Parameters:
  *   radio    - Reference to a radio network driver state instance.
  *   metadata - Obfuscated MAC metadata including node addressing
  *              information.
@@ -505,7 +506,7 @@ void sixlowpan_uncompresshdr_hc06(FAR struct radio_driver_s *radio,
  *   6lowpan packet in the packetbuf buffer from a full IPv6 packet in the
  *   uip_buf buffer.
  *
- * Input Parmeters:
+ * Input Parameters:
  *   radio   - Reference to a radio network driver state instance.
  *   ipv6    - The IPv6 header to be compressed
  *   destmac - L2 destination address, needed to compress the IP
@@ -551,7 +552,7 @@ int sixlowpan_compresshdr_hc1(FAR struct radio_driver_s *radio,
  *              FRAGN frames.
  *
  * Returned Value:
- *   Zero (OK) is returned on success, on failure a negater errno value is
+ *   Zero (OK) is returned on success, on failure a negated errno value is
  *   returned.
  *
  ****************************************************************************/
@@ -562,6 +563,22 @@ int sixlowpan_uncompresshdr_hc1(FAR struct radio_driver_s *radio,
                                 FAR struct iob_s *iob, FAR uint8_t *fptr,
                                 FAR uint8_t *bptr);
 #endif
+
+/****************************************************************************
+ * Name: sixlowpan_nexthopaddr
+ *
+ * Description:
+ *   sixlowpan_nexthopaddr(): If the destination is on-link, extract the
+ *   IEEE 802.15.14 destination address from the destination IP address. If the
+ *   destination is not reachable directly, use the routing table (if available)
+ *   or fall back to the default router IP address and use the router IP address
+ *   to derive the IEEE 802.15.4 MAC address.
+ *
+ ****************************************************************************/
+
+int sixlowpan_nexthopaddr(FAR struct radio_driver_s *radio,
+                          FAR const net_ipv6addr_t ipaddr,
+                          FAR struct netdev_varaddr_s *destaddr);
 
 /****************************************************************************
  * Name: sixlowpan_islinklocal, sixlowpan_destaddrfromip, and
@@ -612,7 +629,7 @@ bool sixlowpan_ismacbased(const net_ipv6addr_t ipaddr,
  * Description:
  *   Get the maximum frame length supported by radio network drvier.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *
  * Returned Value:
@@ -629,7 +646,7 @@ int sixlowpan_radio_framelen(FAR struct radio_driver_s *radio);
  * Description:
  *   Get the source PAN ID from the IEEE802.15.4 radio.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *   panid - The location in which to return the PAN ID.  0xfff may be
  *           returned if the device is not associated.
@@ -651,7 +668,7 @@ int sixlowpan_src_panid(FAR struct radio_driver_s *radio,
  *   Extract the source MAC address from the radio-specific RX metadata, and
  *   return the source address in a radio-agnostic form.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio    - Reference to a radio network driver state instance.
  *   metadata - Opaque reference to the radio-specific RX metadata.
  *   srcaddr  - The location in which to return the source MAC address.
@@ -672,7 +689,7 @@ int sixlowpan_extract_srcaddr(FAR struct radio_driver_s *radio,
  *   Extract the destination MAC address from the radio-specific RX metadata,
  *   and return the destination address in a radio-agnostic form.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio    - Reference to a radio network driver state instance.
  *   metadata - Opaque reference to the radio-specific RX metadata.
  *   destaddr - The location in which to return the destination MAC address.
@@ -696,10 +713,10 @@ int sixlowpan_extract_destaddr(FAR struct radio_driver_s *radio,
  *
  *   Called only once during network initialization.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -717,11 +734,11 @@ void sixlowpan_reass_initialize(void);
  *   list.  If that the list is empty, then the reassembly buffer structure
  *   will be allocated from the dynamic memory pool.
  *
- * Inputs:
+ * Input Parameters:
  *   reasstag - The reassembly tag for subsequent lookup.
  *   fragsrc  - The source address of the fragment.
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the allocated reass structure.  All fields used by the
  *   reasembly logic have been zeroed.  On a failure to allocate, NULL is
  *   returned.
@@ -742,11 +759,11 @@ FAR struct sixlowpan_reassbuf_s *
  *   Find a previously allocated, active reassembly buffer with the specified
  *   reassembly tag.
  *
- * Inputs:
+ * Input Parameters:
  *   reasstag - The reassembly tag to match.
  *   fragsrc  - The source address of the fragment.
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the matching reass structure.
  *
  * Assumptions:
@@ -767,10 +784,10 @@ FAR struct sixlowpan_reassbuf_s *
  *   structure. If the reass structure was allocated dynamically it will
  *   be deallocated.
  *
- * Inputs:
+ * Input Parameters:
  *   reass - reass structure to free
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:

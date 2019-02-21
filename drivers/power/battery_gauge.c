@@ -161,10 +161,10 @@ static int bat_gauge_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Inforce mutually exclusive access to the battery driver */
 
-  ret = sem_wait(&dev->batsem);
+  ret = nxsem_wait(&dev->batsem);
   if (ret < 0)
     {
-      return -errno; /* Probably EINTR */
+      return ret; /* Probably -EINTR */
     }
 
   /* Procss the IOCTL command */
@@ -218,7 +218,7 @@ static int bat_gauge_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&dev->batsem);
+  nxsem_post(&dev->batsem);
   return ret;
 }
 
@@ -233,12 +233,12 @@ static int bat_gauge_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
  *   Register a lower half battery driver with the common, upper-half
  *   battery driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   devpath - The location in the pseudo-filesystem to create the driver.
  *     Recommended standard is "/dev/bat0", "/dev/bat1", etc.
  *   dev - An instance of the battery state structure .
  *
- * Returned value:
+ * Returned Value:
  *    Zero on success or a negated errno value on failure.
  *
  ****************************************************************************/
@@ -247,6 +247,10 @@ int battery_gauge_register(FAR const char *devpath,
                            FAR struct battery_gauge_dev_s *dev)
 {
   int ret;
+
+  /* Initialize the semaphore */
+
+  nxsem_init(&dev->batsem, 0, 1);
 
   /* Register the character driver */
 

@@ -3,7 +3,7 @@
  *
  *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
- *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@yahoogroups.com>
+ *           Alan Carvalho de Assis acassis@gmail.com [nuttx] <nuttx@googlegroups.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -59,16 +59,15 @@
 /* Configuration ********************************************************************/
 
 #undef HAVE_FPU
-#if defined(CONFIG_ARCH_FPU) && defined(CONFIG_EXAMPLES_OSTEST_FPUSIZE) && \
-    defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_DISABLE_SIGNALS) && \
-   !defined(CONFIG_ARMV7M_CMNVECTOR)
+#if defined(CONFIG_ARCH_FPU) && defined(CONFIG_TESTING_OSTEST_FPUSIZE) && \
+    defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_DISABLE_SIGNALS)
 #    define HAVE_FPU 1
 #endif
 
 #ifdef HAVE_FPU
 
-#if CONFIG_EXAMPLES_OSTEST_FPUSIZE != (4*SW_FPU_REGS)
-#  error "CONFIG_EXAMPLES_OSTEST_FPUSIZE has the wrong size"
+#if CONFIG_TESTING_OSTEST_FPUSIZE != (4*SW_FPU_REGS)
+#  error "CONFIG_TESTING_OSTEST_FPUSIZE has the wrong size"
 #endif
 
 /************************************************************************************
@@ -81,7 +80,7 @@ static uint32_t g_saveregs[XCPTCONTEXT_REGS];
  * Public Functions
  ************************************************************************************/
 
-/* Given an array of size CONFIG_EXAMPLES_OSTEST_FPUSIZE, this function will return
+/* Given an array of size CONFIG_TESTING_OSTEST_FPUSIZE, this function will return
  * the current FPU registers.
  */
 
@@ -100,7 +99,7 @@ void arch_getfpu(FAR uint32_t *fpusave)
   leave_critical_section(flags);
 }
 
-/* Given two arrays of size CONFIG_EXAMPLES_OSTEST_FPUSIZE this function
+/* Given two arrays of size CONFIG_TESTING_OSTEST_FPUSIZE this function
  * will compare them and return true if they are identical.
  */
 

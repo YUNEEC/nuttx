@@ -42,7 +42,6 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
@@ -50,6 +49,7 @@
 #include <arch/irq.h>
 
 #include <sys/socket.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
 
@@ -80,7 +80,7 @@ static uint16_t socket_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
   else if (flags & USRSOCK_EVENT_REQ_COMPLETE)
     {
@@ -104,7 +104,7 @@ static uint16_t socket_event(FAR struct net_driver_s *dev, FAR void *pvconn,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->recvsem);
+      nxsem_post(&pstate->recvsem);
     }
 
   return flags;
@@ -159,7 +159,7 @@ static int do_socket_request(FAR struct usrsock_conn_s *conn, int domain,
  *   socket() creates an endpoint for communication and returns a socket
  *   structure.
  *
- * Parameters:
+ * Input Parameters:
  *   domain   (see sys/socket.h)
  *   type     (see sys/socket.h)
  *   protocol (see sys/socket.h)
@@ -233,7 +233,7 @@ int usrsock_socket(int domain, int type, int protocol, FAR struct socket *psock)
 
   while ((ret = net_lockedwait(&state.recvsem)) < 0)
     {
-      DEBUGASSERT(ret == -EINTR);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
     }
 
   if (state.result < 0)

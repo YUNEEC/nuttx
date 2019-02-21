@@ -43,7 +43,7 @@
 
 #include <nuttx/mm/mm.h>
 
-#if defined(CONFIG_MM_KERNEL_HEAP) && defined(CONFIG_DEBUG_FEATURES)
+#ifdef CONFIG_MM_KERNEL_HEAP
 
 /****************************************************************************
  * Public Functions
@@ -55,10 +55,10 @@
  * Description:
  *   Check if an address lies in the kernel heap.
  *
- * Parameters:
+ * Input Parameters:
  *   mem - The address to check
  *
- * Return Value:
+ * Returned Value:
  *   true if the address is a member of the kernel heap.  false if not
  *   not.  If the address is not a member of the kernel heap, then it
  *   must be a member of the user-space heap (unchecked)
@@ -67,42 +67,7 @@
 
 bool kmm_heapmember(FAR void *mem)
 {
-#if CONFIG_MM_REGIONS > 1
-  int i;
-
-  /* A valid address from the kernel heap for this region would have to lie
-   * between the region's two guard nodes.
-   */
-
-  for (i = 0; i < g_kmmheap.mm_nregions; i++)
-    {
-      if (mem > (FAR void *)g_kmmheap.mm_heapstart[i] &&
-          mem < (FAR void *)g_kmmheap.mm_heapend[i])
-        {
-          return true;
-        }
-    }
-
-  /* The address does not like any any region assigned to kernel heap */
-
-  return false;
-
-#else
-  /* A valid address from the kernel heap would have to lie between the
-   * two guard nodes.
-   */
-
-  if (mem > (FAR void *)g_kmmheap.mm_heapstart[0] &&
-      mem < (FAR void *)g_kmmheap.mm_heapend[0])
-    {
-      return true;
-    }
-
-  /* Otherwise, the address does not lie in the kernel heap */
-
-  return false;
-
-#endif
+  return mm_heapmember(&g_kmmheap, mem);
 }
 
-#endif /* CONFIG_MM_KERNEL_HEAP && CONFIG_DEBUG_FEATURES */
+#endif /* CONFIG_MM_KERNEL_HEAP */

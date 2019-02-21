@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/nucleo-l432kc/src/stm32l4_appinit.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,7 @@
 #include <nuttx/board.h>
 #include <nuttx/sdio.h>
 #include <nuttx/mmcsd.h>
+#include <nuttx/leds/userled.h>
 
 #include <stm32l4.h>
 #include <stm32l4_uart.h>
@@ -135,6 +136,16 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#if !defined(CONFIG_ARCH_LEDS) && defined(CONFIG_USERLED_LOWER)
+  /* Register the LED driver */
+
+  ret = userled_lower_initialize(LED_DRIVER_PATH);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: userled_lower_initialize() failed: %d\n", ret);
+    }
+#endif
+
 #ifdef HAVE_RTC_DRIVER
   /* Instantiate the STM32L4 lower-half RTC driver */
 
@@ -159,35 +170,16 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
-#ifdef HAVE_MMCSD
-  /* First, get an instance of the SDIO interface */
+#ifdef HAVE_AT45DB
+  /* Initialize and register the ATDB FLASH file system. */
 
-  g_sdio = sdio_initialize(CONFIG_NSH_MMCSDSLOTNO);
-  if (!g_sdio)
+  ret = stm32_at45dbinitialize(0);
+  if (ret < 0)
     {
-      syslog(LOG_ERR, "ERROR: Failed to initialize SDIO slot %d\n",
-             CONFIG_NSH_MMCSDSLOTNO);
-      return -ENODEV;
-    }
-
-  /* Now bind the SDIO interface to the MMC/SD driver */
-
-  ret = mmcsd_slotinitialize(CONFIG_NSH_MMCSDMINOR, g_sdio);
-  if (ret != OK)
-    {
-      syslog(LOG_ERR,
-             "ERROR: Failed to bind SDIO to the MMC/SD driver: %d\n",
-             ret);
+      syslog(LOG_ERR, "ERROR: Failed to initialize AT45DB minor %d: %d\n",
+             0, ret);
       return ret;
     }
-
-  /* Then let's guess and say that there is a card in the slot. There is no
-   * card detect GPIO.
-   */
-
-  sdio_mediachange(g_sdio, true);
-
-  syslog(LOG_INFO, "[boot] Initialized SDIO\n");
 #endif
 
 #ifdef CONFIG_PWM
@@ -210,6 +202,26 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#ifdef CONFIG_DAC7571
+  /* Initialize and register DAC7571 */
+
+  ret = stm32_dac7571initialize("/dev/dac0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_dac7571initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_SENSORS_INA226
+  /* Initialize and register INA226 */
+
+  ret = stm32_ina226initialize("/dev/ina226");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_ina226initialize() failed: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_TIMER
   /* Initialize and register the timer driver */
 
@@ -224,7 +236,6 @@ int board_app_initialize(uintptr_t arg)
 #endif
 
 #ifdef CONFIG_SENSORS_QENCODER
-
   /* Initialize and register the qencoder driver */
 
   index = 0;

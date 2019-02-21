@@ -73,9 +73,9 @@ extern "C"
 
 enum stm32_pwr_wupin_e
 {
- PWR_WUPIN_1 = 0,  /* Wake-up pin 1 (all parts) */
- PWR_WUPIN_2,      /* Wake-up pin 2 */
- PWR_WUPIN_3       /* Wake-up pin 3 */
+  PWR_WUPIN_1 = 0,  /* Wake-up pin 1 (all parts) */
+  PWR_WUPIN_2,      /* Wake-up pin 2 */
+  PWR_WUPIN_3       /* Wake-up pin 3 */
 };
 
 /************************************************************************************
@@ -152,7 +152,7 @@ void stm32_pwr_enablebkp(bool writable);
  *   wupin - Selects the WKUP pin to enable/disable
  *   wupon - state to set it to
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; A negated errno value is returned on any
  *   failure.  The only cause of failure is if the selected MCU does not support
  *   the requested wakeup pin.
@@ -160,6 +160,26 @@ void stm32_pwr_enablebkp(bool writable);
  ************************************************************************************/
 
 int stm32_pwr_enablewkup(enum stm32_pwr_wupin_e wupin, bool wupon);
+
+/************************************************************************************
+ * Name: stm32_pwr_getsbf
+ *
+ * Description:
+ *   Return the standby flag.
+ *
+ ************************************************************************************/
+
+bool stm32_pwr_getsbf(void);
+
+/************************************************************************************
+ * Name: stm32_pwr_getwuf
+ *
+ * Description:
+ *   Return the wakeup flag.
+ *
+ ************************************************************************************/
+
+bool stm32_pwr_getwuf(void);
 
 /************************************************************************************
  * Name: stm32_pwr_enablebreg
@@ -175,7 +195,7 @@ int stm32_pwr_enablewkup(enum stm32_pwr_wupin_e wupin, bool wupon);
  * Input Parameters:
  *   regon - state to set it to
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ************************************************************************************/
@@ -195,7 +215,7 @@ void stm32_pwr_enablebreg(bool regon);
  * Input Parameters:
  *   vos - Properly aligned voltage scaling select bits for the PWR_CR register.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -217,7 +237,7 @@ void stm32_pwr_setvos(uint16_t vos);
  * Input Parameters:
  *   pls - PVD level
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:

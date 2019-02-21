@@ -47,7 +47,6 @@
 #include <nuttx/lcd/ili9341.h>
 #include <nuttx/video/fb.h>
 
-#include <arch/chip/ltdc.h>
 #include <arch/board/board.h>
 
 #include "up_arch.h"
@@ -156,7 +155,7 @@
 #define ILI9341_MADCTL_LANDSCAPE_MX     0
 #define ILI9341_MADCTL_LANDSCAPE_MV     ILI9341_MEMORY_ACCESS_CONTROL_MV
 #define ILI9341_MADCTL_LANDSCAPE_ML     0
-#ifdef CONFIG_BIG_ENDIAN
+#ifdef CONFIG_ENDIAN_BIG
 #  define ILI9341_MADCTL_LANDSCAPE_BGR  0
 #else
 #  define ILI9341_MADCTL_LANDSCAPE_BGR  ILI9341_MEMORY_ACCESS_CONTROL_BGR
@@ -184,7 +183,7 @@
 #define ILI9341_MADCTL_PORTRAIT_MX      ILI9341_MEMORY_ACCESS_CONTROL_MX
 #define ILI9341_MADCTL_PORTRAIT_MV      0
 #define ILI9341_MADCTL_PORTRAIT_ML      0
-#ifdef CONFIG_BIG_ENDIAN
+#ifdef CONFIG_ENDIAN_BIG
 #  define ILI9341_MADCTL_PORTRAIT_BGR   0
 #else
 #  define ILI9341_MADCTL_PORTRAIT_BGR   ILI9341_MEMORY_ACCESS_CONTROL_BGR
@@ -212,7 +211,7 @@
 #define ILI9341_MADCTL_RLANDSCAPE_MX    ILI9341_MEMORY_ACCESS_CONTROL_MX
 #define ILI9341_MADCTL_RLANDSCAPE_MV    ILI9341_MEMORY_ACCESS_CONTROL_MV
 #define ILI9341_MADCTL_RLANDSCAPE_ML    0
-#ifdef CONFIG_BIG_ENDIAN
+#ifdef CONFIG_ENDIAN_BIG
 #  define ILI9341_MADCTL_RLANDSCAPE_BGR 0
 #else
 #  define ILI9341_MADCTL_RLANDSCAPE_BGR ILI9341_MEMORY_ACCESS_CONTROL_BGR
@@ -242,7 +241,7 @@
 #define ILI9341_MADCTL_RPORTRAIT_MX     0
 #define ILI9341_MADCTL_RPORTRAIT_MV     0
 #define ILI9341_MADCTL_RPORTRAIT_ML     0
-#ifdef CONFIG_BIG_ENDIAN
+#ifdef CONFIG_ENDIAN_BIG
 #  define ILI9341_MADCTL_RPORTRAIT_BGR  0
 #else
 #  define ILI9341_MADCTL_RPORTRAIT_BGR  ILI9341_MEMORY_ACCESS_CONTROL_BGR
@@ -321,6 +320,7 @@ static int stm32_ili9341_initialize(void)
 #ifdef CONFIG_DEBUG_LCD_INFO
   /* Read display identification */
 
+  uint8_t param;
   lcd->sendcmd(lcd, ILI9341_READ_ID1);
   lcd->recvparam(lcd, &param);
   lcdinfo("ili9341 LCD driver: LCD modules manufacturer ID: %d\n", param);
@@ -419,9 +419,9 @@ static int stm32_ili9341_initialize(void)
  * Description:
  *   Unitialize the LCD Device.
  *
- * Parameter:
+ * Input Parameters:
  *
- * Return:
+ * Returned Value:
  *
  ************************************************************************************/
 
@@ -442,10 +442,10 @@ void board_lcd_uninitialize(void)
  *   Return a reference to the LCD object for the specified LCD Device.
  *   This allows support for multiple LCD devices.
  *
- * Parameter:
+ * Input Parameters:
  *   lcddev - Number of the LDC Device.
  *
- * Return:
+ * Returned Value:
  *   Reference to the LCD object if exist otherwise NULL
  *
  ************************************************************************************/
@@ -468,9 +468,9 @@ FAR struct lcd_dev_s *board_lcd_getdev(int lcddev)
  *   fully initialized, display memory cleared, and the LCD ready to use, but
  *   with the power setting at 0 (full off).
  *
- * Parameter:
+ * Input Parameters:
  *
- * Return:
+ * Returned Value:
  *   On success - Ok
  *   On error   - Error Code
  *
@@ -502,7 +502,7 @@ int board_lcd_initialize(void)
             }
         }
 
-      return -errno;
+      return -ENODEV;
     }
 
   return OK;
@@ -516,7 +516,7 @@ int board_lcd_initialize(void)
  * Description:
  *   Initialize the framebuffer video hardware associated with the display.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -556,7 +556,7 @@ int up_fbinitialize(int display)
  *   Return a a reference to the framebuffer object for the specified video
  *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *   vplane - Identifies the plane being queried.
@@ -591,24 +591,4 @@ void up_fbuninitialize(int display)
 {
   stm32_ltdcuninitialize();
 }
-
-/************************************************************************************
- * Name: up_ltdcgetlayer
- *
- * Description:
- *   The application function name to get a reference to the hardware layer of
- *   the ltdc device.
- *
- * Parameter:
- *   lid - The specific layer identifier
- *
- ************************************************************************************/
-
-#ifdef CONFIG_STM32_LTDC_INTERFACE
-FAR struct ltdc_layer_s *up_ltdcgetlayer(int lid)
-{
-  return stm32_ltdcgetlayer(lid);
-}
-#endif
-
 #endif /* CONFIG_STM32_LTDC */

@@ -46,15 +46,29 @@
 #include <errno.h>
 
 #include <nuttx/board.h>
-#include <nuttx/mmcsd.h>
 #include <nuttx/input/buttons.h>
 
 #ifdef CONFIG_USBMONITOR
 #  include <nuttx/usb/usbmonitor.h>
 #endif
 
+#ifdef CONFIG_RNDIS
+#  include <nuttx/usb/rndis.h>
+#  include <net/if.h>
+#endif
+
 #include "stm32.h"
 #include "clicker2-stm32.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#ifdef CONFIG_RNDIS
+#  ifndef CONFIG_CLICKER2_STM32_RNDIS_MACADDR
+#    define CONFIG_CLICKER2_STM32_RNDIS_MACADDR 0xfadedeadbeef
+#  endif
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -76,9 +90,6 @@
 
 int stm32_bringup(void)
 {
-#ifdef HAVE_MMCSD
-  FAR struct sdio_dev_s *sdio;
-#endif
   int ret;
 
 #ifdef CONFIG_FS_PROCFS
@@ -89,38 +100,6 @@ int stm32_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to mount procfs at /proc: %d\n", ret);
     }
-#endif
-
-#ifdef HAVE_MMCSD
-  /* Mount the SDIO-based MMC/SD block driver */
-  /* First, get an instance of the SDIO interface */
-
-  sdio = sdio_initialize(MMCSD_SLOTNO);
-  if (!sdio)
-    {
-      syslog(LOG_ERR,
-             "ERROR: Failed to initialize SDIO slot %d\n",
-             MMCSD_SLOTNO);
-      return -ENODEV;
-    }
-
-  /* Now bind the SDIO interface to the MMC/SD driver */
-
-  ret = mmcsd_slotinitialize(MMCSD_MINOR, sdio);
-  if (ret != OK)
-    {
-      syslog(LOG_ERR,
-             "ERROR: Failed to bind SDIO to the MMC/SD driver: %d\n",
-             ret);
-      return ret;
-    }
-
-  /* Then let's guess and say that there is a card in the slot.  The Olimex
-   * STM32 P407 does not support a GPIO to detect if there is a card in
-   * the slot so we are reduced to guessing.
-   */
-
-   sdio_mediachange(sdio, true);
 #endif
 
 #ifdef CONFIG_CAN
@@ -173,6 +152,27 @@ int stm32_bringup(void)
     }
 #endif
 
+#if defined(CONFIG_CLICKER2_STM32_MB1_MMCSD_AUTOMOUNT) || \
+    defined(CONFIG_CLICKER2_STM32_MB2_MMCSD_AUTOMOUNT)
+  /* Configure uSD automounter */
+
+  ret = stm32_automount_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_automount_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#if defined(CONFIG_CLICKER2_STM32_MB1_MMCSD) || defined(CONFIG_CLICKER2_STM32_MB2_MMCSD)
+  /* Configure uSD card slot */
+
+  ret = stm32_mmcsd_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_mmcsd_initialize() failed: %d\n", ret);
+    }
+#endif
+
 #ifdef CONFIG_BUTTONS
   /* Register the BUTTON driver */
 
@@ -180,6 +180,25 @@ int stm32_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: btn_lower_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_RNDIS
+  uint8_t mac[IFHWADDRLEN];
+
+  mac[0] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 5)) & 0xff;
+  mac[1] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 4)) & 0xff;
+  mac[2] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 3)) & 0xff;
+  mac[3] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 2)) & 0xff;
+  mac[4] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 1)) & 0xff;
+  mac[5] = (CONFIG_CLICKER2_STM32_RNDIS_MACADDR >> (8 * 0)) & 0xff;
+
+  /* Register USB RNDIS Driver */
+
+  ret = usbdev_rndis_initialize(mac);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: usbdev_rndis_initialize() failed %d\n", ret);
     }
 #endif
 

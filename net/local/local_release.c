@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/local/local_release.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,6 +45,7 @@
 #include <queue.h>
 #include <assert.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 
 #include <arch/irq.h>
@@ -107,7 +108,7 @@ int local_release(FAR struct local_conn_s *conn)
            client = (FAR struct local_conn_s *)dq_next(&client->lc_node))
         {
           client->u.client.lc_result = -ENOTCONN;
-          sem_post(&client->lc_waitsem);
+          nxsem_post(&client->lc_waitsem);
         }
 
       conn->u.server.lc_pending = 0;

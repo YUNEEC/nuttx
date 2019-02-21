@@ -1,7 +1,8 @@
 ############################################################################
 # arch/arm/src/sam34/Make.defs
 #
-#   Copyright (C) 2009-2011, 2013-2015 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2009-2011, 2013-2015, 2018 Gregory Nutt. All rights
+#     reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,11 +36,7 @@
 
 # The start-up, "head", file
 
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 HEAD_ASRC =
-else
-HEAD_ASRC = sam_vectors.S
-endif
 
 # Common ARM and Cortex-M3 files
 
@@ -47,30 +44,31 @@ CMN_UASRCS =
 CMN_UCSRCS =
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += up_testset.S vfork.S
+CMN_ASRCS += up_testset.S up_fetchadd.S vfork.S
 
 CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c up_createstack.c
-CMN_CSRCS += up_mdelay.c up_udelay.c up_exit.c up_initialize.c
-CMN_CSRCS += up_initialstate.c up_interruptcontext.c up_memfault.c up_modifyreg8.c
-CMN_CSRCS += up_modifyreg16.c up_modifyreg32.c up_releasepending.c
-CMN_CSRCS += up_releasestack.c up_reprioritizertr.c up_schedulesigaction.c
-CMN_CSRCS += up_sigdeliver.c up_stackframe.c up_unblocktask.c up_usestack.c
-CMN_CSRCS += up_doirq.c up_hardfault.c up_svcall.c up_vfork.c
+CMN_CSRCS += up_doirq.c up_exit.c up_hardfault.c up_initialize.c
+CMN_CSRCS += up_initialstate.c up_interruptcontext.c up_mdelay.c
+CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
+CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
+CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
+CMN_CSRCS += up_svcall.c up_trigger_irq.c up_unblocktask.c up_udelay.c
+CMN_CSRCS += up_usestack.c up_vfork.c
 
 ifneq ($(CONFIG_SMP),y)
+ifneq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
 CMN_CSRCS += up_idle.c
+endif
 endif
 
 # Configuration-dependent common files
 
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
 CMN_ASRCS += up_lazyexception.S
 else
 CMN_ASRCS += up_exception.S
 endif
 CMN_CSRCS += up_vectors.c
-endif
 
 ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
 CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
@@ -86,11 +84,7 @@ endif
 
 ifeq ($(CONFIG_ARCH_FPU),y)
 CMN_ASRCS += up_fpu.S
-ifneq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_CSRCS += up_copyarmstate.c
-else ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
-CMN_CSRCS += up_copyarmstate.c
-endif
 endif
 
 ifeq ($(CONFIG_STACK_COLORATION),y)
@@ -104,10 +98,6 @@ CHIP_CSRCS  = sam_allocateheap.c sam_irq.c sam_lowputc.c sam_serial.c
 CHIP_CSRCS += sam_start.c
 
 # Configuration-dependent SAM3/4 files
-
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
-CHIP_ASRCS += sam_vectors.S
-endif
 
 ifneq ($(CONFIG_SCHED_TICKLESS),y)
 CHIP_CSRCS += sam_timerisr.c
@@ -208,6 +198,10 @@ endif # CONFIG_SAM34_TC
 
 ifeq ($(CONFIG_SMP),y)
 CHIP_CSRCS += sam4cm_cpuindex.c sam4cm_cpuidlestack.c
-CHIP_CSRCS += sam4cm_cpupause.c sam4cm_cpustart.c sam4cm_idle.c
+CHIP_CSRCS += sam4cm_cpupause.c sam4cm_cpustart.c
+ifneq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
+CHIP_CSRCS += sam4cm_idle.c
+endif
 endif # CONFIG_SMP
+
 endif # CONFIG_ARCH_CHIP_SAM4CM

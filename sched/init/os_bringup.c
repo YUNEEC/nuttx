@@ -45,11 +45,14 @@
 
 #include <sched.h>
 #include <stdlib.h>
+#include <string.h>
 #include <debug.h>
+#include <sys/mount.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
 #include <nuttx/init.h>
+#include <nuttx/symtab.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/kthread.h>
 #include <nuttx/userspace.h>
@@ -97,10 +100,6 @@
    * program.
    */
 
-#    ifndef CONFIG_BOARD_INITIALIZE
-#      warning You probably need CONFIG_BOARD_INITIALIZE to mount the file system
-#    endif
-
 #    ifndef CONFIG_USER_INITPATH
   /* Path to the initialization program must have been provided */
 
@@ -114,6 +113,9 @@
 #      undef CONFIG_INIT_NEXPORTS
 #      define CONFIG_INIT_SYMTAB NULL
 #      define CONFIG_INIT_NEXPORTS 0
+#    else
+extern const struct symtab_s CONFIG_INIT_SYMTAB[];
+extern const int             CONFIG_INIT_NEXPORTS;
 #    endif
 #  endif
 #endif
@@ -122,6 +124,10 @@
 
 #if !defined(CONFIG_BUILD_PROTECTED)
 #  undef CONFIG_LIB_USRWORK
+#endif
+
+#if !defined(CONFIG_USERMAIN_PRIORITY)
+#  define CONFIG_USERMAIN_PRIORITY SCHED_PRIORITY_DEFAULT
 #endif
 
 /****************************************************************************
@@ -154,9 +160,9 @@ static inline void os_pgworker(void)
 
   sinfo("Starting paging thread\n");
 
-  g_pgworker = kernel_thread("pgfill", CONFIG_PAGING_DEFPRIO,
-                             CONFIG_PAGING_STACKSIZE,
-                             (main_t)pg_worker, (FAR char * const *)NULL);
+  g_pgworker = kthread_create("pgfill", CONFIG_PAGING_DEFPRIO,
+                              CONFIG_PAGING_STACKSIZE,
+                              (main_t)pg_worker, (FAR char * const *)NULL);
   DEBUGASSERT(g_pgworker > 0);
 }
 
@@ -257,16 +263,17 @@ static inline void os_do_appstart(void)
 
 #ifdef CONFIG_BUILD_PROTECTED
   DEBUGASSERT(USERSPACE->us_entrypoint != NULL);
-  pid = task_create("init", SCHED_PRIORITY_DEFAULT,
-                    CONFIG_USERMAIN_STACKSIZE, USERSPACE->us_entrypoint,
-                    (FAR char * const *)NULL);
+  pid = nxtask_create("init", CONFIG_USERMAIN_PRIORITY,
+                      CONFIG_USERMAIN_STACKSIZE, USERSPACE->us_entrypoint,
+                      (FAR char * const *)NULL);
 #else
-  pid = task_create("init", SCHED_PRIORITY_DEFAULT,
-                    CONFIG_USERMAIN_STACKSIZE,
-                    (main_t)CONFIG_USER_ENTRYPOINT,
-                    (FAR char * const *)NULL);
+  pid = nxtask_create("init", CONFIG_USERMAIN_PRIORITY,
+                      CONFIG_USERMAIN_STACKSIZE,
+                      (main_t)CONFIG_USER_ENTRYPOINT,
+                      (FAR char * const *)NULL);
 #endif
-  ASSERT(pid > 0);
+  DEBUGASSERT(pid > 0);
+  UNUSED(pid);
 }
 
 #elif defined(CONFIG_INIT_FILEPATH)
@@ -282,6 +289,16 @@ static inline void os_do_appstart(void)
   board_initialize();
 #endif
 
+#ifdef CONFIG_INIT_MOUNT
+  /* Mount the file system containing the init program. */
+
+  ret = mount(CONFIG_INIT_MOUNT_SOURCE, CONFIG_INIT_MOUNT_TARGET,
+              CONFIG_INIT_MOUNT_FSTYPE, CONFIG_INIT_MOUNT_FLAGS,
+              CONFIG_INIT_MOUNT_DATA);
+  DEBUGASSERT(ret >= 0);
+  UNUSED(ret);
+#endif
+
   /* Start the application initialization program from a program in a
    * mounted file system.  Presumably the file system was mounted as part
    * of the board_initialize() operation.
@@ -291,7 +308,8 @@ static inline void os_do_appstart(void)
 
   ret = exec(CONFIG_USER_INITPATH, NULL, CONFIG_INIT_SYMTAB,
              CONFIG_INIT_NEXPORTS);
-  ASSERT(ret >= 0);
+  DEBUGASSERT(ret >= 0);
+  UNUSED(ret);
 }
 
 #elif defined(CONFIG_INIT_NONE)
@@ -354,11 +372,11 @@ static inline void os_start_application(void)
    * execution.
    */
 
-  pid = kernel_thread("AppBringUp", CONFIG_BOARD_INITTHREAD_PRIORITY,
+  pid = kthread_create("AppBringUp", CONFIG_BOARD_INITTHREAD_PRIORITY,
                       CONFIG_BOARD_INITTHREAD_STACKSIZE,
                       (main_t)os_start_task, (FAR char * const *)NULL);
-  ASSERT(pid > 0);
-
+  DEBUGASSERT(pid > 0);
+  UNUSED(pid);
 #else
   /* Do the board/application initialization on this thread of execution. */
 

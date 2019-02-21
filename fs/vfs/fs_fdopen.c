@@ -67,17 +67,16 @@ static inline int fs_checkfd(FAR struct tcb_s *tcb, int fd, int oflags)
 {
   FAR struct file *filep;
   FAR struct inode *inode;
+  int ret;
 
   DEBUGASSERT(tcb && tcb->group);
 
   /* Get the file structure corresponding to the file descriptor. */
 
-  filep = fs_getfilep(fd);
-  if (!filep)
+  ret = fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* The errno value has already been set */
-
-      return ERROR;
+      return ret;
     }
 
   /* Get the inode associated with the file descriptor.  This should
@@ -208,10 +207,11 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
 
   /* Find an unallocated FILE structure in the stream list */
 
-  ret = sem_wait(&slist->sl_sem);
-  if (ret != OK)
+  ret = nxsem_wait(&slist->sl_sem);
+  if (ret < 0)
     {
-      goto errout_with_errno;
+      errcode = -ret;
+      goto errout;
     }
 
   for (i = 0 ; i < CONFIG_NFILE_STREAMS; i++)
@@ -226,7 +226,7 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
 #ifndef CONFIG_STDIO_DISABLE_BUFFERING
           /* Initialize the semaphore the manages access to the buffer */
 
-          (void)sem_init(&stream->fs_sem, 0, 1);
+          (void)nxsem_init(&stream->fs_sem, 0, 1);
 
 #if CONFIG_STDIO_BUFFER_SIZE > 0
           /* Allocate the IO buffer at the appropriate privilege level for
@@ -264,7 +264,7 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
           stream->fs_fd      = fd;
           stream->fs_oflags  = (uint16_t)oflags;
 
-          sem_post(&slist->sl_sem);
+          nxsem_post(&slist->sl_sem);
           return stream;
         }
     }
@@ -276,10 +276,9 @@ FAR struct file_struct *fs_fdopen(int fd, int oflags, FAR struct tcb_s *tcb)
 #if !defined(CONFIG_STDIO_DISABLE_BUFFERING) && CONFIG_STDIO_BUFFER_SIZE > 0
 errout_with_sem:
 #endif
-  sem_post(&slist->sl_sem);
+  nxsem_post(&slist->sl_sem);
 
 errout:
   set_errno(errcode);
-errout_with_errno:
   return NULL;
 }

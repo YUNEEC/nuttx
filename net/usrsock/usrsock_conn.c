@@ -42,13 +42,13 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
 
 #include <arch/irq.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/netconfig.h>
 #include <nuttx/net/net.h>
 
@@ -60,7 +60,7 @@
 
 /* The array containing all usrsock connections. */
 
-struct usrsock_conn_s g_usrsock_connections[CONFIG_NET_USRSOCK_CONNS];
+static struct usrsock_conn_s g_usrsock_connections[CONFIG_NET_USRSOCK_CONNS];
 
 /* A list of all free usrsock connections */
 
@@ -95,13 +95,13 @@ static void _usrsock_semtake(FAR sem_t *sem)
        * the wait was awakened by a signal.
        */
 
-      DEBUGASSERT(ret == -EINTR);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
     }
 }
 
 static void _usrsock_semgive(FAR sem_t *sem)
 {
-  (void)sem_post(sem);
+  (void)nxsem_post(sem);
 }
 
 /****************************************************************************
@@ -121,9 +121,7 @@ FAR struct usrsock_conn_s *usrsock_alloc(void)
 {
   FAR struct usrsock_conn_s *conn;
 
-  /* The free list is only accessed from user, non-interrupt level and
-   * is protected by a semaphore (that behaves like a mutex).
-   */
+  /* The free list is protected by a semaphore (that behaves like a mutex). */
 
   _usrsock_semtake(&g_free_sem);
   conn = (FAR struct usrsock_conn_s *)dq_remfirst(&g_free_usrsock_connections);
@@ -158,9 +156,7 @@ FAR struct usrsock_conn_s *usrsock_alloc(void)
 
 void usrsock_free(FAR struct usrsock_conn_s *conn)
 {
-  /* The free list is only accessed from user, non-interrupt level and
-   * is protected by a semaphore (that behaves like a mutex).
-   */
+  /* The free list is protected by a semaphore (that behaves like a mutex). */
 
   DEBUGASSERT(conn->crefs == 0);
 
@@ -256,7 +252,9 @@ int usrsock_setup_request_callback(FAR struct usrsock_conn_s *conn,
 {
   int ret = -EBUSY;
 
-  (void)sem_init(&pstate->recvsem, 0, 0);
+  (void)nxsem_init(&pstate->recvsem, 0, 0);
+  nxsem_setprotocol(&pstate->recvsem, SEM_PRIO_NONE);
+
   pstate->conn   = conn;
   pstate->result = -EAGAIN;
   pstate->completed = false;
@@ -303,8 +301,29 @@ void usrsock_teardown_request_callback(FAR struct usrsock_reqstate_s *pstate)
   /* Make sure that no further events are processed */
 
   devif_conn_callback_free(NULL, pstate->cb, &conn->list);
+  nxsem_destroy(&pstate->recvsem);
 
   pstate->cb = NULL;
+}
+
+/****************************************************************************
+ * Name: usrsock_setup_datain
+ ****************************************************************************/
+
+void usrsock_setup_datain(FAR struct usrsock_conn_s *conn,
+                          FAR struct iovec *iov, unsigned int iovcnt)
+{
+  unsigned int i;
+
+  conn->resp.datain.iov = iov;
+  conn->resp.datain.pos = 0;
+  conn->resp.datain.total = 0;
+  conn->resp.datain.iovcnt = iovcnt;
+
+  for (i = 0; i < iovcnt; i++)
+    {
+      conn->resp.datain.total += iov[i].iov_len;
+    }
 }
 
 /****************************************************************************
@@ -324,7 +343,7 @@ void usrsock_initialize(void)
 
   dq_init(&g_free_usrsock_connections);
   dq_init(&g_active_usrsock_connections);
-  sem_init(&g_free_sem, 0, 1);
+  nxsem_init(&g_free_sem, 0, 1);
 
   for (i = 0; i < CONFIG_NET_USRSOCK_CONNS; i++)
     {

@@ -58,14 +58,11 @@
  * Description:
  *   Return the number of network devices
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
  *   The number of network devices
- *
- * Assumptions:
- *  Called from normal user mode
  *
  ****************************************************************************/
 

@@ -3,7 +3,7 @@
  *
  * A do-nothinig audio device driver to simplify testing of audio decoders.
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author:  Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,6 +53,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/audio/audio.h>
@@ -437,7 +438,7 @@ static void *null_workerthread(pthread_addr_t pvarg)
     {
       /* Wait for messages from our message queue */
 
-      msglen = mq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
+      msglen = nxmq_receive(priv->mq, (FAR char *)&msg, sizeof(msg), &prio);
 
       /* Handle the case when we return with no message */
 
@@ -589,8 +590,8 @@ static int null_stop(FAR struct audio_lowerhalf_s *dev)
 
   term_msg.msgId = AUDIO_MSG_STOP;
   term_msg.u.data = 0;
-  mq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-          CONFIG_AUDIO_NULL_MSG_PRIO);
+  (void)nxmq_send(priv->mq, (FAR const char *)&term_msg, sizeof(term_msg),
+                 CONFIG_AUDIO_NULL_MSG_PRIO);
 
   /* Join the worker thread */
 
@@ -665,8 +666,8 @@ static int null_enqueuebuffer(FAR struct audio_lowerhalf_s *dev,
 
   done = ((apb->flags & AUDIO_APB_FINAL) != 0);
 
-  /* The buffer belongs to to an upper level.  Just forward the event to
-   * the next level up.
+  /* The buffer belongs to an upper level.  Just forward the event to the
+   * next level up.
    */
 
 #ifdef CONFIG_AUDIO_MULTI_SESSION

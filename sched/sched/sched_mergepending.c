@@ -68,10 +68,10 @@
  *   This function merges the prioritized g_pendingtasks list into the
  *   prioritized ready-to-run task list.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   true if the head of the ready-to-run task list has changed indicating
  *     a context switch is needed.
  *
@@ -124,7 +124,7 @@ bool sched_mergepending(void)
        * the ready-to-run list!
        */
 
-      ASSERT(rtcb);
+      DEBUGASSERT(rtcb);
 
       /* The ptcb goes just before rtcb */
 
@@ -173,10 +173,10 @@ bool sched_mergepending(void)
  *   This function merges the prioritized g_pendingtasks list into the
  *   prioritized ready-to-run task list.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   true if the head of the ready-to-run task list has changed indicating
  *     a context switch is needed.
  *
@@ -199,6 +199,10 @@ bool sched_mergepending(void)
   int cpu;
   int me;
 
+  /* Lock the tasklist before accessing */
+
+  irqstate_t lock = sched_tasklist_lock();
+
   /* Remove and process every TCB in the g_pendingtasks list.
    *
    * Do nothing if (1) pre-emption is still disabled (by any CPU), or (2) if
@@ -206,7 +210,7 @@ bool sched_mergepending(void)
    */
 
   me = this_cpu();
-  if (!spin_islocked(&g_cpu_schedlock) && !irq_cpu_locked(me))
+  if (!sched_islocked_global() && !irq_cpu_locked(me))
     {
       /* Find the CPU that is executing the lowest priority task */
 
@@ -215,7 +219,7 @@ bool sched_mergepending(void)
         {
           /* The pending task list is empty */
 
-          return ret;
+          goto errout_with_lock;
         }
 
       cpu  = sched_cpu_select(ALL_CPUS /* ptcb->affinity */);
@@ -235,17 +239,18 @@ bool sched_mergepending(void)
           /* Remove the task from the pending task list */
 
           tcb = (FAR struct tcb_s *)dq_remfirst((FAR dq_queue_t *)&g_pendingtasks);
-          DEBUGASSERT(tcb == ptcb);
 
           /* Add the pending task to the correct ready-to-run list. */
 
+          sched_tasklist_unlock(lock);
           ret |= sched_addreadytorun(tcb);
+          lock = sched_tasklist_lock();
 
           /* This operation could cause the scheduler to become locked.
            * Check if that happened.
            */
 
-          if (spin_islocked(&g_cpu_schedlock) || irq_cpu_locked(me))
+          if (sched_islocked_global() || irq_cpu_locked(me))
             {
               /* Yes.. then we may have incorrectly placed some TCBs in the
                * g_readytorun list (unlikely, but possible).  We will have to
@@ -260,7 +265,7 @@ bool sched_mergepending(void)
                * pending task list.
                */
 
-              return ret;
+              goto errout_with_lock;
             }
 
           /* Set up for the next time through the loop */
@@ -270,7 +275,7 @@ bool sched_mergepending(void)
             {
               /* The pending task list is empty */
 
-              return ret;
+              goto errout_with_lock;
             }
 
           cpu  = sched_cpu_select(ALL_CPUS /* ptcb->affinity */);
@@ -286,6 +291,11 @@ bool sched_mergepending(void)
                              TSTATE_TASK_READYTORUN);
     }
 
+errout_with_lock:
+
+  /* Unlock the tasklist */
+
+  sched_tasklist_unlock(lock);
   return ret;
 }
 #endif /* CONFIG_SMP */

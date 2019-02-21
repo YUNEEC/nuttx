@@ -87,13 +87,34 @@ struct timeval;           /* Forward reference */
 void net_lockinitialize(void);
 
 /****************************************************************************
+ * Name: net_breaklock
+ *
+ * Description:
+ *   Break the lock, return information needed to restore re-entrant lock
+ *   state.
+ *
+ ****************************************************************************/
+
+int net_breaklock(FAR unsigned int *count);
+
+/****************************************************************************
+ * Name: net_breaklock
+ *
+ * Description:
+ *   Restore the locked state
+ *
+ ****************************************************************************/
+
+void net_restorelock(unsigned int count);
+
+/****************************************************************************
  * Name: net_dsec2timeval
  *
  * Description:
  *   Convert a decisecond value to a struct timeval.  Needed by getsockopt()
  *   to report timeout values.
  *
- * Parameters:
+ * Input Parameters:
  *   dsec The decisecond value to convert
  *   tv   The struct timeval to receive the converted value
  *
@@ -112,7 +133,7 @@ void net_dsec2timeval(uint16_t dsec, FAR struct timeval *tv);
  * Description:
  *   Convert a decisecond value to a system clock ticks.  Used by IGMP logic.
  *
- * Parameters:
+ * Input Parameters:
  *   dsec The decisecond value to convert
  *
  * Returned Value:
@@ -129,7 +150,7 @@ unsigned int net_dsec2tick(int dsec);
  *   Convert a struct timeval to deciseconds.  Needed by setsockopt() to
  *   save new timeout values.
  *
- * Parameters:
+ * Input Parameters:
  *   tv        - The struct timeval to convert
  *   remainder - Determines how to handler the microsecond remainder
  *
@@ -158,10 +179,10 @@ unsigned int net_timeval2dsec(FAR struct timeval *tv,
  *   there might not be additional '1' bits following the firs '0', but that
  *   will be a malformed netmask.
  *
- * Parameters:
+ * Input Parameters:
  *   mask   Points to an IPv6 netmask in the form of uint16_t[8]
  *
- * Return:
+ * Returned Value:
  *   The prefix length, range 0-128 on success;  This function will not
  *   fail.
  *
@@ -178,7 +199,7 @@ uint8_t net_ipv6_mask2pref(FAR const uint16_t *mask);
  *   Convert a IPv6 prefix length to a network mask.  The prefix length
  *   specifies the number of MS bits under mask (0-128)
  *
- * Parameters:
+ * Input Parameters:
  *   preflen  - Determines the width of the netmask (in bits).  Range 0-128
  *   mask  - The location to return the netmask.
  *
@@ -267,13 +288,16 @@ uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto);
  * Name: ipv6_upperlayer_chksum
  *
  * Description:
- *   Perform the checksum calcaultion over the IPv6, protocol headers, and
+ *   Perform the checksum calculation over the IPv6, protocol headers, and
  *   data payload as necessary.
  *
  * Input Parameters:
  *   dev   - The network driver instance.  The packet data is in the d_buf
  *           of the device.
  *   proto - The protocol being supported
+ *   iplen - The size of the IPv6 header.  This may be larger than
+ *           IPv6_HDRLEN the IPv6 header if IPv6 extension headers are
+ *           present.
  *
  * Returned Value:
  *   The calculated checksum
@@ -281,7 +305,8 @@ uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto);
  ****************************************************************************/
 
 #if !defined(CONFIG_NET_ARCH_CHKSUM) && defined(CONFIG_NET_IPv6)
-uint16_t ipv6_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto);
+uint16_t ipv6_upperlayer_chksum(FAR struct net_driver_s *dev,
+                                uint8_t proto, unsigned int iplen);
 #endif
 
 /****************************************************************************
@@ -309,6 +334,7 @@ uint16_t tcp_ipv4_chksum(FAR struct net_driver_s *dev);
 
 #ifdef CONFIG_NET_IPv6
 /* REVIST: Is this used? */
+
 uint16_t tcp_ipv6_chksum(FAR struct net_driver_s *dev);
 #endif
 
@@ -352,7 +378,7 @@ uint16_t udp_ipv6_chksum(FAR struct net_driver_s *dev);
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING)
+#if defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_SOCKET)
 uint16_t icmp_chksum(FAR struct net_driver_s *dev, int len);
 #endif
 
@@ -365,7 +391,7 @@ uint16_t icmp_chksum(FAR struct net_driver_s *dev, int len);
  ****************************************************************************/
 
 #ifdef CONFIG_NET_ICMPv6
-uint16_t icmpv6_chksum(FAR struct net_driver_s *dev);
+uint16_t icmpv6_chksum(FAR struct net_driver_s *dev, unsigned int iplen);
 #endif
 
 #undef EXTERN

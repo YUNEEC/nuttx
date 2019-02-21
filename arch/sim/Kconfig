@@ -107,6 +107,7 @@ config SIM_NETDEV
 	bool "Simulated Network Device"
 	default y
 	depends on NET
+	select ARCH_HAVE_NETDEV_STATISTICS
 	---help---
 		Build in support for a simulated network device using a TAP device on Linux or
 		WPCAP on Windows.
@@ -210,7 +211,7 @@ config SIM_TOUCHSCREEN
 config SIM_AJOYSTICK
 	bool "X11 mouse-based analog joystick emulation"
 	---help---
-		Support an X11 mouse-based anallog joystick emulation.  Also needs INPUT=y`
+		Support an X11 mouse-based analog joystick emulation.  Also needs INPUT=y
 
 config SIM_NOINPUT
 	bool "No input device"

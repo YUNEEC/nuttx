@@ -49,7 +49,7 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
-
+#include <nuttx/signal.h>
 #include <nuttx/mm/iob.h>
 
 #include <nuttx/wireless/ieee802154/ieee802154_device.h>
@@ -99,11 +99,10 @@ struct mac802154_chardevice_s
 
   /* Hold a list of events */
 
-  bool enableevents : 1;                /* Are events enabled? */
-  bool geteventpending : 1;             /* Is there a get event using the semaphore? */
-  sem_t geteventsem;                    /* Signaling semaphore for waiting get event */
-  FAR struct ieee802154_notif_s *event_head;
-  FAR struct ieee802154_notif_s *event_tail;
+  bool enableevents : 1;          /* Are events enabled? */
+  bool geteventpending : 1;       /* Is there a get event using the semaphore? */
+  sem_t geteventsem;              /* Signaling semaphore for waiting get event */
+  sq_queue_t primitive_queue;     /* For holding primitives to pass along */
 
   /* The following is a singly linked list of open references to the
    * MAC device.
@@ -134,17 +133,12 @@ struct mac802154_chardevice_s
  /* Semaphore helpers */
 
 static inline int mac802154dev_takesem(sem_t *sem);
-#define mac802154dev_givesem(s) sem_post(s);
+#define mac802154dev_givesem(s) nxsem_post(s);
 
-static inline void mac802154dev_pushevent(FAR struct mac802154_chardevice_s *dev,
-                                FAR struct ieee802154_notif_s *notif);
-static inline FAR struct ieee802154_notif_s *
-  mac802154dev_popevent(FAR struct mac802154_chardevice_s *dev);
-
-static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
-                                FAR struct ieee802154_notif_s *notif);
-static int  mac802154dev_rxframe(FAR struct mac802154_maccb_s *maccb,
-                                 FAR struct ieee802154_data_ind_s *ind);
+static int mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
+                               FAR struct ieee802154_primitive_s *primitive);
+static int mac802154dev_rxframe(FAR struct mac802154_chardevice_s *dev,
+                                FAR struct ieee802154_data_ind_s *ind);
 
 static int  mac802154dev_open(FAR struct file *filep);
 static int  mac802154dev_close(FAR struct file *filep);
@@ -189,75 +183,18 @@ static const struct file_operations mac802154dev_fops =
 
 static inline int mac802154dev_takesem(sem_t *sem)
 {
-  /* Take a count from the semaphore, possibly waiting */
+  int ret;
 
-  if (sem_wait(sem) < 0)
-    {
-      /* EINTR is the only error that we expect */
+  /* Take the semaphore (perhaps waiting) */
 
-      int errcode = get_errno();
-      DEBUGASSERT(errcode == EINTR);
-      return -errcode;
-    }
+  ret = nxsem_wait(sem);
 
-  return OK;
-}
+  /* The only case that an error should occur here is if the wait were
+   * awakened by a signal.
+   */
 
-/****************************************************************************
- * Name: mac802154dev_pushevent
- *
- * Description:
- *   Push event onto the event queue
- *
- * Assumptions:
- *   Called with the char device struct locked.
- *
- ****************************************************************************/
-
-static inline void mac802154dev_pushevent(FAR struct mac802154_chardevice_s *dev,
-                                FAR struct ieee802154_notif_s *notif)
-{
-  notif->flink = NULL;
-  if (!dev->event_head)
-    {
-      dev->event_head = notif;
-      dev->event_tail = notif;
-    }
-  else
-    {
-      dev->event_tail->flink = notif;
-      dev->event_tail        = notif;
-    }
-}
-
-/****************************************************************************
- * Name: mac802154dev_popevent
- *
- * Description:
- *   Pop an event off of the event queue
- *
- * Assumptions:
- *   Called with the char device struct locked.
- *
- ****************************************************************************/
-
-static inline FAR struct ieee802154_notif_s *
-  mac802154dev_popevent(FAR struct mac802154_chardevice_s *dev)
-{
-  FAR struct ieee802154_notif_s *notif = dev->event_head;
-
-  if (notif)
-    {
-      dev->event_head = notif->flink;
-      if (!dev->event_head)
-        {
-          dev->event_head = NULL;
-        }
-
-      notif->flink = NULL;
-    }
-
-  return notif;
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
@@ -408,13 +345,16 @@ static int mac802154dev_close(FAR struct file *filep)
 
   if (dev->md_open)
     {
-      FAR struct ieee802154_notif_s *notif;
+      FAR struct ieee802154_primitive_s *primitive;
 
-      while (dev->event_head != NULL)
+      primitive =
+        (FAR struct ieee802154_primitive_s *)sq_remfirst(&dev->primitive_queue);
+
+      while (primitive)
         {
-          notif = mac802154dev_popevent(dev);
-          DEBUGASSERT(notif != NULL);
-          mac802154_notif_free(dev->md_mac, notif);
+          ieee802154_primitive_free(primitive);
+          primitive =
+            (FAR struct ieee802154_primitive_s *)sq_remfirst(&dev->primitive_queue);
         }
     }
 
@@ -440,6 +380,7 @@ static ssize_t mac802154dev_read(FAR struct file *filep, FAR char *buffer,
   FAR struct mac802154_chardevice_s *dev;
   FAR struct mac802154dev_rxframe_s *rx;
   FAR struct ieee802154_data_ind_s *ind;
+  struct ieee802154_get_req_s req;
   int ret;
 
   DEBUGASSERT(filep && filep->f_inode);
@@ -500,11 +441,12 @@ static ssize_t mac802154dev_read(FAR struct file *filep, FAR char *buffer,
 
       /* Wait to be signaled when a frame is added to the list */
 
-      if (sem_wait(&dev->readsem) < 0)
+      ret = nxsem_wait(&dev->readsem);
+      if (ret < 0)
         {
-          DEBUGASSERT(errno == EINTR);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
           dev->readpending = false;
-          return -EINTR;
+          return ret;
         }
 
       /* Let the loop wrap back around, we will then pop a indication and this
@@ -512,12 +454,36 @@ static ssize_t mac802154dev_read(FAR struct file *filep, FAR char *buffer,
        */
     }
 
- rx->length = (ind->frame->io_len - ind->frame->io_offset);
+  /* Check if the MAC layer is in promiscuous mode. If it is, pass the entire
+   * frame, including IEEE 802.15.4 header and checksum by assuming the frame
+   * starts at the beginning of the IOB and goes 2 past the length to account
+   * for the FCS that the radio driver "removes"
+   */
 
- /* Copy the data from the IOB to the user supplied struct */
+  req.attr = IEEE802154_ATTR_MAC_PROMISCUOUS_MODE;
 
- memcpy(&rx->payload[0], &ind->frame->io_data[ind->frame->io_offset],
-        rx->length);
+  ret = mac802154_ioctl(dev->md_mac, MAC802154IOC_MLME_GET_REQUEST,
+                        (unsigned long)&req);
+
+  if (ret == 0 && req.attrval.mac.promisc_mode)
+    {
+      rx->length = ind->frame->io_len + 2;
+      rx->offset = ind->frame->io_offset;
+
+      /* Copy the entire frame from the IOB to the user supplied struct */
+
+      memcpy(&rx->payload[0], &ind->frame->io_data[0], rx->length);
+    }
+  else
+    {
+      rx->length = (ind->frame->io_len - ind->frame->io_offset);
+      rx->offset = 0;
+
+      /* Copy just the payload from the IOB to the user supplied struct */
+
+      memcpy(&rx->payload[0], &ind->frame->io_data[ind->frame->io_offset],
+             rx->length);
+    }
 
  memcpy(&rx->meta, ind, sizeof(struct ieee802154_data_ind_s));
 
@@ -526,9 +492,13 @@ static ssize_t mac802154dev_read(FAR struct file *filep, FAR char *buffer,
  rx->meta.flink = NULL;
  rx->meta.frame = NULL;
 
+ /* Free the IOB */
+
+ iob_free(ind->frame);
+
  /* Deallocate the data indication */
 
- ieee802154_ind_free(ind);
+ ieee802154_primitive_free((FAR struct ieee802154_primitive_s *)ind);
 
  return OK;
 }
@@ -665,25 +635,26 @@ static int mac802154dev_ioctl(FAR struct file *filep, int cmd,
 
       case MAC802154IOC_GET_EVENT:
         {
-          FAR struct ieee802154_notif_s *notif;
+          FAR struct ieee802154_primitive_s *primitive;
 
           while (1)
             {
               /* Try popping an event off the queue */
 
-              notif = mac802154dev_popevent(dev);
+              primitive = (FAR struct ieee802154_primitive_s *)
+                              sq_remfirst(&dev->primitive_queue);
 
               /* If there was an event to pop off, copy it into the user data and
                * free it from the MAC layer's memory.
                */
 
-              if (notif != NULL)
+              if (primitive != NULL)
                 {
-                  memcpy(&macarg->notif, notif, sizeof(struct ieee802154_notif_s));
+                  memcpy(&macarg->primitive, primitive, sizeof(struct ieee802154_primitive_s));
 
                   /* Free the notification */
 
-                  mac802154_notif_free(dev->md_mac, notif);
+                  ieee802154_primitive_free(primitive);
                   ret = OK;
                   break;
                 }
@@ -707,11 +678,12 @@ static int mac802154dev_ioctl(FAR struct file *filep, int cmd,
 
               /* Wait to be signaled when an event is queued */
 
-              if (sem_wait(&dev->geteventsem) < 0)
+              ret = nxsem_wait(&dev->geteventsem);
+              if (ret < 0)
                 {
-                  DEBUGASSERT(errno == EINTR);
+                  DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
                   dev->geteventpending = false;
-                  return -EINTR;
+                  return ret;
                 }
 
               /* Get exclusive access again, then loop back around and try and
@@ -748,8 +720,8 @@ static int mac802154dev_ioctl(FAR struct file *filep, int cmd,
   return ret;
 }
 
-static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
-                                FAR struct ieee802154_notif_s *notif)
+static int mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
+                                FAR struct ieee802154_primitive_s *primitive)
 {
   FAR struct mac802154dev_callback_s *cb =
     (FAR struct mac802154dev_callback_s *)maccb;
@@ -758,10 +730,12 @@ static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
   DEBUGASSERT(cb != NULL && cb->mc_priv != NULL);
   dev = cb->mc_priv;
 
-  /* Get exclusive access to the driver structure.  We don't care about any
-   * signals so if we see one, just go back to trying to get access again */
+  /* Handle the special case for data indications or "incoming frames" */
 
-  while (mac802154dev_takesem(&dev->md_exclsem) != 0);
+  if (primitive->type == IEEE802154_PRIMITIVE_IND_DATA)
+    {
+      return mac802154dev_rxframe(dev, &primitive->u.dataind);
+    }
 
   /* If there is a registered notification receiver, queue the event and signal
    * the receiver. Events should be popped from the queue from the application
@@ -771,7 +745,13 @@ static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
 
   if (dev->enableevents && (dev->md_open != NULL || dev->md_notify_registered))
     {
-      mac802154dev_pushevent(dev, notif);
+      /* Get exclusive access to the driver structure.  We don't care about any
+       * signals so if we see one, just go back to trying to get access again */
+
+      while (mac802154dev_takesem(&dev->md_exclsem) != 0);
+
+      sq_addlast((FAR sq_entry_t *)primitive, &dev->primitive_queue);
+
 
       /* Check if there is a read waiting for data */
 
@@ -780,7 +760,7 @@ static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
           /* Wake the thread waiting for the data transmission */
 
           dev->geteventpending = false;
-          sem_post(&dev->geteventsem);
+          nxsem_post(&dev->geteventsem);
         }
 
 #ifndef CONFIG_DISABLE_SIGNALS
@@ -789,27 +769,25 @@ static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
 
 #ifdef CONFIG_CAN_PASS_STRUCTS
           union sigval value;
-          value.sival_int = (int)notif->notiftype;
-          (void)sigqueue(dev->md_notify_pid, dev->md_notify_signo, value);
+          value.sival_int = (int)primitive->type;
+          (void)nxsig_queue(dev->md_notify_pid, dev->md_notify_signo,
+                            value);
 #else
-          (void)sigqueue(dev->md_notify_pid, dev->md_notify_signo,
-                         (FAR void *)notif->notiftype);
+          (void)nxsig_queue(dev->md_notify_pid, dev->md_notify_signo,
+                            (FAR void *)primitive->type);
 #endif
         }
 #endif
-    }
-  else
-    {
-      /* Just free the event if the driver is closed and there isn't a registered
-       * signal number.
-       */
 
-      mac802154_notif_free(dev->md_mac, notif);
+      mac802154dev_givesem(&dev->md_exclsem);
+      return OK;
     }
 
-  /* Release the driver */
+  /* By returning a negative value, we let the MAC know that we don't want the
+   * primitive and it will free it for us
+   */
 
-  mac802154dev_givesem(&dev->md_exclsem);
+  return -1;
 }
 
 /****************************************************************************
@@ -824,16 +802,9 @@ static void mac802154dev_notify(FAR struct mac802154_maccb_s *maccb,
  *
  ****************************************************************************/
 
-static int mac802154dev_rxframe(FAR struct mac802154_maccb_s *maccb,
+static int mac802154dev_rxframe(FAR struct mac802154_chardevice_s *dev,
                                 FAR struct ieee802154_data_ind_s *ind)
 {
-  FAR struct mac802154dev_callback_s *cb =
-    (FAR struct mac802154dev_callback_s *)maccb;
-  FAR struct mac802154_chardevice_s *dev;
-
-  DEBUGASSERT(cb != NULL && cb->mc_priv != NULL);
-  dev = cb->mc_priv;
-
   /* Get exclusive access to the driver structure.  We don't care about any
    * signals so if we see one, just go back to trying to get access again */
 
@@ -850,7 +821,7 @@ static int mac802154dev_rxframe(FAR struct mac802154_maccb_s *maccb,
       /* Wake the thread waiting for the data transmission */
 
       dev->readpending = false;
-      sem_post(&dev->readsem);
+      nxsem_post(&dev->readsem);
     }
 
   /* Release the driver */
@@ -875,7 +846,7 @@ static int mac802154dev_rxframe(FAR struct mac802154_maccb_s *maccb,
  *   minor - The device minor number.  The IEEE802.15.4 MAC character device
  *     will be registered as /dev/ieeeN where N is the minor number
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success.  Otherwise a negated errno value is
  *   returned to indicate the nature of the failure.
  *
@@ -898,21 +869,20 @@ int mac802154dev_register(MACHANDLE mac, int minor)
   /* Initialize the new mac driver instance */
 
   dev->md_mac = mac;
-  sem_init(&dev->md_exclsem, 0, 1); /* Allow the device to be opened once
-                                     * before blocking */
+  nxsem_init(&dev->md_exclsem, 0, 1); /* Allow the device to be opened once
+                                       * before blocking */
 
-  sem_init(&dev->readsem, 0, 0);
-  sem_setprotocol(&dev->readsem, SEM_PRIO_NONE);
+  nxsem_init(&dev->readsem, 0, 0);
+  nxsem_setprotocol(&dev->readsem, SEM_PRIO_NONE);
   dev->readpending = false;
 
   sq_init(&dev->dataind_queue);
 
   dev->geteventpending = false;
-  sem_init(&dev->geteventsem, 0, 0);
-  sem_setprotocol(&dev->geteventsem, SEM_PRIO_NONE);
+  nxsem_init(&dev->geteventsem, 0, 0);
+  nxsem_setprotocol(&dev->geteventsem, SEM_PRIO_NONE);
 
-  dev->event_head = NULL;
-  dev->event_tail = NULL;
+  sq_init(&dev->primitive_queue);
 
   dev->enableevents = true;
   dev->md_notify_registered = false;
@@ -925,7 +895,6 @@ int mac802154dev_register(MACHANDLE mac, int minor)
   maccb->flink    = NULL;
   maccb->prio     = CONFIG_IEEE802154_MACDEV_RECVRPRIO;
   maccb->notify   = mac802154dev_notify;
-  maccb->rxframe  = mac802154dev_rxframe;
 
   /* Bind the callback structure */
 
@@ -955,7 +924,7 @@ int mac802154dev_register(MACHANDLE mac, int minor)
   return OK;
 
 errout_with_priv:
-  sem_destroy(&dev->md_exclsem);
+  nxsem_destroy(&dev->md_exclsem);
   kmm_free(dev);
   return ret;
 }

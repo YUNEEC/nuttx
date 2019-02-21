@@ -1,7 +1,8 @@
 /****************************************************************************
  * arch/arm/src/sam34/sam_dmac.c
  *
- *   Copyright (C) 2010, 2013-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2013-2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -274,21 +275,26 @@ static struct sam_dma_s g_dma[SAM34_NDMACHAN] =
 
 static void sam_takechsem(void)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&g_chsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_chsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givechsem(void)
 {
-  (void)sem_post(&g_chsem);
+  (void)nxsem_post(&g_chsem);
 }
 
 /****************************************************************************
@@ -301,21 +307,26 @@ static inline void sam_givechsem(void)
 
 static void sam_takedsem(void)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&g_dsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_dsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givedsem(void)
 {
-  (void)sem_post(&g_dsem);
+  (void)nxsem_post(&g_dsem);
 }
 
 /****************************************************************************
@@ -1342,7 +1353,7 @@ static int sam_dmainterrupt(int irq, void *context, FAR void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_dmainitialize
+ * Name: up_dma_initialize
  *
  * Description:
  *   Initialize the DMA subsystem
@@ -1352,7 +1363,7 @@ static int sam_dmainterrupt(int irq, void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
   dmainfo("Initialize DMAC0\n");
 
@@ -1382,8 +1393,8 @@ void weak_function up_dmainitialize(void)
 
   /* Initialize semaphores */
 
-  sem_init(&g_chsem, 0, 1);
-  sem_init(&g_dsem, 0, CONFIG_SAM34_NLLDESC);
+  nxsem_init(&g_chsem, 0, 1);
+  nxsem_init(&g_dsem, 0, CONFIG_SAM34_NLLDESC);
 }
 
 /****************************************************************************

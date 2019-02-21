@@ -563,22 +563,22 @@
  * task management.
  */
 
-#define GIC_IRQ_SGI0              0  /* Sofware Generated Interrupt (SGI) 0 */
-#define GIC_IRQ_SGI1              1  /* Sofware Generated Interrupt (SGI) 1 */
-#define GIC_IRQ_SGI2              2  /* Sofware Generated Interrupt (SGI) 2 */
-#define GIC_IRQ_SGI3              3  /* Sofware Generated Interrupt (SGI) 3 */
-#define GIC_IRQ_SGI4              4  /* Sofware Generated Interrupt (SGI) 4 */
-#define GIC_IRQ_SGI5              5  /* Sofware Generated Interrupt (SGI) 5 */
-#define GIC_IRQ_SGI6              6  /* Sofware Generated Interrupt (SGI) 6 */
-#define GIC_IRQ_SGI7              7  /* Sofware Generated Interrupt (SGI) 7 */
-#define GIC_IRQ_SGI8              8  /* Sofware Generated Interrupt (SGI) 8 */
-#define GIC_IRQ_SGI9              9  /* Sofware Generated Interrupt (SGI) 9 */
-#define GIC_IRQ_SGI10            10  /* Sofware Generated Interrupt (SGI) 10 */
-#define GIC_IRQ_SGI11            11  /* Sofware Generated Interrupt (SGI) 11 */
-#define GIC_IRQ_SGI12            12  /* Sofware Generated Interrupt (SGI) 12 */
-#define GIC_IRQ_SGI13            13  /* Sofware Generated Interrupt (SGI) 13 */
-#define GIC_IRQ_SGI14            14  /* Sofware Generated Interrupt (SGI) 14 */
-#define GIC_IRQ_SGI15            15  /* Sofware Generated Interrupt (SGI) 15 */
+#define GIC_IRQ_SGI0              0  /* Software Generated Interrupt (SGI) 0 */
+#define GIC_IRQ_SGI1              1  /* Software Generated Interrupt (SGI) 1 */
+#define GIC_IRQ_SGI2              2  /* Software Generated Interrupt (SGI) 2 */
+#define GIC_IRQ_SGI3              3  /* Software Generated Interrupt (SGI) 3 */
+#define GIC_IRQ_SGI4              4  /* Software Generated Interrupt (SGI) 4 */
+#define GIC_IRQ_SGI5              5  /* Software Generated Interrupt (SGI) 5 */
+#define GIC_IRQ_SGI6              6  /* Software Generated Interrupt (SGI) 6 */
+#define GIC_IRQ_SGI7              7  /* Software Generated Interrupt (SGI) 7 */
+#define GIC_IRQ_SGI8              8  /* Software Generated Interrupt (SGI) 8 */
+#define GIC_IRQ_SGI9              9  /* Software Generated Interrupt (SGI) 9 */
+#define GIC_IRQ_SGI10            10  /* Software Generated Interrupt (SGI) 10 */
+#define GIC_IRQ_SGI11            11  /* Software Generated Interrupt (SGI) 11 */
+#define GIC_IRQ_SGI12            12  /* Software Generated Interrupt (SGI) 12 */
+#define GIC_IRQ_SGI13            13  /* Software Generated Interrupt (SGI) 13 */
+#define GIC_IRQ_SGI14            14  /* Software Generated Interrupt (SGI) 14 */
+#define GIC_IRQ_SGI15            15  /* Software Generated Interrupt (SGI) 15 */
 
 #define GIC_IRQ_GTM              27  /* Global Timer (GTM) PPI(0) */
 #define GIC_IRQ_FIQ              28  /* Fast Interrupt Request (nFIQ) PPI(1) */
@@ -634,7 +634,7 @@ static inline unsigned int arm_gic_nlines(void)
  *   If CONFIG_SMP is not selected, the cpuset is ignored and SGI is sent
  *   only to the current CPU.
  *
- * Input Paramters
+ * Input Parameters:
  *   sgi    - The SGI interrupt ID (0-15)
  *   cpuset - The set of CPUs to receive the SGI
  *
@@ -714,7 +714,7 @@ void arm_gic_initialize(void);
  *   Since this API is not supported on all architectures, it should be
  *   avoided in common implementations where possible.
  *
- * Input Paramters:
+ * Input Parameters:
  *   irq - The interrupt request to modify.
  *   edge - False: Active HIGH level sensitive, True: Rising edge sensitive
  *
@@ -735,7 +735,7 @@ int arm_gic_irq_trigger(int irq, bool edge);
  *   the irq number of the interrupt and then to call arm_doirq to dispatch
  *   the interrupt.
  *
- *  Input parameters:
+ *  Input Parameters:
  *   regs - A pointer to the register save area on the stack.
  *
  ****************************************************************************/

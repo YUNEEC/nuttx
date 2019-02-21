@@ -1,7 +1,8 @@
 /****************************************************************************
  * arch/z80/src/common/up_internal.h
  *
- *   Copyright (C) 2007-2009, 2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2015, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,25 +38,6 @@
 #define __ARCH_Z80_SRC_COMMON_UP_INTERNAL_H
 
 /****************************************************************************
- * Conditional Compilation
- ****************************************************************************/
-
-/* Bring-up debug configurations.  These are here (vs defconfig)
- * because these should only be controlled during low level
- * board bring-up and not part of normal platform configuration.
- */
-
-#undef  CONFIG_SUPPRESS_INTERRUPTS    /* Do not enable interrupts */
-#undef  CONFIG_SUPPRESS_TIMER_INTS    /* No timer */
-#undef  CONFIG_SUPPRESS_SERIAL_INTS   /* Console will poll */
-#undef  CONFIG_SUPPRESS_UART_CONFIG   /* Do not reconfig UART */
-#undef  CONFIG_DUMP_ON_EXIT           /* Dump task state on exit */
-
-#ifndef CONFIG_DEBUG_SCHED_INFO
-#  undef CONFIG_DUMP_ON_EXIT          /* Needs CONFIG_DEBUG_SCHED_INFO */
-#endif
-
-/****************************************************************************
  * Included Files
  ****************************************************************************/
 
@@ -63,8 +45,8 @@
 #include <stdbool.h>
 
 #include <arch/irq.h>
-#include "chip/chip.h"
-#include "chip/switch.h"
+#include "chip.h"
+#include "switch.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -206,7 +188,7 @@ void up_timerhook(void);
 
 /* Defined in board/up_network.c */
 
-#ifdef CONFIG_NET
+#if defined(CONFIG_NET) && !defined(CONFIG_NETDEV_LATEINIT)
 int  up_netinitialize(void);
 void up_netuninitialize(void);
 # ifdef CONFIG_ARCH_MCFILTER

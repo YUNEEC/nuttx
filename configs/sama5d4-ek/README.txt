@@ -105,7 +105,7 @@ Development Environment
 
   Several possible development environments may be used:
 
-  - Linux or OSX native
+  - Linux or macOS native
   - Cygwin unders Windows
   - MinGW + MSYS under Windows
   - Windows native (with GNUMake from GNUWin32).
@@ -205,8 +205,7 @@ NuttX EABI "buildroot" Toolchain
 
   1.  You must have already configured Nuttx in <some-dir>/nuttx.
 
-      cd tools
-      ./configure.sh sama5d4-ek/<sub-dir>
+      tools/configure.sh sama5d4-ek/<sub-dir>
 
   2.  Download the latest buildroot package into <some-dir>
 
@@ -256,8 +255,7 @@ NXFLAT Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh sama5d4-ek/<sub-dir>
+     tools/configure.sh sama5d4-ek/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -356,9 +354,7 @@ Creating and Using DRAMBOOT
      the dramboot configuration and setup the PATH variable in order to do
      the build:
 
-       cd tools
-       ./configure.sh sama5d4-ek/dramboot
-       cd -
+       tools/configure.sh sama5d4-ek/dramboot
 
      Before building, make sure that the PATH environment variable includes
      the correct path  to the directory than holds your toolchain binaries.
@@ -461,9 +457,7 @@ Creating and Using AT25BOOT
      the AT25BOOT configuration and setup the PATH variable in order to do
      the build:
 
-       cd tools
-       ./configure.sh sama5d4-ek/at25boot
-       cd -
+       tools/configure.sh sama5d4-ek/at25boot
 
      Before building, make sure that the PATH environment variable includes
      the correct path  to the directory than holds your toolchain binaries.
@@ -1345,8 +1339,7 @@ Networking
   Networking Support
     CONFIG_NET=y                         : Enable Neworking
     CONFIG_NET_SOCKOPTS=y                : Enable socket operations
-    CONFIG_NET_ETH_MTU=562               : Maximum packet size (MTU) 1518 is more standard
-    CONFIG_NET_ETH_TCP_RECVWNDO=562      : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_ETH_PKTSIZE=562           : Maximum packet size 1518 is more standard
     CONFIG_NET_ARP=y                     : ARP support should be enabled
     CONFIG_NET_ARP_IPIN=y                : IP address harvesting (optional)
     CONFIG_NET_TCP=y                     : Enable TCP/IP networking
@@ -1356,7 +1349,7 @@ Networking
     CONFIG_NET_UDP=y                     : Enable UDP networking
     CONFIG_NET_BROADCAST=y               : Support UDP broadcase packets
     CONFIG_NET_ICMP=y                    : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y               : Needed for NSH ping command
+    CONFIG_NET_ICMP_SOCKET=y             : Needed for NSH ping command
                                          : Defaults should be okay for other options
   Device drivers -> Network Device/PHY Support
     CONFIG_NETDEVICES=y                  : Enabled PHY selection
@@ -1675,7 +1668,7 @@ HSMCI Card Slots
       CONFIG_MMCSD=y                        : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
       CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
-      CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
+      CONFIG_MMCSD_HAVE_CARDDETECT=y         : Supports card-detect PIOs
       CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
       CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
       CONFIG_MMCSD_SDIO=y                   : SDIO-based MMC/SD support
@@ -3268,7 +3261,6 @@ TM7000 LCD/Touchscreen
   build in a touchscreen test:
 
     CONFIG_EXAMPLES_TOUCHSCREEN=y
-    CONFIG_EXAMPLES_TOUCHSCREEN_ARCHINIT=y
     CONFIG_EXAMPLES_TOUCHSCREEN_DEVPATH="/dev/input0"
     CONFIG_EXAMPLES_TOUCHSCREEN_MINOR=0
 
@@ -3464,13 +3456,6 @@ SAMA4D4-EK Configuration Options
 
   CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-  CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-  cause a 100 second delay during boot-up.  This 100 second delay
-  serves no purpose other than it allows you to calibrate
-  CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-  the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-  the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     CONFIG_SAMA5_DBGU        - Debug Unit
@@ -3585,9 +3570,7 @@ Configurations
   Each SAMA4D4-EK configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh sama5d4-ek/<subdir>
-    cd -
+    tools/configure.sh sama5d4-ek/<subdir>
 
   Before building, make sure that the PATH environment variable includes
   the correct path  to the directory than holds your toolchain binaries.
@@ -3910,7 +3893,7 @@ Configurations
     4. A system call interface is enabled and the ELF test programs interface
        with the base RTOS code system calls.  This eliminates the need for symbol
        tables to link with the base RTOS (symbol tables are still used, however,
-       to interface with the common C library instaniation).  Relevant
+       to interface with the common C library instantiation).  Relevant
        configuration settings:
 
       RTOS Features -> System call support
@@ -3920,6 +3903,18 @@ Configurations
 
       Application Configurations -> Examples -> ELF Loader Example
         CONFIG_EXAMPLES_ELF_SYSCALL=y          : Link apps with the SYStem call library
+
+    5. By default, this configuration uses the ROMFS file system.  It can also
+       be modified to use the compressed CROMFS:
+
+       -CONFIG_PATH_INITIAL="/mnt/romfs"
+       +CONFIG_PATH_INITIAL="/mnt/cromfs"
+
+       -CONFIG_FS_ROMFS=y
+       +CONFIG_FS_CROMFS=y
+
+       -CONFIG_EXAMPLES_ELF_ROMFS=y
+       +CONFIG_EXAMPLES_ELF_CROMFS=y
 
     STATUS:
       2014-8-24: This configuration works with the address environment
@@ -3933,7 +3928,7 @@ Configurations
 
       2014-8-29: System call interface verified.
       2014-9-16: Reverified after fixing changes for the knsh configuration
-                 that broke this on.  All seems to be well now.
+                 that broke this one.  All seems to be well now.
 
   ipv6:
   ----
@@ -3959,7 +3954,7 @@ Configurations
          CONFIG_NET_ARP=y
          CONFIG_NET_ARP_SEND=y (optional)
          CONFIG_NET_ICMP=y
-         CONFIG_NET_ICMP_PING=y
+         CONFIG_NET_ICMP_SOCKET=y
 
          CONFIG_NETDB_DNSCLIENT=y
          CONFIG_NETUTILS_TELNETD=y
@@ -4115,9 +4110,6 @@ Configurations
        Then you will need to follow some special build instructions below
        in order to build and install the ROMFS file system image.
 
-       UPDATE: The ROMFS configuration is pre-configured in the
-       file nuttx/configs/sama5d4-ek/knsh/defconfig.ROMFS
-
     5. Board initialization is performed performed before the application
        is started:
 
@@ -4158,41 +4150,79 @@ Configurations
 
     6a. General build directions (boot from SD card):
 
-        $ cd nuttx/tools                    : Go to the tools sub-directory
-        $ ./configure.sh sama5d4-ek/kernel  : Establish this configuration
-        $ cd ..                             : Back to the NuttX build directory
+        A. Build with no symbol table
+
+        $ make menuconfig
+
+          Disable ROMFS support in the .config file; Enable FAT file system
+          support in the .config file.  Enable "HSMCIO boot mount" support in
+          the board
+
+        $ cd nuttx                          : Go to the NuttX build directory
+        $ tools/configure.sh sama5d4-ek/knsh  : Establish this configuration
         $ export PATH=???:$PATH             : Set up the PATH variable
         $ make                              : Build the kerne with a dummy ROMFS image
                                             : This should create the nuttx ELF
+
+        B. Create the export package
+
         $ make export                       : Create the kernel export package
                                             : You should have a file like
                                             : nuttx-export-*.zip
+
+        C. Build the file system image at apps/bin
+
         $ cd apps/                          : Go to the apps/ directory
         $ tools/mkimport.sh -x <zip-file>   : Use the full path to nuttx-export-*.zip
         $ make import                       : This will build the file system.
 
-      You will then need to copy the files from apps/bin to an SD card to
-      create the bootable SD card.
+      You will then need to copy the files from apps/bin to an SD card or USB
+      FLASH drive to create the bootable SD card.
+
+      But how does the SD card/USB FLASH drive get mounted?  This must be
+      done in board-specific logic before the 'init' program is started.
+      That logic is not yet implemented for the case of SD card or USB FLASH
+      driver
 
     6b. General build directions (boot from ROMFS image):
 
-        $ cd nuttx/tools                    : Go to the tools sub-directory
-        $ ./configure.sh sama5d4-ek/kernel  : Establish this configuration
-        $ cd ..                             : Back to the NuttX build directory
+        A. Build with dummy ROMFS file system image and no symbol table
+
+        $ make menuconfig
+
+          Enable the ROMFS file system and board-specific "ROMFS boot mount"
+          support to auto-mount the ROMFS file system on bootup.
+
+        $ tools/configure.sh sama5d4-ek/knsh  : Establish this configuration
         $ export PATH=???:$PATH             : Set up the PATH variable
         $ touch configs/sama5d4-ek/include/boot_romfsimg.h
         $ make                              : Build the kernel with a dummy ROMFS image
                                             : This should create the nuttx ELF
+
+        B. Create the export package
+
         $ make export                       : Create the kernel export package
                                             : You should have a file like
                                             : nuttx-export-*.zip
+
+        C. Build the file system image at apps/bin
+
         $ cd apps/                          : Go to the apps/ directory
         $ tools/mkimport.sh -x <zip-file>   : Use the full path to nuttx-export-*.zip
         $ make import                       : This will build the file system
+
+        D. Create the ROMFS file system image
+
         $ tools/mkromfsimg.sh               : Create the real ROMFS image
         $ mv boot_romfsimg.h ../nuttx/configs/sama5d4-ek/include/boot_romfsimg.h
+
+        E. Rebuild NuttX with the new file system image
+
         $ cd nuttx/                         : Rebuild the system with the correct
-        $ make clean_context all            : ROMFS file system
+        $ make clean clean_context all      : ROMFS file system and symbol table
+
+      But how does the ROMFS file system get mounted?  This is done in board-
+      specific logic before the 'init' program is started.
 
     STATUS:
 
@@ -4214,14 +4244,19 @@ Configurations
        Update: I don't believe that this HSMCI error occurs if file system
        debug output is enabled.
 
-    2014-9-11: Everything seems to be working quite nicely witn the ROMFS
+    2014-9-11: Everything seems to be working quite nicely with the ROMFS
        file system.  A considerable amount of testing has been done and
        there are no known defects as of this writing.
 
     2014-9-16: After some substantial effort, I think I may have resolved
        the last of the mainstream bugs that prevented from executing other
        user processes from a user processes.  Long story but I am glad to
-       haave that done.
+       have that done.
+
+    2018-07-15:  Revisited.  It is not clear to me how, back in 2014, the
+       symbol table was created.  I have added logic to created the symbol
+       table.  After some additional fixes, the full build is again
+       successful.
 
   nsh:
 
@@ -4460,10 +4495,10 @@ Configurations
          |   |      |- fd                : File descriptors open in the group
          |   |      `- status            : Status of the group
          |   |- 1/                       : Information about Task ID 1
-         |   |  `- ...                   : Same psuedo-directories as for Task ID 0
+         |   |  `- ...                   : Same pseudo-directories as for Task ID 0
          |   |- ...                      : ...
          |   |- n/                       : Information about Task ID n
-         |   |  `- ...                   : Same psuedo-directories as for Task ID 0
+         |   |  `- ...                   : Same pseudo-directories as for Task ID 0
          |   |- uptime                   : Processor uptime
          `- tmp/
 
@@ -4731,10 +4766,6 @@ Configurations
 
           nuttx-git/NxWidgets/UnitTests/nxwm
 
-        Documentation for installing the NxWM unit test can be found here:
-
-          nuttx-git/NxWidgets/UnitTests/README.txt
-
     2. This configuration is set up generally like the nsh configuration
        except that:
 
@@ -4749,48 +4780,7 @@ Configurations
        for the nxwm configuration (other than the differences noted
        above).
 
-    3. Here is the quick summary of the build steps.  These steps assume
-       that you have the entire NuttX GIT in some directory ~/nuttx-git.
-       You may have these components installed elsewhere.  In that case, you
-       will need to adjust all of the paths in the following accordingly:
-
-        a. Install the nxwm configuration
-
-           $ cd ~/nuttx-git/nuttx/tools
-           $ ./configure.sh sama5d4-ek/nxwm
-
-        b. Make the build context (only)
-
-           $ cd ..
-           $ make context
-           ...
-
-        c. Install the nxwm unit test
-
-           $ cd ~/nuttx-git/NxWidgets
-           $ tools/install.sh ~/nuttx-git/apps nxwm
-           Creating symbolic link
-            - To ~/nuttx-git/NxWidgets/UnitTests/nxwm
-            - At ~/nuttx-git/apps/external
-
-        d. Build the NxWidgets library
-
-           $ cd ~/nuttx-git/NxWidgets/libnxwidgets
-           $ make TOPDIR=~/nuttx-git/nuttx
-           ...
-
-        e. Build the NxWM library
-
-           $ cd ~/nuttx-git/NxWidgets/nxwm
-           $ make TOPDIR=~/nuttx-git/nuttx
-           ...
-
-        f. Built NuttX with the installed unit test as the application
-
-           $ cd ~/nuttx-git/nuttx
-           $ make
-
-    4. NSH Console Access.
+    3. NSH Console Access.
 
        This configuration boots directly into a graphic, window manage
        environment.  There is no serial console.  Some initial stdout
@@ -4814,7 +4804,7 @@ Configurations
        Instead, you will need use the dmesg command from an NxTerm or
        from a Telnet session to see the debug output
 
-    5. USB HID Keyboard Input
+    4. USB HID Keyboard Input
 
        USB keyboard support is enabled in the default configuration, but
        can be disabled:
@@ -4855,7 +4845,7 @@ Configurations
 
        which can be reduced if better keyboard response is required.
 
-    6. Media Player
+    5. Media Player
 
        This configuration has the media player application enabled. Support
        for the WM8904 CODEC is built in.

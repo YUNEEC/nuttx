@@ -7,7 +7,7 @@
  *
  * Derived from drivers/can.c
  *
- *   Copyright (C) 2008-2009Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,6 +56,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/analog/dac.h>
@@ -114,15 +115,12 @@ static int dac_open(FAR struct file *filep)
   FAR struct inode     *inode = filep->f_inode;
   FAR struct dac_dev_s *dev   = inode->i_private;
   uint8_t               tmp;
-  int                   ret   = OK;
+  int                   ret;
 
   /* If the port is the middle of closing, wait until the close is finished */
 
-  if (sem_wait(&dev->ad_closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_closesem);
+  if (ret >= 0)
     {
       /* Increment the count of references to the device.  If this the first
        * time that the driver has been opened for this device, then initialize
@@ -162,7 +160,7 @@ static int dac_open(FAR struct file *filep)
             }
         }
 
-      sem_post(&dev->ad_closesem);
+      nxsem_post(&dev->ad_closesem);
     }
 
   return ret;
@@ -182,13 +180,10 @@ static int dac_close(FAR struct file *filep)
   FAR struct inode     *inode = filep->f_inode;
   FAR struct dac_dev_s *dev   = inode->i_private;
   irqstate_t            flags;
-  int                   ret = OK;
+  int                   ret;
 
-  if (sem_wait(&dev->ad_closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->ad_closesem);
+  if (ret >= 0)
     {
       /* Decrement the references to the driver.  If the reference count will
        * decrement to 0, then uninitialize the driver.
@@ -197,7 +192,7 @@ static int dac_close(FAR struct file *filep)
       if (dev->ad_ocount > 1)
         {
           dev->ad_ocount--;
-          sem_post(&dev->ad_closesem);
+          nxsem_post(&dev->ad_closesem);
         }
       else
         {
@@ -210,7 +205,7 @@ static int dac_close(FAR struct file *filep)
           while (dev->ad_xmit.af_head != dev->ad_xmit.af_tail)
             {
 #ifndef CONFIG_DISABLE_SIGNALS
-               usleep(HALF_SECOND_USEC);
+               nxsig_usleep(HALF_SECOND_USEC);
 #else
                up_mdelay(HALF_SECOND_MSEC);
 #endif
@@ -222,7 +217,7 @@ static int dac_close(FAR struct file *filep)
           dev->ad_ops->ao_shutdown(dev);       /* Disable the DAC */
           leave_critical_section(flags);
 
-          sem_post(&dev->ad_closesem);
+          nxsem_post(&dev->ad_closesem);
         }
     }
 
@@ -288,7 +283,7 @@ static ssize_t dac_write(FAR struct file *filep, FAR const char *buffer, size_t 
   int                    msglen;
   int                    ret   = 0;
 
-  /* Interrupts must disabled throughout the following */
+  /* Interrupts must be disabled throughout the following */
 
   flags = enter_critical_section();
 
@@ -372,10 +367,9 @@ static ssize_t dac_write(FAR struct file *filep, FAR const char *buffer, size_t 
 
           do
             {
-              ret = sem_wait(&fifo->af_sem);
-              if (ret < 0 && errno != EINTR)
+              ret = nxsem_wait(&fifo->af_sem);
+              if (ret < 0 && ret != -EINTR)
                 {
-                  ret = -errno;
                   goto return_with_irqdisabled;
                 }
             }
@@ -387,7 +381,7 @@ static ssize_t dac_write(FAR struct file *filep, FAR const char *buffer, size_t 
         }
 
       /* We get here if there is space at the end of the FIFO.  Add the new
-       * CAN message at the tail of the FIFO.
+       * DAC message at the tail of the FIFO.
        */
 
       if (msglen == 5)
@@ -471,7 +465,7 @@ static int dac_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
  * Description:
  *   Called from the DAC interrupt handler at the completion of a send operation.
  *
- * Return:
+ * Returned Value:
  *   OK on success; a negated errno on failure.
  *
  ************************************************************************************/
@@ -499,10 +493,10 @@ int dac_txdone(FAR struct dac_dev_s *dev)
         {
           /* Inform any waiting threads that new xmit space is available */
 
-          ret = sem_getvalue(&dev->ad_xmit.af_sem, &sval);
+          ret = nxsem_getvalue(&dev->ad_xmit.af_sem, &sval);
           if (ret == OK && sval <= 0)
             {
-              ret = sem_post(&dev->ad_xmit.af_sem);
+              ret = nxsem_post(&dev->ad_xmit.af_sem);
             }
         }
     }
@@ -518,14 +512,14 @@ int dac_register(FAR const char *path, FAR struct dac_dev_s *dev)
 
   /* Initialize semaphores */
 
-  sem_init(&dev->ad_xmit.af_sem, 0, 0);
-  sem_init(&dev->ad_closesem, 0, 1);
+  nxsem_init(&dev->ad_xmit.af_sem, 0, 0);
+  nxsem_init(&dev->ad_closesem, 0, 1);
 
   /* The transmit semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&dev->ad_xmit.af_sem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&dev->ad_xmit.af_sem, SEM_PRIO_NONE);
 
   dev->ad_ops->ao_reset(dev);
 

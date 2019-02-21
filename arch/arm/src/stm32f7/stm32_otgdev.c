@@ -4000,7 +4000,7 @@ static int stm32_epin_configure(FAR struct stm32_ep_s *privep,
                   OTG_DIEPCTL_TXFNUM_MASK);
       regval |= mpsiz;
       regval |= (eptype << OTG_DIEPCTL_EPTYP_SHIFT);
-      regval |= (eptype << OTG_DIEPCTL_TXFNUM_SHIFT);
+      regval |= (privep->epphy << OTG_DIEPCTL_TXFNUM_SHIFT);
       regval |= (OTG_DIEPCTL_SD0PID | OTG_DIEPCTL_USBAEP);
       stm32_putreg(regval, regaddr);
 
@@ -4358,7 +4358,7 @@ static void stm32_ep_freereq(FAR struct usbdev_ep_s *ep, FAR struct usbdev_req_s
 #ifdef CONFIG_USBDEV_DMA
 static void *stm32_ep_allocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
 {
-  usbtrace(TRACE_EPALLOCBUFFER, privep->epphy);
+  usbtrace(TRACE_EPALLOCBUFFER, ((FAR struct stm32_ep_s *)ep)->epphy);
 
 #ifdef CONFIG_USBDEV_DMAMEMORY
   return usbdev_dma_alloc(bytes);
@@ -4379,7 +4379,7 @@ static void *stm32_ep_allocbuffer(FAR struct usbdev_ep_s *ep, unsigned bytes)
 #ifdef CONFIG_USBDEV_DMA
 static void stm32_ep_freebuffer(FAR struct usbdev_ep_s *ep, FAR void *buf)
 {
-  usbtrace(TRACE_EPFREEBUFFER, privep->epphy);
+  usbtrace(TRACE_EPALLOCBUFFER, ((FAR struct stm32_ep_s *)ep)->epphy);
 
 #ifdef CONFIG_USBDEV_DMAMEMORY
   usbdev_dma_free(buf);
@@ -5579,12 +5579,6 @@ void up_usbinitialize(void)
   /* Enable USB controller interrupts at the NVIC */
 
   up_enable_irq(STM32_IRQ_OTG);
-
-#ifdef CONFIG_ARCH_IRQPRIO
-  /* Set the interrupt priority */
-
-  up_prioritize_irq(STM32_IRQ_OTG, CONFIG_OTG_PRI);
-#endif
   return;
 
 errout:

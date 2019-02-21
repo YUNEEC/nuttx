@@ -60,10 +60,10 @@
  *   The getenv() function searches the environment list for a string that
  *   matches the string pointed to by name.
  *
- * Parameters:
+ * Input Parameters:
  *   name - The name of the variable to find.
  *
- * Return Value:
+ * Returned Value:
  *   The value of the valiable (read-only) or NULL on failure
  *
  * Assumptions:
@@ -71,7 +71,7 @@
  *
  ****************************************************************************/
 
-FAR char *getenv(const char *name)
+FAR char *getenv(FAR const char *name)
 {
   FAR struct tcb_s *rtcb;
   FAR struct task_group_s *group;

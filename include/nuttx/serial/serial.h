@@ -1,7 +1,7 @@
 /************************************************************************************
  * include/nuttx/serial/serial.h
  *
- *   Copyright (C) 2007-2008, 2012-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2008, 2012-2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <semaphore.h>
+#include <errno.h>
 #ifdef CONFIG_SERIAL_TERMIOS
 #  include <termios.h>
 #endif
@@ -105,10 +106,18 @@
 #define uart_receive(dev,s)      dev->ops->receive(dev,s)
 
 #ifdef CONFIG_SERIAL_DMA
-#  define uart_dmasend(dev)      dev->ops->dmasend(dev)
-#  define uart_dmareceive(dev)   dev->ops->dmareceive(dev)
-#  define uart_dmarxfree(dev)    dev->ops->dmarxfree(dev)
-#  define uart_dmatxavail(dev)   dev->ops->dmatxavail(dev)
+#define uart_dmasend(dev)      \
+  ((dev)->ops->dmasend ? (dev)->ops->dmasend(dev) : -ENOSYS)
+
+#define uart_dmareceive(dev)   \
+  ((dev)->ops->dmareceive ? (dev)->ops->dmareceive(dev) : -ENOSYS)
+
+#define uart_dmarxfree(dev)    \
+  ((dev)->ops->dmarxfree ? (dev)->ops->dmarxfree(dev) : -ENOSYS)
+
+#define uart_dmatxavail(dev)   \
+  ((dev)->ops->dmatxavail ? (dev)->ops->dmatxavail(dev) : -ENOSYS)
+
 #endif
 
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
@@ -286,6 +295,9 @@ struct uart_dev_s
   tcflag_t             tc_iflag;     /* Input modes */
   tcflag_t             tc_oflag;     /* Output modes */
   tcflag_t             tc_lflag;     /* Local modes */
+#if defined(CONFIG_TTY_SIGINT) || defined(CONFIG_TTY_SIGSTP)
+  pid_t                pid;          /* Thread PID to receive signals (-1 if none) */
+#endif
 #endif
 
   /* Semaphores */
@@ -480,6 +492,17 @@ void uart_recvchars_dma(FAR uart_dev_t *dev);
 #ifdef CONFIG_SERIAL_DMA
 void uart_recvchars_done(FAR uart_dev_t *dev);
 #endif
+
+/************************************************************************************
+ * Name: uart_reset_sem
+ *
+ * Description:
+ *   This function is called when need reset uart semphore, this may used in kill one
+ *   process, but this process was reading/writing with the semphore.
+ *
+ ************************************************************************************/
+
+void uart_reset_sem(FAR uart_dev_t *dev);
 
 #undef EXTERN
 #if defined(__cplusplus)

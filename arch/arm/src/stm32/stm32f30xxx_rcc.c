@@ -314,10 +314,16 @@ static inline void rcc_enableapb1(void)
   regval |= RCC_APB1ENR_PWREN;
 #endif
 
-#ifdef CONFIG_STM32_DAC
-  /* DAC interface clock enable */
+#ifdef CONFIG_STM32_DAC1
+  /* DAC2 interface clock enable */
 
-  regval |= RCC_APB1ENR_DACEN;
+  regval |= RCC_APB1ENR_DAC1EN;
+#endif
+
+#ifdef CONFIG_STM32_DAC2
+  /* DAC2 interface clock enable */
+
+  regval |= RCC_APB1ENR_DAC2EN;
 #endif
 
   putreg32(regval, STM32_RCC_APB1ENR);
@@ -649,7 +655,7 @@ static void stm32_stdclockconfig(void)
 
   while ((getreg32(STM32_RCC_CFGR) & RCC_CFGR_SWS_MASK) != STM32_SYSCLK_SWS);
 
-#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_RTC_LSICLOCK)
+#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_STM32_RTC_LSICLOCK)
   /* Low speed internal clock source LSI
    *
    * TODO: There is another case where the LSI needs to
@@ -659,7 +665,19 @@ static void stm32_stdclockconfig(void)
   stm32_rcc_enablelsi();
 #endif
 
-#if defined(CONFIG_RTC_LSECLOCK)
+#if defined(CONFIG_STM32_RTC_LSECLOCK)
+  /* Normally peripheral clocks are enabled later in bootup, but we need
+   * clock on PWR *now* as without this setting registers that enable LSE
+   * won't work.
+   *
+   * NOTE: In this configuration, we can assume the CONFIG_STM32_PWR has
+   * been selected.
+   */
+
+  regval  = getreg32(STM32_RCC_APB1ENR);
+  regval |= RCC_APB1ENR_PWREN;
+  putreg32(regval, STM32_RCC_APB1ENR);
+
   /* Low speed external clock source LSE
    *
    * TODO: There is another case where the LSE needs to

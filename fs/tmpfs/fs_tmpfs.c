@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/tmpfs/fs_tmpfs.c
  *
- *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -140,6 +140,7 @@ static off_t tmpfs_seek(FAR struct file *filep, off_t offset, int whence);
 static int  tmpfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg);
 static int  tmpfs_dup(FAR const struct file *oldp, FAR struct file *newp);
 static int  tmpfs_fstat(FAR const struct file *filep, FAR struct stat *buf);
+static int  tmpfs_truncate(FAR struct file *filep, off_t length);
 
 static int  tmpfs_opendir(FAR struct inode *mountpt, FAR const char *relpath,
               FAR struct fs_dirent_s *dir);
@@ -177,16 +178,21 @@ const struct mountpt_operations tmpfs_operations =
   tmpfs_write,      /* write */
   tmpfs_seek,       /* seek */
   tmpfs_ioctl,      /* ioctl */
+
   NULL,             /* sync */
   tmpfs_dup,        /* dup */
   tmpfs_fstat,      /* fstat */
+  tmpfs_truncate,   /* truncate */
+
   tmpfs_opendir,    /* opendir */
   tmpfs_closedir,   /* closedir */
   tmpfs_readdir,    /* readdir */
   tmpfs_rewinddir,  /* rewinddir */
+
   tmpfs_bind,       /* bind */
   tmpfs_unbind,     /* unbind */
   tmpfs_statfs,     /* statfs */
+
   tmpfs_unlink,     /* unlink */
   tmpfs_mkdir,      /* mkdir */
   tmpfs_rmdir,      /* rmdir */
@@ -221,14 +227,19 @@ static void tmpfs_lock_reentrant(FAR struct tmpfs_sem_s *sem)
 
   else
     {
-      while (sem_wait(&sem->ts_sem) != 0)
+      int ret;
+
+      do
         {
-          /* The only case that an error should occr here is if
-           * the wait was awakened by a signal.
+          ret = nxsem_wait(&sem->ts_sem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
            */
 
-          DEBUGASSERT(get_errno() == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
 
       /* No we hold the semaphore */
 
@@ -278,7 +289,7 @@ static void tmpfs_unlock_reentrant(FAR struct tmpfs_sem_s *sem)
     {
       sem->ts_holder = TMPFS_NO_HOLDER;
       sem->ts_count  = 0;
-      sem_post(&sem->ts_sem);
+      nxsem_post(&sem->ts_sem);
     }
 }
 
@@ -373,7 +384,7 @@ static int tmpfs_realloc_file(FAR struct tmpfs_file_s **tfo,
   size_t allocsize;
   size_t delta;
 
-  /* Check if the current allocation is sufficent */
+  /* Check if the current allocation is sufficient */
 
   objsize = SIZEOF_TMPFS_FILE(newsize);
 
@@ -464,7 +475,7 @@ static void tmpfs_release_lockedfile(FAR struct tmpfs_file_s *tfo)
 
   if (tfo->tfo_refs == 1 && (tfo->tfo_flags & TFO_FLAG_UNLINKED) != 0)
     {
-      sem_destroy(&tfo->tfo_exclsem.ts_sem);
+      nxsem_destroy(&tfo->tfo_exclsem.ts_sem);
       kmm_free(tfo);
     }
 
@@ -634,7 +645,7 @@ static FAR struct tmpfs_file_s *tmpfs_alloc_file(void)
 
   tfo->tfo_exclsem.ts_holder = getpid();
   tfo->tfo_exclsem.ts_count  = 1;
-  sem_init(&tfo->tfo_exclsem.ts_sem, 0, 0);
+  nxsem_init(&tfo->tfo_exclsem.ts_sem, 0, 0);
 
   return tfo;
 }
@@ -746,7 +757,7 @@ static int tmpfs_create_file(FAR struct tmpfs_s *fs,
 /* Error exits */
 
 errout_with_file:
-  sem_destroy(&newtfo->tfo_exclsem.ts_sem);
+  nxsem_destroy(&newtfo->tfo_exclsem.ts_sem);
   kmm_free(newtfo);
 
 errout_with_parent:
@@ -792,7 +803,7 @@ static FAR struct tmpfs_directory_s *tmpfs_alloc_directory(void)
 
   tdo->tdo_exclsem.ts_holder = TMPFS_NO_HOLDER;
   tdo->tdo_exclsem.ts_count  = 0;
-  sem_init(&tdo->tdo_exclsem.ts_sem, 0, 1);
+  nxsem_init(&tdo->tdo_exclsem.ts_sem, 0, 1);
 
   return tdo;
 }
@@ -908,7 +919,7 @@ static int tmpfs_create_directory(FAR struct tmpfs_s *fs,
 /* Error exits */
 
 errout_with_directory:
-  sem_destroy(&newtdo->tdo_exclsem.ts_sem);
+  nxsem_destroy(&newtdo->tdo_exclsem.ts_sem);
   kmm_free(newtdo);
 
 errout_with_parent:
@@ -1268,7 +1279,7 @@ static int tmpfs_free_callout(FAR struct tmpfs_directory_s *tdo,
 
   /* Free the object now */
 
-  sem_destroy(&to->to_exclsem.ts_sem);
+  nxsem_destroy(&to->to_exclsem.ts_sem);
   kmm_free(to);
   return TMPFS_DELETED;
 }
@@ -1614,7 +1625,7 @@ static ssize_t tmpfs_write(FAR struct file *filep, FAR const char *buffer,
 
   tmpfs_lock_file(tfo);
 
-  /* Handle attempts to read beyond the end of the file */
+  /* Handle attempts to write beyond the end of the file */
 
   startpos = filep->f_pos;
   nwritten = buflen;
@@ -1686,7 +1697,7 @@ static off_t tmpfs_seek(FAR struct file *filep, off_t offset, int whence)
           return -EINVAL;
     }
 
-  /* Attempts to set the position beyound the end of file will
+  /* Attempts to set the position beyond the end of file will
    * work if the file is open for write access.
    *
    * REVISIT: This simple implementation has no per-open storage that
@@ -1722,7 +1733,7 @@ static int tmpfs_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Recover our private data from the struct file instance */
 
-  tfo = filep->f_inode->i_private;
+  tfo = filep->f_priv;
 
   DEBUGASSERT(tfo != NULL);
 
@@ -1810,6 +1821,63 @@ static int tmpfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
 }
 
 /****************************************************************************
+ * Name: tmpfs_truncate
+ ****************************************************************************/
+
+static int tmpfs_truncate(FAR struct file *filep, off_t length)
+{
+  FAR struct tmpfs_file_s *tfo;
+  size_t oldsize;
+  int ret = OK;
+
+  finfo("filep: %p length: %ld\n", filep, (long)length);
+  DEBUGASSERT(filep != NULL && length >= 0);
+
+  /* Recover our private data from the struct file instance */
+
+  tfo = filep->f_priv;
+
+  /* Get exclusive access to the file */
+
+  tmpfs_lock_file(tfo);
+
+  /* Get the old size of the file.  Do nothing if the file size is not
+   * changing.
+   */
+
+  oldsize = tfo->tfo_size;
+  if (oldsize != length)
+    {
+      /* The size is changing.. up or down.  Reallocate the file memory. */
+
+      ret = tmpfs_realloc_file(&tfo, (size_t)length);
+      if (ret < 0)
+        {
+          goto errout_with_lock;
+        }
+
+      filep->f_priv = tfo;
+
+      /* If the size has increased, then we need to zero the newly added
+       * memory.
+       */
+
+      if (length > oldsize)
+        {
+          memset(&tfo->tfo_data[oldsize], 0, length - oldsize);
+        }
+
+      ret = OK;
+    }
+
+  /* Release the lock on the file */
+
+errout_with_lock:
+  tmpfs_unlock_file(tfo);
+  return ret;
+}
+
+/****************************************************************************
  * Name: tmpfs_opendir
  ****************************************************************************/
 
@@ -1849,7 +1917,7 @@ static int tmpfs_opendir(FAR struct inode *mountpt, FAR const char *relpath,
     {
       dir->u.tmpfs.tf_tdo   = tdo;
       dir->u.tmpfs.tf_index = 0;
-      
+
       tmpfs_unlock_directory(tdo);
     }
 
@@ -2014,7 +2082,7 @@ static int tmpfs_bind(FAR struct inode *blkdriver, FAR const void *data,
 
   fs->tfs_exclsem.ts_holder = TMPFS_NO_HOLDER;
   fs->tfs_exclsem.ts_count  = 0;
-  sem_init(&fs->tfs_exclsem.ts_sem, 0, 1);
+  nxsem_init(&fs->tfs_exclsem.ts_sem, 0, 1);
 
   /* Return the new file system handle */
 
@@ -2048,10 +2116,10 @@ static int tmpfs_unbind(FAR void *handle, FAR struct inode **blkdriver,
 
   /* Now we can destroy the root file system and the file system itself. */
 
-  sem_destroy(&tdo->tdo_exclsem.ts_sem);
+  nxsem_destroy(&tdo->tdo_exclsem.ts_sem);
   kmm_free(tdo);
 
-  sem_destroy(&fs->tfs_exclsem.ts_sem);
+  nxsem_destroy(&fs->tfs_exclsem.ts_sem);
   kmm_free(fs);
   return ret;
 }
@@ -2207,7 +2275,7 @@ static int tmpfs_unlink(FAR struct inode *mountpt, FAR const char *relpath)
 
   else
     {
-      sem_destroy(&tfo->tfo_exclsem.ts_sem);
+      nxsem_destroy(&tfo->tfo_exclsem.ts_sem);
       kmm_free(tfo);
     }
 
@@ -2333,7 +2401,7 @@ static int tmpfs_rmdir(FAR struct inode *mountpt, FAR const char *relpath)
 
   /* Free the directory object */
 
-  sem_destroy(&tdo->tdo_exclsem.ts_sem);
+  nxsem_destroy(&tdo->tdo_exclsem.ts_sem);
   kmm_free(tdo);
 
   /* Release the reference and lock on the parent directory */

@@ -36,15 +36,18 @@
  * Included Files
  ****************************************************************************/
 
-#include <debug.h>
 #include <nuttx/config.h>
-#include <nuttx/mmcsd.h>
-#include <nuttx/spi/spi.h>
+
 #include <pthread.h>
 #include <sched.h>
 #include <semaphore.h>
 #include <time.h>
 #include <unistd.h>
+#include <debug.h>
+
+#include <nuttx/mmcsd.h>
+#include <nuttx/signal.h>
+#include <nuttx/spi/spi.h>
 
 #include "stm32.h"
 #include "stm32_butterfly2.h"
@@ -100,7 +103,7 @@ static void *stm32_cd_thread(void *arg)
   spiinfo("INFO: Runnig card detect thread\n");
   while (1)
     {
-      sem_wait(&g_cdsem);
+      nxsem_wait(&g_cdsem);
       spiinfo("INFO: Card has been inserted, initializing\n");
 
       if (g_chmediaclbk)
@@ -109,7 +112,7 @@ static void *stm32_cd_thread(void *arg)
            * rest for a millsecond or so.
            */
 
-          usleep(1 * 1000);
+          nxsig_usleep(1 * 1000);
           g_chmediaclbk(g_chmediaarg);
         }
     }
@@ -142,7 +145,7 @@ static int stm32_cd(int irq, void *context, void *arg)
   if (now - debounce_time > prev)
     {
       prev = now;
-      sem_post(&g_cdsem);
+      nxsem_post(&g_cdsem);
     }
 
   return OK;
@@ -198,7 +201,7 @@ int stm32_mmcsd_initialize(int minor)
 
   (void)stm32_gpiosetevent(GPIO_SD_CD, true, true, true, stm32_cd, NULL);
 
-  sem_init(&g_cdsem, 0, 0);
+  nxsem_init(&g_cdsem, 0, 0);
   pthread_attr_init(&pattr);
 
 #ifdef CONFIG_DEBUG_FS

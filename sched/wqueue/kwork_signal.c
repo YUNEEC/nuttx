@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/wqueue/work_signal.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@
 #include <errno.h>
 
 #include <nuttx/wqueue.h>
+#include <nuttx/signal.h>
 
 #include "wqueue/wqueue.h"
 
@@ -60,57 +61,35 @@
  *   is used internally by the work logic but could also be used by the
  *   user to force an immediate re-assessment of pending work.
  *
- * Input parameters:
+ * Input Parameters:
  *   qid    - The work queue ID
  *
  * Returned Value:
- *   Zero on success, a negated errno on failure
+ *   Zero (OK) on success, a negated errno value on failure
  *
  ****************************************************************************/
 
 int work_signal(int qid)
 {
-  pid_t pid;
-  int ret;
+  FAR struct kwork_wqueue_s *work;
+  int threads;
+  int i;
 
   /* Get the process ID of the worker thread */
 
 #ifdef CONFIG_SCHED_HPWORK
   if (qid == HPWORK)
     {
-      pid = g_hpwork.worker[0].pid;
+      work = (FAR struct kwork_wqueue_s *)&g_hpwork;
+      threads = CONFIG_SCHED_HPNTHREADS;
     }
   else
 #endif
 #ifdef CONFIG_SCHED_LPWORK
   if (qid == LPWORK)
     {
-      int i;
-
-      /* Find an IDLE worker thread */
-
-      for (i = 0; i < CONFIG_SCHED_LPNTHREADS; i++)
-        {
-          /* Is this worker thread busy? */
-
-          if (!g_lpwork.worker[i].busy)
-            {
-              /* No.. select this thread */
-
-              break;
-            }
-        }
-
-      /* If all of the IDLE threads are busy, then just return successfully */
-
-      if (i >= CONFIG_SCHED_LPNTHREADS)
-        {
-          return OK;
-        }
-
-      /* Otherwise, signal the first IDLE thread found */
-
-      pid = g_lpwork.worker[i].pid;
+      work = (FAR struct kwork_wqueue_s *)&g_lpwork;
+      threads = CONFIG_SCHED_LPNTHREADS;
     }
   else
 #endif
@@ -118,16 +97,30 @@ int work_signal(int qid)
       return -EINVAL;
     }
 
-  /* Signal the worker thread */
+  /* Find an IDLE worker thread */
 
-  ret = kill(pid, SIGWORK);
-  if (ret < 0)
+  for (i = 0; i < threads; i++)
     {
-      int errcode = errno;
-      return -errcode;
+      /* Is this worker thread busy? */
+
+      if (!work->worker[i].busy)
+        {
+          /* No.. select this thread */
+
+          break;
+        }
     }
 
-  return OK;
+  /* If all of the IDLE threads are busy, then just return successfully */
+
+  if (i >= threads)
+    {
+      return OK;
+    }
+
+  /* Otherwise, signal the first IDLE thread found */
+
+  return nxsig_kill(work->worker[i].pid, SIGWORK);
 }
 
 #endif /* CONFIG_SCHED_WORKQUEUE */

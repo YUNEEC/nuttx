@@ -51,17 +51,17 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_recover
+ * Name: nxmq_recover
  *
  * Description:
  *   This function is called when a task is deleted via task_deleted or
  *   via pthread_cancel. I checks if the task was waiting for a message
  *   queue event and adjusts counts appropriately.
  *
- * Inputs:
+ * Input Parameters:
  *   tcb - The TCB of the terminated task or thread
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -69,7 +69,7 @@
  *
  ****************************************************************************/
 
-void mq_recover(FAR struct tcb_s *tcb)
+void nxmq_recover(FAR struct tcb_s *tcb)
 {
   /* If were were waiting for a timed message queue event, then the
    * timer was canceled and deleted in task_recover() before this

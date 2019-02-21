@@ -51,12 +51,13 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
-#include <debug.h>
 #include <errno.h>
 
 #include <crc8.h>
 #include <crc16.h>
 #include <crc32.h>
+#include <debug.h>
+
 #include <nuttx/kmalloc.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
@@ -118,7 +119,7 @@
 #endif
 
 #ifndef CONFIG_MTD_SMART_SECTOR_SIZE
-#  define  CONFIG_MTD_SMART_SECTOR_SIZE 1024
+#  define CONFIG_MTD_SMART_SECTOR_SIZE 1024
 #endif
 
 #ifndef offsetof
@@ -1433,7 +1434,21 @@ static int smart_write_header(FAR struct smart_struct_s *dev, uint16_t sector)
 #else
   header->seq = 0;
 #endif
-  sectsize = dev->sectorsize >> 7;
+
+  /* Calculate the 3-bit logical sector size in bits 2-4:
+   * 000b - 256 bytes
+   * 001b - 512 bytes
+   * 010b - 1024 bytes
+   * 100b - 2048 bytes
+   * 011b - 4096 bytes
+   * 101b - 8192 bytes
+   * 110b - 16384 bytes
+   * 110b - 32768 bytes
+   */
+
+  sectsize = dev->sectorsize < 4096  ? (dev->sectorsize >> 9) :
+             dev->sectorsize == 4096 ? 3 : 5 + (dev->sectorsize >> 14);
+  sectsize <<= 2;
 
   header->status = ~(SMART_STATUS_COMMITTED | SMART_STATUS_SIZEBITS |
           SMART_STATUS_VERBITS) | SMART_STATUS_VERSION | sectsize;

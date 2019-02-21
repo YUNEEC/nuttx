@@ -1429,7 +1429,7 @@ static int sam_setclut(struct sam_layer_s *layer,
             (uint32_t)cmap->green[i] << LCDC_BASECLUT_GCLUT_SHIFT |
             (uint32_t)cmap->blue[i]  << LCDC_BASECLUT_BCLUT_SHIFT;
 
-#ifdef CONFIG_FB_TRANSPARENCY
+#ifdef CONFIG_SAMA5_LCDC_TRANSPARENCY
       if (camp->transp)
         {
           rgb |= (uint32_t)cmap->transp[i] << LCDC_OVR1CLUT_ACLUT_SHIFT;
@@ -1494,7 +1494,7 @@ static int sam_getclut(struct sam_layer_s *layer,
       cmap->blue[i] = (uint8_t)
         (regval & LCDC_BASECLUT_GCLUT_MASK) << LCDC_BASECLUT_BCLUT_SHIFT;
 
-#ifdef CONFIG_FB_TRANSPARENCY
+#ifdef CONFIG_SAMA5_LCDC_TRANSPARENCY
       cmap->transp[i] = (uint8_t)
         (regval & LCDC_OVR1CLUT_ACLUT_MASK) << LCDC_OVR1CLUT_ACLUT_SHIFT;
 #endif
@@ -2901,7 +2901,7 @@ static void sam_show_hcr(void)
  * Description:
  *   Initialize the framebuffer video hardware associated with the display.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -3001,7 +3001,7 @@ int up_fbinitialize(int display)
  *   Return a a reference to the framebuffer object for the specified video
  *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *   vplane - Identifies the plane being queried.

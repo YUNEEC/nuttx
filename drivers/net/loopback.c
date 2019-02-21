@@ -38,7 +38,6 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && defined(CONFIG_NETDEV_LOOPBACK)
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -63,6 +62,8 @@
 #  include <nuttx/net/pkt.h>
 #endif
 
+#ifdef CONFIG_NETDEV_LOOPBACK
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -71,14 +72,6 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Worker thread support is required (CONFIG_SCHED_WORKQUEUE)
-#else
-#  if defined(CONFIG_LOOPBACK_HPWORK)
-#    define LPBKWORK HPWORK
-#  elif defined(CONFIG_LOOPBACK_LPWORK)
-#    define LPBKWORK LPWORK
-#  else
-#    error Neither CONFIG_LOOPBACK_HPWORK nor CONFIG_LOOPBACK_LPWORK defined
-#  endif
 #endif
 
 /* TX poll delay = 1 seconds. CLK_TCK is the number of clock ticks per second */
@@ -115,7 +108,7 @@ struct lo_driver_s
  ****************************************************************************/
 
 static struct lo_driver_s g_loopback;
-static uint8_t g_iobuffer[MAX_NET_DEV_MTU + CONFIG_NET_GUARDSIZE];
+static uint8_t g_iobuffer[MAX_NETDEV_PKTSIZE + CONFIG_NET_GUARDSIZE];
 
 /****************************************************************************
  * Private Function Prototypes
@@ -133,7 +126,7 @@ static int lo_ifup(FAR struct net_driver_s *dev);
 static int lo_ifdown(FAR struct net_driver_s *dev);
 static void lo_txavail_work(FAR void *arg);
 static int lo_txavail(FAR struct net_driver_s *dev);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -150,7 +143,7 @@ static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
  *   a callback from devif_poll() or devif_timer().  devif_poll() will be
  *   called only during normal TX polling.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -204,7 +197,7 @@ static int lo_txpoll(FAR struct net_driver_s *dev)
       else
 #endif
         {
-          nwarn("WARNING: Unrecognized packet type dropped: %02x\n", IPv4BUF->vhl);
+          nwarn("WARNING: Unrecognized IP version\n");
           NETDEV_RXDROPPED(&priv->lo_dev);
           priv->lo_dev.d_len = 0;
         }
@@ -222,7 +215,7 @@ static int lo_txpoll(FAR struct net_driver_s *dev)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -265,7 +258,7 @@ static void lo_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -283,7 +276,7 @@ static void lo_poll_expiry(int argc, wdparm_t arg, ...)
 
   /* Schedule to perform the interrupt processing on the worker thread. */
 
-  work_queue(LPBKWORK, &priv->lo_work, lo_poll_work, priv, 0);
+  work_queue(LPWORK, &priv->lo_work, lo_poll_work, priv, 0);
 }
 
 /****************************************************************************
@@ -293,7 +286,7 @@ static void lo_poll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -334,7 +327,7 @@ static int lo_ifup(FAR struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -364,7 +357,7 @@ static int lo_ifdown(FAR struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -405,7 +398,7 @@ static void lo_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -429,7 +422,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
     {
       /* Schedule to serialize the poll on the worker thread. */
 
-      work_queue(LPBKWORK, &priv->lo_work, lo_txavail_work, priv, 0);
+      work_queue(LPWORK, &priv->lo_work, lo_txavail_work, priv, 0);
     }
 
   return OK;
@@ -442,7 +435,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -453,7 +446,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   /* There is no multicast support in the loopback driver */
@@ -469,7 +462,7 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -480,7 +473,7 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   /* There is no multicast support in the loopback driver */
@@ -499,7 +492,7 @@ static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Initialize the localhost, loopback network driver
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -521,7 +514,7 @@ int localhost_initialize(void)
   priv->lo_dev.d_ifup    = lo_ifup;      /* I/F up (new IP address) callback */
   priv->lo_dev.d_ifdown  = lo_ifdown;    /* I/F down callback */
   priv->lo_dev.d_txavail = lo_txavail;   /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   priv->lo_dev.d_addmac  = lo_addmac;    /* Add multicast MAC address */
   priv->lo_dev.d_rmmac   = lo_rmmac;     /* Remove multicast MAC address */
 #endif
@@ -558,4 +551,4 @@ int localhost_initialize(void)
   return lo_ifup(&priv->lo_dev);
 }
 
-#endif /* CONFIG_NET && CONFIG_NETDEV_LOOPBACK */
+#endif /* CONFIG_NETDEV_LOOPBACK */

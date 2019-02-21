@@ -218,12 +218,6 @@
 #define PIN_SPI1_MISO  (PIN_SPI1_MISO_3 | PIN_ALT2_PULLUP)
 #define PIN_SPI1_MOSI  (PIN_SPI0_MOSI_7 | PIN_ALT2_PULLUP)
 
-/* These pins are used by CC3000 module */
-
-#define GPIO_WIFI_EN (GPIO_OUTPUT | GPIO_OUTPUT_ZER0 | PIN_PORTC | PIN12)
-#define GPIO_WIFI_IRQ (GPIO_INPUT | PIN_PORTA | PIN16)
-#define GPIO_WIFI_CS (GPIO_OUTPUT | GPIO_OUTPUT_ONE | PIN_PORTE | PIN1)
-
 /* Interrupt pin used by ADXL345
  *
  *   CS = PTD0 (D10 at connector J2 pin 6 of Freedom Board)
@@ -250,17 +244,6 @@ extern "C" {
 /************************************************************************************
  * Public Function Prototypes
  ************************************************************************************/
-/************************************************************************************
- * Name: kl_boardinitialize
- *
- * Description:
- *   All Kinetis L architectures must provide the following entry point.  This entry
- *   point is called early in the intitialization -- after all memory has been
- *   configured and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void kl_boardinitialize(void);
 
 /************************************************************************************
  * Name: kl_tsi_initialize

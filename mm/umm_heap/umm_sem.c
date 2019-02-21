@@ -55,10 +55,10 @@
  *   function is exported from the user-space blob so that the kernel
  *   can manage the user-mode allocator.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   OK on success; a negated errno on failure
  *
  ****************************************************************************/
@@ -76,10 +76,10 @@ int umm_trysemaphore(void)
  *   function is exported from the user-space blob so that the kernel
  *   can manage the user-mode allocator.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   OK on success; a negated errno on failure
  *
  ****************************************************************************/

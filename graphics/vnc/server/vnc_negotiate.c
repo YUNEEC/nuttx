@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/vnc/vnc_negotiate.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -86,7 +86,7 @@ static const char g_vncname[] = CONFIG_VNCSERVER_NAME;
  * Name: vnc_negotiate
  *
  * Description:
- *  Perform the VNC initialization sequence after the client has sucessfully
+ *  Perform the VNC initialization sequence after the client has successfully
  *  connected to the server.  Negotiate security, framebuffer and color
  *  properties.
  *
@@ -115,7 +115,6 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
   ssize_t nsent;
   ssize_t nrecvd;
   size_t len;
-  int errcode;
 
 #ifdef CONFIG_NET_SOCKOPTS
   struct timeval tv;
@@ -127,14 +126,13 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
 
   tv.tv_sec  = 5;
   tv.tv_usec = 0;
+
   ret = psock_setsockopt(&session->connect, SOL_SOCKET, SO_RCVTIMEO,
                          &tv, sizeof(struct timeval));
   if (ret < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Failed to set receive timeout: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Failed to set receive timeout: %d\n", ret);
+      return ret;
     }
 #endif
 
@@ -146,10 +144,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
   nsent = psock_send(&session->connect, g_vncproto, len, 0);
   if (nsent < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Send ProtocolVersion failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Send ProtocolVersion failed: %d\n", (int)nsent);
+      return (int)nsent;
     }
 
   DEBUGASSERT(nsent == len);
@@ -161,10 +157,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
   nrecvd = psock_recv(&session->connect, session->inbuf, len, 0);
   if (nrecvd < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Receive protocol confirmation failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Receive protocol confirmation failed: %d\n", (int)nrecvd);
+      return (int)nrecvd;
     }
   else if (nrecvd == 0)
     {
@@ -189,10 +183,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                      sizeof(struct rfb_sectype_s), 0);
   if (nsent < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Send Security failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Send Security failed: %d\n", (int)nsent);
+      return (int)nsent;
     }
 
   DEBUGASSERT(nsent == sizeof(struct rfb_sectype_s));
@@ -212,10 +204,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                      SIZEOF_RFB_SUPPORTED_SECTYPES_S(1), 0);
   if (nsent < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Send SupportedSecurityTypes failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Send SupportedSecurityTypes failed: %d\n", (int)nsent);
+      return (int)nsent;
     }
 
   DEBUGASSERT(nsent == SIZEOF_RFB_SUPPORTED_SECTYPES_S(1));
@@ -233,10 +223,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                       sizeof(struct rfb_selected_sectype_s), 0);
   if (nrecvd < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Receive SecurityType failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Receive SecurityType failed: %d\n", (int)nrecvd);
+      return (int)nrecvd;
     }
   else if (nrecvd == 0)
     {
@@ -262,10 +250,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                          sizeof(struct rfb_sectype_result_s), 0);
       if (nsent < 0)
         {
-          errcode = get_errno();
-          gerr("ERROR: Send SecurityResult failed: %d\n", errcode);
-          DEBUGASSERT(errcode > 0);
-          return -errcode;
+          gerr("ERROR: Send SecurityResult failed: %d\n", (int)nsent);
+          return (int)nsent;
         }
 
       DEBUGASSERT(nsent == sizeof(struct rfb_sectype_result_s));
@@ -281,10 +267,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                          SIZEOF_RFB_SECTYPE_FAIL_S(len), 0);
       if (nsent < 0)
         {
-          errcode = get_errno();
-          gerr("ERROR: Send failure reason failed: %d\n", errcode);
-          DEBUGASSERT(errcode > 0);
-          return -errcode;
+          gerr("ERROR: Send failure reason failed: %d\n", (int)nsent);
+          return (int)nsent;
         }
 
       DEBUGASSERT(nsent == SIZEOF_RFB_SECTYPE_FAIL_S(len));
@@ -297,10 +281,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                      sizeof(struct rfb_sectype_result_s), 0);
   if (nsent < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Send SecurityResult failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Send SecurityResult failed: %d\n", (int)nsent);
+      return (int)nsent;
     }
 
   DEBUGASSERT(nsent == sizeof(struct rfb_sectype_result_s));
@@ -310,7 +292,7 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
    *
    * "Once the client and server are sure that they’re happy to talk to one
    *  another using the agreed security type, the protocol passes to the
-   *  initialisation phase. The client sends a ClientInit message followed
+   *  initialization phase. The client sends a ClientInit message followed
    *  by the server sending a ServerInit message."
    *
    * In this implementation, the sharing flag is ignored.
@@ -322,10 +304,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                       sizeof(struct rfb_clientinit_s), 0);
   if (nrecvd < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Receive ClientInit failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Receive ClientInit failed: %d\n", (int)nrecvd);
+      return (int)nrecvd;
     }
   else if (nrecvd == 0)
     {
@@ -378,9 +358,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                      SIZEOF_RFB_SERVERINIT_S(len), 0);
   if (nsent < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Send ServerInit failed: %d\n", errcode);
-      return -errcode;
+      gerr("ERROR: Send ServerInit failed: %d\n", (int)nsent);
+      return (int)nsent;
     }
 
   DEBUGASSERT(nsent == SIZEOF_RFB_SERVERINIT_S(len));
@@ -397,10 +376,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                       sizeof(struct rfb_setpixelformat_s), 0);
   if (nrecvd < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Receive SetPixelFormat failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Receive SetPixelFormat failed: %d\n", (int)nrecvd);
+      return (int)nrecvd;
     }
   else if (nrecvd == 0)
     {
@@ -444,10 +421,8 @@ int vnc_negotiate(FAR struct vnc_session_s *session)
                       CONFIG_VNCSERVER_INBUFFER_SIZE, 0);
   if (nrecvd < 0)
     {
-      errcode = get_errno();
-      gerr("ERROR: Receive SetEncodings failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      return -errcode;
+      gerr("ERROR: Receive SetEncodings failed: %d\n", (int)nrecvd);
+      return (int)nrecvd;
     }
   else if (nrecvd == 0)
     {

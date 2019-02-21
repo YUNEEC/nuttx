@@ -88,10 +88,10 @@ struct ieee802154_recvfrom_s
  * Description:
  *   Return the number of frames in the RX queue.
  *
- * Parameters:
+ * Input Parameters:
  *   conn   - The socket connection structure.
  *
- * Return:
+ * Returned Value:
  *   The number of frames in the queue.
  *
  ****************************************************************************/
@@ -119,9 +119,9 @@ static int ieee802154_count_frames(FAR struct ieee802154_conn_s *conn)
  *   Perform the reception operation if there are any queued frames in the
  *   RX frame queue.
  *
- * Parameters:
+ * Input Parameters:
  *
- * Returned Values:
+ * Returned Value:
  *
  * Assumptions:
  *   The network is lockec
@@ -207,9 +207,9 @@ static ssize_t ieee802154_recvfrom_rxqueue(FAR struct radio_driver_s *radio,
  *
  * Description:
  *
- * Parameters:
+ * Input Parameters:
  *
- * Returned Values:
+ * Returned Value:
  *
  * Assumptions:
  *   The network is locked.
@@ -270,7 +270,7 @@ static uint16_t ieee802154_recvfrom_eventhandler(FAR struct net_driver_s *dev,
                * actually read.
                */
 
-              sem_post(&pstate->ir_sem);
+              nxsem_post(&pstate->ir_sem);
             }
         }
     }
@@ -297,7 +297,7 @@ static uint16_t ieee802154_recvfrom_eventhandler(FAR struct net_driver_s *dev,
  *   modified on return to indicate the actual size of the address stored
  *   there.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Buffer to receive data
  *   len      Length of buffer
@@ -380,8 +380,8 @@ ssize_t ieee802154_recvfrom(FAR struct socket *psock, FAR void *buf,
    * hence, should not have priority inheritance enabled.
    */
 
-  (void)sem_init(&state.ir_sem, 0, 0); /* Doesn't really fail */
-  (void)sem_setprotocol(&state.ir_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&state.ir_sem, 0, 0); /* Doesn't really fail */
+  (void)nxsem_setprotocol(&state.ir_sem, SEM_PRIO_NONE);
 
   /* Set the socket state to receiving */
 
@@ -417,7 +417,7 @@ ssize_t ieee802154_recvfrom(FAR struct socket *psock, FAR void *buf,
   /* Set the socket state to idle */
 
   psock->s_flags = _SS_SETSTATE(psock->s_flags, _SF_IDLE);
-  sem_destroy(&state.ir_sem);
+  nxsem_destroy(&state.ir_sem);
 
 errout_with_lock:
   net_unlock();

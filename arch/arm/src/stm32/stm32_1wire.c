@@ -82,7 +82,11 @@
 #define WRITE_TX0       0x00
 #define WRITE_TX1       0xFF
 
-#define PIN_OPENDRAIN(GPIO) ((GPIO) | GPIO_CNF_OUTOD)
+#if defined(CONFIG_STM32_STM32F10XX)
+#  define PIN_OPENDRAIN(GPIO) ((GPIO) | GPIO_CNF_OUTOD)
+#else
+#  define PIN_OPENDRAIN(GPIO) ((GPIO) | GPIO_OPENDRAIN)
+#endif
 
 #if defined(CONFIG_STM32_STM32F10XX)
 #  define USART_CR3_ONEBIT (0)
@@ -99,7 +103,9 @@ enum stm32_1wire_msg_e
   ONEWIRETASK_NONE = 0,
   ONEWIRETASK_RESET,
   ONEWIRETASK_WRITE,
-  ONEWIRETASK_READ
+  ONEWIRETASK_READ,
+  ONEWIRETASK_WRITEBIT,
+  ONEWIRETASK_READBIT
 };
 
 struct stm32_1wire_msg_s
@@ -169,6 +175,8 @@ static int stm32_1wire_read(FAR struct onewire_dev_s *dev, uint8_t *buffer,
 static int stm32_1wire_exchange(FAR struct onewire_dev_s *dev, bool reset,
                                 const uint8_t *txbuffer, int txbuflen,
                                 uint8_t *rxbuffer, int rxbuflen);
+static int stm32_1wire_writebit(FAR struct onewire_dev_s *dev, const uint8_t *bit);
+static int stm32_1wire_readbit(FAR struct onewire_dev_s *dev, uint8_t *bit);
 
 /****************************************************************************
  * Private Data
@@ -335,7 +343,9 @@ static const struct onewire_ops_s stm32_1wire_ops =
   .reset    = stm32_1wire_reset,
   .write    = stm32_1wire_write,
   .read     = stm32_1wire_read,
-  .exchange = stm32_1wire_exchange
+  .exchange = stm32_1wire_exchange,
+  .writebit = stm32_1wire_writebit,
+  .readbit  = stm32_1wire_readbit
 };
 
 /****************************************************************************
@@ -500,7 +510,7 @@ static void stm32_1wire_set_baud(struct stm32_1wire_priv_s *priv)
  * Description:
  *   Enable or disable APB clock for the USART peripheral
  *
- * Input parameters:
+ * Input Parameters:
  *   priv - A reference to the 1-Wire driver state structure
  *   on  - Enable clock if 'on' is 'true' and disable if 'false'
  *
@@ -708,14 +718,14 @@ static int stm32_1wire_deinit(FAR struct stm32_1wire_priv_s *priv)
 
 static inline void stm32_1wire_sem_init(FAR struct stm32_1wire_priv_s *priv)
 {
-  sem_init(&priv->sem_excl, 0, 1);
-  sem_init(&priv->sem_isr, 0, 0);
+  nxsem_init(&priv->sem_excl, 0, 1);
+  nxsem_init(&priv->sem_isr, 0, 0);
 
   /* The sem_isr semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->sem_isr, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->sem_isr, SEM_PRIO_NONE);
 }
 
 /****************************************************************************
@@ -728,8 +738,8 @@ static inline void stm32_1wire_sem_init(FAR struct stm32_1wire_priv_s *priv)
 
 static inline void stm32_1wire_sem_destroy(FAR struct stm32_1wire_priv_s *priv)
 {
-  sem_destroy(&priv->sem_excl);
-  sem_destroy(&priv->sem_isr);
+  nxsem_destroy(&priv->sem_excl);
+  nxsem_destroy(&priv->sem_isr);
 }
 
 /****************************************************************************
@@ -742,10 +752,21 @@ static inline void stm32_1wire_sem_destroy(FAR struct stm32_1wire_priv_s *priv)
 
 static inline void stm32_1wire_sem_wait(FAR struct stm32_1wire_priv_s *priv)
 {
-  while (sem_wait(&priv->sem_excl) != 0)
+  int ret;
+
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->sem_excl);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -758,7 +779,7 @@ static inline void stm32_1wire_sem_wait(FAR struct stm32_1wire_priv_s *priv)
 
 static inline void stm32_1wire_sem_post(FAR struct stm32_1wire_priv_s *priv)
 {
-  sem_post(&priv->sem_excl);
+  nxsem_post(&priv->sem_excl);
 }
 
 /****************************************************************************
@@ -803,14 +824,15 @@ static int stm32_1wire_process(struct stm32_1wire_priv_s *priv,
           stm32_1wire_send(priv, RESET_TX);
           leave_critical_section(irqs);
 
-          /* Wait */
+          /* Wait.  Break on timeout if TX line closed to GND */
 
           clock_gettime(CLOCK_REALTIME, &abstime);
           abstime.tv_sec += BUS_TIMEOUT;
-          sem_timedwait(&priv->sem_isr, &abstime); /* break on timeout if TX line closed to GND */
+          (void)nxsem_timedwait(&priv->sem_isr, &abstime);
           break;
 
         case ONEWIRETASK_WRITE:
+        case ONEWIRETASK_WRITEBIT:
           /* Set baud rate */
 
           priv->baud = TIMESLOT_BAUD;
@@ -825,14 +847,15 @@ static int stm32_1wire_process(struct stm32_1wire_priv_s *priv,
           stm32_1wire_send(priv, (*priv->byte & (1 << priv->bit)) ? WRITE_TX1 : WRITE_TX0);
           leave_critical_section(irqs);
 
-          /* Wait */
+          /* Wait.  Break on timeout if TX line closed to GND */
 
           clock_gettime(CLOCK_REALTIME, &abstime);
           abstime.tv_sec += BUS_TIMEOUT;
-          sem_timedwait(&priv->sem_isr, &abstime); /* break on timeout if TX line closed to GND */
+          (void)nxsem_timedwait(&priv->sem_isr, &abstime);
           break;
 
         case ONEWIRETASK_READ:
+        case ONEWIRETASK_READBIT:
           /* Set baud rate */
 
           priv->baud = TIMESLOT_BAUD;
@@ -847,11 +870,11 @@ static int stm32_1wire_process(struct stm32_1wire_priv_s *priv,
           stm32_1wire_send(priv, READ_TX);
           leave_critical_section(irqs);
 
-          /* Wait */
+          /* Wait.  Break on timeout if TX line closed to GND */
 
           clock_gettime(CLOCK_REALTIME, &abstime);
           abstime.tv_sec += BUS_TIMEOUT;
-          sem_timedwait(&priv->sem_isr, &abstime); /* break on timeout if TX line closed to GND */
+          (void)nxsem_timedwait(&priv->sem_isr, &abstime);
           break;
         }
 
@@ -910,7 +933,7 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
             case ONEWIRETASK_RESET:
               priv->msgs = NULL;
               priv->result = (dr != RESET_TX) ? OK : -ENODEV; /* if read RESET_TX then no slave */
-              sem_post(&priv->sem_isr);
+              nxsem_post(&priv->sem_isr);
               break;
 
             case ONEWIRETASK_WRITE:
@@ -921,7 +944,7 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
                     {
                       priv->msgs = NULL;
                       priv->result = OK;
-                      sem_post(&priv->sem_isr);
+                      nxsem_post(&priv->sem_isr);
                       break;
                     }
                 }
@@ -948,7 +971,7 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
                     {
                       priv->msgs = NULL;
                       priv->result = OK;
-                      sem_post(&priv->sem_isr);
+                      nxsem_post(&priv->sem_isr);
                       break;
                     }
                 }
@@ -956,6 +979,17 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
               /* Recv next bit */
 
               stm32_1wire_send(priv, READ_TX);
+              break;
+
+            case ONEWIRETASK_READBIT:
+              *priv->byte = (dr == READ_RX1) ? 1 : 0;
+
+              /* Fall through */
+
+            case ONEWIRETASK_WRITEBIT:
+              priv->msgs = NULL;
+              priv->result = OK;
+              nxsem_post(&priv->sem_isr);
               break;
             }
         }
@@ -988,7 +1022,7 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
         {
           priv->msgs = NULL;
           priv->result = ERROR;
-          sem_post(&priv->sem_isr);
+          nxsem_post(&priv->sem_isr);
         }
     }
 
@@ -1003,7 +1037,7 @@ static int stm32_1wire_isr(int irq, void *context, void *arg)
         {
           priv->msgs = NULL;
           priv->result = ERROR;
-          sem_post(&priv->sem_isr);
+          nxsem_post(&priv->sem_isr);
         }
     }
 
@@ -1126,6 +1160,50 @@ static int stm32_1wire_exchange(FAR struct onewire_dev_s *dev, bool reset,
 }
 
 /****************************************************************************
+ * Name: stm32_1wire_writebit
+ *
+ * Description:
+ *   Write one bit of 1-Wire data
+ *
+ ****************************************************************************/
+
+static int stm32_1wire_writebit(FAR struct onewire_dev_s *dev, const uint8_t *bit)
+{
+  struct stm32_1wire_priv_s *priv = ((struct stm32_1wire_inst_s *)dev)->priv;
+  const struct stm32_1wire_msg_s msgs[1] =
+  {
+    [0].task = ONEWIRETASK_WRITEBIT,
+    [0].buffer = (uint8_t *)bit,
+    [0].buflen = 1
+  };
+
+  DEBUGASSERT(*bit == 0 || *bit == 1);
+
+  return stm32_1wire_process(priv, msgs, 1);
+}
+
+/****************************************************************************
+ * Name: stm32_1wire_readbit
+ *
+ * Description:
+ *   Sample one bit of 1-Wire data
+ *
+ ****************************************************************************/
+
+static int stm32_1wire_readbit(FAR struct onewire_dev_s *dev, uint8_t *bit)
+{
+  struct stm32_1wire_priv_s *priv = ((struct stm32_1wire_inst_s *)dev)->priv;
+  const struct stm32_1wire_msg_s msgs[1] =
+  {
+    [0].task = ONEWIRETASK_READBIT,
+    [0].buffer = bit,
+    [0].buflen = 1
+  };
+
+  return stm32_1wire_process(priv, msgs, 1);
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -1138,7 +1216,7 @@ static int stm32_1wire_exchange(FAR struct onewire_dev_s *dev, bool reset,
  *   instances of the interface, each of which may be set up with a
  *   different frequency and slave address.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has multiple 1-Wire interfaces)
  *
  * Returned Value:
@@ -1202,7 +1280,8 @@ FAR struct onewire_dev_s *stm32_1wireinitialize(int port)
 
   /* Allocate instance */
 
-  if (!(inst = kmm_malloc(sizeof(struct stm32_1wire_inst_s))))
+  inst = kmm_malloc(sizeof(*inst));
+  if (inst == NULL)
     {
       return NULL;
     }
@@ -1234,7 +1313,7 @@ FAR struct onewire_dev_s *stm32_1wireinitialize(int port)
  * Description:
  *   De-initialize the selected 1-Wire port, and power down the device.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Device structure as returned by the stm32_1wireinitialize()
  *
  * Returned Value:
@@ -1248,7 +1327,7 @@ int stm32_1wireuninitialize(FAR struct onewire_dev_s *dev)
   struct stm32_1wire_priv_s *priv = ((struct stm32_1wire_inst_s *)dev)->priv;
   int irqs;
 
-  ASSERT(dev);
+  DEBUGASSERT(priv);
 
   /* Decrement reference count and check for underflow */
 

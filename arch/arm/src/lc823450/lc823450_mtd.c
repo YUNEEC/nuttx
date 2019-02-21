@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_mtd.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Yasuhiro Osaki <Yasuhiro.Osaki@jp.sony.com>
@@ -110,13 +110,11 @@ static sem_t g_sem = SEM_INITIALIZER(1);
 static FAR struct mtd_dev_s *g_mtdpart[LC823450_NPARTS];
 static FAR struct mtd_dev_s *g_mtdmaster[CONFIG_MTD_DEV_MAX];   /* 0: eMMC, 1: SDC */
 
-#ifdef CONFIG_MTD_REGISTRATION
 static const char g_mtdname[2][4] =
 {
   "sd",
   "mmc"
 };
-#endif
 
 static struct lc823450_partinfo_s partinfo[LC823450_NPARTS] =
 {
@@ -142,10 +140,21 @@ static struct lc823450_partinfo_s partinfo[LC823450_NPARTS] =
 
 static void mtd_semtake(FAR sem_t *sem)
 {
-  while (sem_wait(sem) != 0)
+  int ret;
+
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -154,7 +163,7 @@ static void mtd_semtake(FAR sem_t *sem)
 
 static void mtd_semgive(FAR sem_t *sem)
 {
-  sem_post(sem);
+  nxsem_post(sem);
 }
 
 /****************************************************************************
@@ -504,6 +513,7 @@ exit_with_error:
 static FAR struct mtd_dev_s *lc823450_mtd_allocdev(uint32_t channel)
 {
   int ret;
+  int mtype = lc823450_sdc_refmediatype(channel);
   FAR struct lc823450_mtd_dev_s *priv;
 
   /* Create an instance of the LC823450 MTD device state structure */
@@ -516,7 +526,7 @@ static FAR struct mtd_dev_s *lc823450_mtd_allocdev(uint32_t channel)
       return NULL;
     }
 
-  sem_init(&priv->sem, 0, 1);
+  nxsem_init(&priv->sem, 0, 1);
 
   priv->mtd.erase  = lc823450_erase;
   priv->mtd.bread  = lc823450_bread;
@@ -528,6 +538,7 @@ static FAR struct mtd_dev_s *lc823450_mtd_allocdev(uint32_t channel)
   priv->mtd.write  = NULL;
 #endif
   priv->mtd.ioctl  = lc823450_ioctl;
+  priv->mtd.name   = g_mtdname[mtype];
 
   priv->channel = channel;
 
@@ -535,7 +546,7 @@ static FAR struct mtd_dev_s *lc823450_mtd_allocdev(uint32_t channel)
   if (ret != OK)
     {
       finfo("ERROR: Failed to initialize media\n");
-      sem_destroy(&priv->sem);
+      nxsem_destroy(&priv->sem);
       kmm_free(priv);
       return NULL;
     }
@@ -620,12 +631,6 @@ int lc823450_mtd_initialize(uint32_t devno)
 
   priv = (FAR struct lc823450_mtd_dev_s *)g_mtdmaster[ch];
 
-#ifdef CONFIG_MTD_REGISTRATION
-  int mtype = lc823450_sdc_refmediatype(ch);
-  mtd_register(g_mtdmaster[ch], g_mtdname[mtype]);
-  g_mtdmaster[ch]->mtdno = devno;
-#endif
-
   /* If SDC, create no child partition */
 
 #if CONFIG_MTD_DEV_MAX > 1
@@ -644,9 +649,9 @@ int lc823450_mtd_initialize(uint32_t devno)
 #ifdef CONFIG_DEBUG
   for (i = 0; i < LC823450_NPARTS - 1; i++)
     {
-      ASSERT(partinfo[i].startblock < partinfo[i + 1].startblock);
-      ASSERT(partinfo[i].startblock + partinfo[i].nblocks <= maxblock);
-      ASSERT(partinfo[i + 1].startblock + partinfo[i + 1].nblocks <= maxblock);
+      DEBUGASSERT(partinfo[i].startblock < partinfo[i + 1].startblock);
+      DEBUGASSERT(partinfo[i].startblock + partinfo[i].nblocks <= maxblock);
+      DEBUGASSERT(partinfo[i + 1].startblock + partinfo[i + 1].nblocks <= maxblock);
     }
 #endif
 
@@ -799,7 +804,7 @@ int lc823450_mtd_uninitialize(uint32_t devno)
   ret = lc823450_sdc_finalize(ch);
   DEBUGASSERT(ret == OK);
 
-  sem_destroy(&priv->sem);
+  nxsem_destroy(&priv->sem);
 
   kmm_free(g_mtdmaster[ch]);
 

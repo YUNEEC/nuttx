@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/utils/net_lock.c
  *
- *   Copyright (C) 2011-2012, 2014-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,8 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
+#include <nuttx/semaphore.h>
+#include <nuttx/mm/iob.h>
 #include <nuttx/net/net.h>
 
 #include "utils/utils.h"
@@ -80,14 +82,21 @@ static unsigned int g_count   = 0;
 
 static void _net_takesem(void)
 {
-  while (sem_wait(&g_netlock) != 0)
+  int ret;
+
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_netlock);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      DEBUGASSERT(get_errno() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -104,7 +113,7 @@ static void _net_takesem(void)
 
 void net_lockinitialize(void)
 {
-  sem_init(&g_netlock, 0, 1);
+  nxsem_init(&g_netlock, 0, 1);
 }
 
 /****************************************************************************
@@ -116,13 +125,16 @@ void net_lockinitialize(void)
  * Input Parameters:
  *   None
  *
- * Returned value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
 
 void net_lock(void)
 {
+#ifdef CONFIG_SMP
+  irqstate_t flags = enter_critical_section();
+#endif
   pid_t me = getpid();
 
   /* Does this thread already hold the semaphore? */
@@ -144,6 +156,10 @@ void net_lock(void)
       g_holder = me;
       g_count  = 1;
     }
+
+#ifdef CONFIG_SMP
+  leave_critical_section(flags);
+#endif
 }
 
 /****************************************************************************
@@ -155,13 +171,16 @@ void net_lock(void)
  * Input Parameters:
  *   None
  *
- * Returned value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
 
 void net_unlock(void)
 {
+#ifdef CONFIG_SMP
+  irqstate_t flags = enter_critical_section();
+#endif
   DEBUGASSERT(g_holder == getpid() && g_count > 0);
 
   /* If the count would go to zero, then release the semaphore */
@@ -172,7 +191,7 @@ void net_unlock(void)
 
       g_holder = NO_HOLDER;
       g_count  = 0;
-      sem_post(&g_netlock);
+      nxsem_post(&g_netlock);
     }
   else
     {
@@ -180,6 +199,68 @@ void net_unlock(void)
 
       g_count--;
     }
+
+#ifdef CONFIG_SMP
+  leave_critical_section(flags);
+#endif
+}
+
+/****************************************************************************
+ * Name: net_breaklock
+ *
+ * Description:
+ *   Break the lock, return information needed to restore re-entrant lock
+ *   state.
+ *
+ ****************************************************************************/
+
+int net_breaklock(FAR unsigned int *count)
+{
+  irqstate_t flags;
+  pid_t me = getpid();
+  int ret = -EPERM;
+
+  DEBUGASSERT(count != NULL);
+
+  flags = enter_critical_section(); /* No interrupts */
+  if (g_holder == me)
+    {
+      /* Return the lock setting */
+
+      *count   = g_count;
+
+      /* Release the network lock  */
+
+      g_holder = NO_HOLDER;
+      g_count  = 0;
+
+      (void)nxsem_post(&g_netlock);
+      ret      = OK;
+    }
+
+  leave_critical_section(flags);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: net_breaklock
+ *
+ * Description:
+ *   Restore the locked state
+ *
+ ****************************************************************************/
+
+void net_restorelock(unsigned int count)
+{
+  pid_t me = getpid();
+
+  DEBUGASSERT(g_holder != me);
+
+  /* Recover the network lock at the proper count */
+
+  _net_takesem();
+  g_holder = me;
+  g_count  = count;
 }
 
 /****************************************************************************
@@ -189,11 +270,16 @@ void net_unlock(void)
  *   Atomically wait for sem (or a timeout( while temporarily releasing
  *   the lock on the network.
  *
+ *   Caution should be utilized.  Because the network lock is relinquished
+ *   during the wait, there could changes in the network state that occur
+ *   before the lock is recovered.  Your design should account for this
+ *   possibility.
+ *
  * Input Parameters:
  *   sem     - A reference to the semaphore to be taken.
  *   abstime - The absolute time to wait until a timeout is declared.
  *
- * Returned value:
+ * Returned Value:
  *   Zero (OK) is returned on success; a negated errno value is returned on
  *   any failure.
  *
@@ -201,68 +287,41 @@ void net_unlock(void)
 
 int net_timedwait(sem_t *sem, FAR const struct timespec *abstime)
 {
-  pid_t        me = getpid();
   unsigned int count;
   irqstate_t   flags;
+  int          blresult;
   int          ret;
 
   flags = enter_critical_section(); /* No interrupts */
-  sched_lock();      /* No context switches */
-  if (g_holder == me)
+  sched_lock();                     /* No context switches */
+
+  /* Release the network lock, remembering my count.  net_breaklock will
+   * return a negated value if the caller does not hold the network lock.
+   */
+
+  blresult = net_breaklock(&count);
+
+  /* Now take the semaphore, waiting if so requested. */
+
+  if (abstime != NULL)
     {
-      /* Release the network lock, remembering my count */
+      /* Wait until we get the lock or until the timeout expires */
 
-      count    = g_count;
-      g_holder = NO_HOLDER;
-      g_count  = 0;
-      sem_post(&g_netlock);
-
-      /* Now take the semaphore, waiting if so requested. */
-
-      if (abstime)
-        {
-          /* Wait until we get the lock or until the timeout expires */
-
-          ret = sem_timedwait(sem, abstime);
-        }
-      else
-        {
-          /* Wait as long as necessary to get the lock */
-
-          ret = sem_wait(sem);
-        }
-
-      /* Check for errors from sem_wait() (should only be EINTR)
-       * REVISIT:  errno really should not be used within the OS
-       */
-
-      if (ret < 0)
-        {
-          ret = -get_errno();
-          DEBUGASSERT(ret < 0);
-        }
-
-      /* Recover the network lock at the proper count */
-
-      _net_takesem();
-      g_holder = me;
-      g_count  = count;
+      ret = nxsem_timedwait(sem, abstime);
     }
   else
     {
-      ret = sem_wait(sem);
+      /* Wait as long as necessary to get the lock */
 
-      /* Check for errors from sem_wait() (should only be EINTR)
-       * REVISIT:  errno really should not be used within the OS
-       */
-
-      if (ret < 0)
-        {
-          ret = -get_errno();
-          DEBUGASSERT(ret < 0);
-        }
+      ret = nxsem_wait(sem);
     }
 
+  /* Recover the network lock at the proper count (if we held it before) */
+
+  if (blresult >= 0)
+    {
+      net_restorelock(count);
+    }
 
   sched_unlock();
   leave_critical_section(flags);
@@ -275,10 +334,15 @@ int net_timedwait(sem_t *sem, FAR const struct timespec *abstime)
  * Description:
  *   Atomically wait for sem while temporarily releasing the network lock.
  *
+ *   Caution should be utilized.  Because the network lock is relinquished
+ *   during the wait, there could changes in the network state that occur
+ *   before the lock is recovered.  Your design should account for this
+ *   possibility.
+ *
  * Input Parameters:
  *   sem - A reference to the semaphore to be taken.
  *
- * Returned value:
+ * Returned Value:
  *   Zero (OK) is returned on success; a negated errno value is returned on
  *   any failure.
  *
@@ -289,3 +353,54 @@ int net_lockedwait(sem_t *sem)
   return net_timedwait(sem, NULL);
 }
 
+/****************************************************************************
+ * Name: net_ioballoc
+ *
+ * Description:
+ *   Allocate an IOB.  If no IOBs are available, then atomically wait for
+ *   for the IOB while temporarily releasing the lock on the network.
+ *
+ *   Caution should be utilized.  Because the network lock is relinquished
+ *   during the wait, there could changes in the network state that occur
+ *   before the lock is recovered.  Your design should account for this
+ *   possibility.
+ *
+ * Input Parameters:
+ *   throttled - An indication of the IOB allocation is "throttled"
+ *
+ * Returned Value:
+ *   A pointer to the newly allocated IOB is returned on success.  NULL is
+ *   returned on any allocation failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_MM_IOB
+FAR struct iob_s *net_ioballoc(bool throttled)
+{
+  FAR struct iob_s *iob;
+
+  iob = iob_tryalloc(throttled);
+  if (iob == NULL)
+    {
+      irqstate_t flags;
+      unsigned int count;
+      int blresult;
+
+      /* There are no buffers available now.  We will have to wait for one to
+       * become available. But let's not do that with the network locked.
+       */
+
+      flags    = enter_critical_section();
+      blresult = net_breaklock(&count);
+      iob      = iob_alloc(throttled);
+      if (blresult >= 0)
+        {
+          net_restorelock(count);
+        }
+
+      leave_critical_section(flags);
+    }
+
+  return iob;
+}
+#endif

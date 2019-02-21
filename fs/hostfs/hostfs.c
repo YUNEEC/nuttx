@@ -62,6 +62,12 @@
 #include "hostfs.h"
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define HOSTFS_RETRY_DELAY_MS       10
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
@@ -82,6 +88,8 @@ static int     hostfs_dup(FAR const struct file *oldp,
                         FAR struct file *newp);
 static int     hostfs_fstat(FAR const struct file *filep,
                         FAR struct stat *buf);
+static int     hostfs_ftruncate(FAR struct file *filep,
+                        off_t length);
 
 static int     hostfs_opendir(FAR struct inode *mountpt,
                         FAR const char *relpath,
@@ -139,6 +147,7 @@ const struct mountpt_operations hostfs_operations =
   hostfs_sync,          /* sync */
   hostfs_dup,           /* dup */
   hostfs_fstat,         /* fstat */
+  hostfs_ftruncate,     /* ftruncate */
 
   hostfs_opendir,       /* opendir */
   hostfs_closedir,      /* closedir */
@@ -166,16 +175,21 @@ const struct mountpt_operations hostfs_operations =
 
 void hostfs_semtake(FAR struct hostfs_mountpt_s *fs)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(fs->fs_sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(fs->fs_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(*get_errno_ptr() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -184,7 +198,7 @@ void hostfs_semtake(FAR struct hostfs_mountpt_s *fs)
 
 void hostfs_semgive(FAR struct hostfs_mountpt_s *fs)
 {
-  sem_post(fs->fs_sem);
+  nxsem_post(fs->fs_sem);
 }
 
 /****************************************************************************
@@ -294,12 +308,29 @@ static int hostfs_open(FAR struct file *filep, FAR const char *relpath,
   /* Try to open the file in the host file system */
 
   hf->fd = host_open(path, oflags, mode);
-  if (hf->fd == -1)
+  if (hf->fd < 0)
     {
       /* Error opening file */
 
       ret = -EBADF;
       goto errout_with_buffer;
+    }
+
+  /* In write/append mode, we need to set the file pointer to the end of the
+   * file.
+   */
+
+  if ((oflags & (O_APPEND | O_WRONLY)) == (O_APPEND | O_WRONLY))
+    {
+      ret = host_lseek(hf->fd, 0, SEEK_END);
+      if (ret >= 0)
+        {
+          filep->f_pos = ret;
+        }
+      else
+        {
+          goto errout_with_buffer;
+        }
     }
 
   /* Attach the private date to the struct file instance */
@@ -425,7 +456,7 @@ static ssize_t hostfs_read(FAR struct file *filep, FAR char *buffer,
   FAR struct inode *inode;
   FAR struct hostfs_mountpt_s *fs;
   FAR struct hostfs_ofile_s *hf;
-  int ret = OK;
+  ssize_t ret;
 
   /* Sanity checks */
 
@@ -446,6 +477,10 @@ static ssize_t hostfs_read(FAR struct file *filep, FAR char *buffer,
   /* Call the host to perform the read */
 
   ret = host_read(hf->fd, buffer, buflen);
+  if (ret > 0)
+    {
+      filep->f_pos += ret;
+    }
 
   hostfs_semgive(fs);
   return ret;
@@ -461,7 +496,7 @@ static ssize_t hostfs_write(FAR struct file *filep, const char *buffer,
   FAR struct inode *inode;
   FAR struct hostfs_mountpt_s *fs;
   FAR struct hostfs_ofile_s *hf;
-  int ret;
+  ssize_t ret;
 
   /* Sanity checks.  I have seen the following assertion misfire if
    * CONFIG_DEBUG_MM is enabled while re-directing output to a
@@ -504,6 +539,10 @@ static ssize_t hostfs_write(FAR struct file *filep, const char *buffer,
   /* Call the host to perform the write */
 
   ret = host_write(hf->fd, buffer, buflen);
+  if (ret > 0)
+    {
+      filep->f_pos += ret;
+    }
 
 errout_with_semaphore:
   hostfs_semgive(fs);
@@ -519,7 +558,7 @@ static off_t hostfs_seek(FAR struct file *filep, off_t offset, int whence)
   FAR struct inode *inode;
   FAR struct hostfs_mountpt_s *fs;
   FAR struct hostfs_ofile_s *hf;
-  int ret;
+  off_t ret;
 
   /* Sanity checks */
 
@@ -540,6 +579,10 @@ static off_t hostfs_seek(FAR struct file *filep, off_t offset, int whence)
   /* Call our internal routine to perform the seek */
 
   ret = host_lseek(hf->fd, offset, whence);
+  if (ret >= 0)
+    {
+      filep->f_pos = ret;
+    }
 
   hostfs_semgive(fs);
   return ret;
@@ -683,6 +726,47 @@ static int hostfs_fstat(FAR const struct file *filep, FAR struct stat *buf)
   /* Call the host to perform the read */
 
   ret = host_fstat(hf->fd, buf);
+
+  hostfs_semgive(fs);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: hostfs_ftruncate
+ *
+ * Description:
+ *   Set the length of the open, regular file associated with the file
+ *   structure 'filep' to 'length'.
+ *
+ ****************************************************************************/
+
+static int hostfs_ftruncate(FAR struct file *filep, off_t length)
+{
+  FAR struct inode *inode;
+  FAR struct hostfs_mountpt_s *fs;
+  FAR struct hostfs_ofile_s *hf;
+  int ret = OK;
+
+  /* Sanity checks */
+
+  DEBUGASSERT(filep != NULL);
+
+  /* Recover our private data from the struct file instance */
+
+  DEBUGASSERT(filep->f_priv != NULL && filep->f_inode != NULL);
+  hf    = filep->f_priv;
+  inode = filep->f_inode;
+
+  fs    = inode->i_private;
+  DEBUGASSERT(fs != NULL);
+
+  /* Take the semaphore */
+
+  hostfs_semtake(fs);
+
+  /* Call the host to perform the truncate */
+
+  ret = host_ftruncate(hf->fd, length);
 
   hostfs_semgive(fs);
   return ret;
@@ -837,8 +921,9 @@ static int hostfs_bind(FAR struct inode *blkdriver, FAR const void *data,
 {
   FAR struct hostfs_mountpt_s  *fs;
   struct stat buf;
-  FAR const char *options;
-  int len;
+  FAR char *options;
+  char *ptr, *saveptr;
+  int len, timeout = 0;
   int ret;
 
   /* Validate the block driver is NULL */
@@ -848,23 +933,42 @@ static int hostfs_bind(FAR struct inode *blkdriver, FAR const void *data,
       return -ENODEV;
     }
 
-  /* The only options we suppor are "-o fs=whatever", so search
-   * for the 'dir=' portion
-   */
-
-  options = (const char *) data;
-  if ((strncmp(options, "fs=", 3) != 0) || (strlen(options) < 5))
-    {
-      return -ENODEV;
-    }
-
   /* Create an instance of the mountpt state structure */
 
-  fs = (struct hostfs_mountpt_s *)kmm_zalloc(sizeof(struct hostfs_mountpt_s));
-  if (!fs)
+  fs = (FAR struct hostfs_mountpt_s *)kmm_zalloc(sizeof(struct hostfs_mountpt_s));
+  if (fs == NULL)
     {
       return -ENOMEM;
     }
+
+  /* The options we suppor are:
+   *  "fs=whatever", remote dir
+   *  "timeout=xx", bind timeout, unit (ms)
+   */
+
+  options = strdup(data);
+  if (!options)
+    {
+      kmm_free(fs);
+      return -ENOMEM;
+    }
+
+  ptr = strtok_r(options, ",", &saveptr);
+  while(ptr != NULL)
+    {
+      if ((strncmp(ptr, "fs=", 3) == 0))
+        {
+          strncpy(fs->fs_root, &ptr[3], sizeof(fs->fs_root));
+        }
+      else if ((strncmp(ptr, "timeout=", 8) == 0))
+        {
+          timeout = atoi(&ptr[8]);
+        }
+
+      ptr = strtok_r(NULL, ",", &saveptr);
+    }
+
+  kmm_free(options);
 
   /* If the global semaphore hasn't been initialized, then
    * initialized it now. */
@@ -874,7 +978,7 @@ static int hostfs_bind(FAR struct inode *blkdriver, FAR const void *data,
     {
       /* Initialize the semaphore that controls access */
 
-      sem_init(&g_sem, 0, 0);
+      nxsem_init(&g_sem, 0, 0);
       g_seminitialized = TRUE;
     }
   else
@@ -893,9 +997,8 @@ static int hostfs_bind(FAR struct inode *blkdriver, FAR const void *data,
 
   /* Now perform the mount.  */
 
-  strncpy(fs->fs_root, &options[3], sizeof(fs->fs_root));
   len = strlen(fs->fs_root);
-  if (len && fs->fs_root[len-1] == '/')
+  if (len > 1 && fs->fs_root[len - 1] == '/')
     {
       /* Remove trailing '/' */
 
@@ -904,17 +1007,31 @@ static int hostfs_bind(FAR struct inode *blkdriver, FAR const void *data,
 
   /* Try to stat the file in the host FS */
 
-  ret = host_stat(fs->fs_root, &buf);
-  if (ret != 0 || (buf.st_mode & S_IFDIR) == 0)
+  while (1)
     {
-      hostfs_semgive(fs);
-      kmm_free(fs);
-      return -ENOENT;
+      ret = host_stat(fs->fs_root, &buf);
+      if ((ret != 0 && timeout <= 0) ||
+              (ret == 0 && (buf.st_mode & S_IFDIR) == 0))
+        {
+          hostfs_semgive(fs);
+          kmm_free(fs);
+          return -ENOENT;
+        }
+      else if (ret == 0)
+        {
+          break;
+        }
+
+      usleep(HOSTFS_RETRY_DELAY_MS * 1000);
+      timeout -= HOSTFS_RETRY_DELAY_MS;
     }
 
   /* Append a '/' to the name now */
 
-  strcat(fs->fs_root, "/");
+  if (fs->fs_root[len-1] != '/')
+    {
+      strcat(fs->fs_root, "/");
+    }
 
   *handle = (FAR void *)fs;
   hostfs_semgive(fs);
@@ -984,14 +1101,11 @@ static int hostfs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
 
   hostfs_semtake(fs);
 
-  /* Implement the logic!! */
-
-  memset(buf, 0, sizeof(struct statfs));
-  buf->f_type = HOSTFS_MAGIC;
-
   /* Call the host fs to perform the statfs */
 
+  memset(buf, 0, sizeof(struct statfs));
   ret = host_statfs(fs->fs_root, buf);
+  buf->f_type = HOSTFS_MAGIC;
 
   hostfs_semgive(fs);
   return ret;

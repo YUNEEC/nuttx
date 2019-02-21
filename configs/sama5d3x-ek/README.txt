@@ -111,7 +111,7 @@ Development Environment
 
   Several possible development environments may be used:
 
-  - Linux or OSX native
+  - Linux or macOS native
   - Cygwin unders Windows
   - MinGW + MSYS under Windows
   - Windows native (with GNUMake from GNUWin32).
@@ -211,8 +211,7 @@ NuttX EABI "buildroot" Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh sama5d3x-ek/<sub-dir>
+     tools/configure.sh sama5d3x-ek/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -262,8 +261,7 @@ NXFLAT Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh sama5d3x-ek/<sub-dir>
+     tools/configure.sh sama5d3x-ek/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -369,9 +367,7 @@ Creating and Using NORBOOT
      the norboot configuration and setup the PATH variable in order to do
      the build:
 
-       cd tools
-       ./configure.sh sama5d3x-ek/<subdir>
-       cd -
+       tools/configure.sh sama5d3x-ek/<subdir>
 
      Before building, make sure the PATH environment variable includes the
      correct path to the directory than holds your toolchain binaries.
@@ -401,9 +397,7 @@ Creating and Using NORBOOT
 
        cd <nuttx>
        make distclean                 # Remove the norboot configuration
-       cd tools
-       ./configure.sh sama5d3x-ek/nsh # Establish the NSH configuration
-       cd -
+       tools/configure.sh sama5d3x-ek/nsh # Establish the NSH configuration
        make                           # Build the NSH configuration
 
      Then use SAM-BA to write the nuttx.bin binary into NOR FLASH.  This
@@ -982,14 +976,13 @@ Networking
   Networking Support
     CONFIG_NET=y                         : Enable Networking
     CONFIG_NET_SOCKOPTS=y                : Enable socket operations
-    CONFIG_NET_ETH_MTU=562               : Maximum packet size (MTU) 1518 is more standard
-    CONFIG_NET_ETH_TCP_RECVWNDO=562      : Should be the same as CONFIG_NET_ETH_MTU
+    CONFIG_NET_ETH_PKTSIZE=562           : Maximum packet size 1518 is more standard
     CONFIG_NET_TCP=y                     : Enable TCP/IP networking
     CONFIG_NET_TCPBACKLOG=y              : Support TCP/IP backlog
     CONFIG_NET_TCP_READAHEAD_BUFSIZE=562 : Read-ahead buffer size
     CONFIG_NET_UDP=y                     : Enable UDP networking
     CONFIG_NET_ICMP=y                    : Enable ICMP networking
-    CONFIG_NET_ICMP_PING=y               : Needed for NSH ping command
+    CONFIG_NET_ICMP_SOCKET=y             : Needed for NSH ping command
                                          : Defaults should be okay for other options
   Device drivers -> Network Device/PHY Support
     CONFIG_NETDEVICES=y                  : Enabled PHY selection
@@ -1305,7 +1298,7 @@ HSMCI Card Slots
       CONFIG_MMCSD=y                        : Enable MMC/SD support
       CONFIG_MMSCD_NSLOTS=1                 : One slot per driver instance
       CONFIG_MMCSD_MULTIBLOCK_DISABLE=y     : (REVISIT)
-      CONFIG_MMCSD_HAVECARDDETECT=y         : Supports card-detect PIOs
+      CONFIG_MMCSD_HAVE_CARDDETECT=y         : Supports card-detect PIOs
       CONFIG_MMCSD_MMCSUPPORT=n             : Interferes with some SD cards
       CONFIG_MMCSD_SPI=n                    : No SPI-based MMC/SD support
       CONFIG_MMCSD_SDIO=y                   : SDIO-based MMC/SD support
@@ -3177,13 +3170,6 @@ SAMA5D3x-EK Configuration Options
 
   CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-  CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-  cause a 100 second delay during boot-up.  This 100 second delay
-  serves no purpose other than it allows you to calibrate
-  CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-  the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-  the delay actually is 100 seconds.
-
   Individual subsystems can be enabled:
 
     CONFIG_SAMA5_DBGU        - Debug Unit
@@ -3301,9 +3287,7 @@ Configurations
   Each SAMA5D3x-EK configuration is maintained in a sub-directory and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh sama5d3x-ek/<subdir>
-    cd -
+    tools/configure.sh sama5d3x-ek/<subdir>
 
   Before building, make sure the PATH environment variable includes the
   correct path to the directory than holds your toolchain binaries.
@@ -3779,51 +3763,6 @@ Configurations
     The NxWM unit test can be found at:
 
       nuttx-git/NxWidgets/UnitTests/nxwm
-
-    Documentation for installing the NxWM unit test can be found here:
-
-      nuttx-git/NxWidgets/UnitTests/README.txt
-
-    Here is the quick summary of the build steps.  These steps assume that
-    you have the entire NuttX GIT in some directory ~/nuttx-git.  You may
-    have these components installed elsewhere.  In that case, you will need
-    to adjust all of the paths in the following accordingly:
-
-    1. Install the nxwm configuration
-
-       $ cd ~/nuttx-git/nuttx/tools
-       $ ./configure.sh sama5d3x-ek/nxwm
-
-    2. Make the build context (only)
-
-       $ cd ..
-       $ make context
-       ...
-
-    3. Install the nxwm unit test
-
-       $ cd ~/nuttx-git/NxWidgets
-       $ tools/install.sh ~/nuttx-git/apps nxwm
-       Creating symbolic link
-        - To ~/nuttx-git/NxWidgets/UnitTests/nxwm
-        - At ~/nuttx-git/apps/external
-
-    4. Build the NxWidgets library
-
-       $ cd ~/nuttx-git/NxWidgets/libnxwidgets
-       $ make TOPDIR=~/nuttx-git/nuttx
-       ...
-
-    5. Build the NxWM library
-
-       $ cd ~/nuttx-git/NxWidgets/nxwm
-       $ make TOPDIR=~/nuttx-git/nuttx
-       ...
-
-    6. Built NuttX with the installed unit test as the application
-
-       $ cd ~/nuttx-git/nuttx
-       $ make
 
     STATUS:
     See the To-Do list below

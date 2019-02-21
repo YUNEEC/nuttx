@@ -71,12 +71,6 @@ void weak_function kl_spidev_initialize(void)
 # ifdef CONFIG_ADXL345_SPI
   kl_configgpio(GPIO_ADXL345_CS);
 #endif
-
-# ifdef CONFIG_WL_CC3000
-  kl_configgpio(GPIO_WIFI_CS);
-  kl_configgpio(GPIO_WIFI_EN);
-  kl_configgpio(GPIO_WIFI_INT);
-# endif
 #endif
 
   /* Configure SPI1 chip selects */
@@ -133,7 +127,7 @@ void weak_function kl_spidev_initialize(void)
  *   devid - Identifies the (logical) device
  *   selected - TRUE:Select the device, FALSE:De-select the device
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -153,14 +147,6 @@ void kl_spi0select(FAR struct spi_dev_s *dev, uint32_t devid,
       kl_gpiowrite(GPIO_ADXL345_CS, !selected);
     }
 #endif
-
-#if defined(CONFIG_WL_CC3000)
-  if (devid == SPIDEV_WIRELESS(0))
-    {
-      kl_gpiowrite(GPIO_WIFI_CS, !selected);
-    }
-#endif
-
 }
 #endif
 
@@ -182,7 +168,7 @@ void kl_spi1select(FAR struct spi_dev_s *dev, uint32_t devid,
  * Input Parameters:
  *   devid - Identifies the (logical) device
  *
- * Returned Values:
+ * Returned Value:
  *   Bit-encoded SPI status (see include/nuttx/spi/spi.h.
  *
  ****************************************************************************/
@@ -213,7 +199,7 @@ uint8_t kl_spi1status(FAR struct spi_dev_s *dev, uint32_t devid)
  *   devid - Identifies the (logical) device
  *   cmd - Determines where command or data should be selected.
  *
- * Returned Values:
+ * Returned Value:
  *   Bit-encoded SPI status (see include/nuttx/spi/spi.h.
  *
  ****************************************************************************/

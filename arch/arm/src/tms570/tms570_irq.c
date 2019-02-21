@@ -110,6 +110,10 @@ static void tms570_error_handler(void)
  *
  ****************************************************************************/
 
+#define TMS570_VIM_FIRQPR3 (TMS570_VIM_BASE+0x001c)
+#define TMS570_VIM_REQENASET3 (TMS570_VIM_BASE+0x003c)
+#define TMS570_VIM_REQENACLR3 (TMS570_VIM_BASE+0x004c)
+
 void up_irqinitialize(void)
 {
   FAR uintptr_t *vimram;
@@ -198,7 +202,7 @@ void up_irqinitialize(void)
  *   the irq number of the interrupt and then to call arm_doirq to dispatch
  *   the interrupt.
  *
- * Input parameters:
+ * Input Parameters:
  *   regs - A pointer to the register save area on the stack.
  *
  ****************************************************************************/
@@ -240,7 +244,7 @@ uint32_t *arm_decodeirq(uint32_t *regs)
  *   the irq number of the interrupt and then to call arm_doirq to dispatch
  *   the interrupt.
  *
- *  Input parameters:
+ *  Input Parameters:
  *   regs - A pointer to the register save area on the stack.
  *
  ****************************************************************************/
@@ -293,7 +297,6 @@ void up_disable_irq(int channel)
 
   /* Offset to account for the "phantom" vector */
 
-  channel++;
   regndx   = VIM_REGNDX(channel);
   channel  = VIM_REGBIT(channel);
   bitmask  = (1 << channel);
@@ -302,7 +305,7 @@ void up_disable_irq(int channel)
 
   regaddr  =  TMS570_VIM_REQENACLR(regndx);
   regval   = getreg32(regaddr);
-  regaddr |= bitmask;
+  regval  |= bitmask;
   putreg32(regval, regaddr);
 }
 
@@ -325,7 +328,6 @@ void up_enable_irq(int channel)
 
   /* Offset to account for the "phantom" vector */
 
-  channel++;
   regndx  = VIM_REGNDX(channel);
   channel = VIM_REGBIT(channel);
   bitmask = (1 << channel);
@@ -335,7 +337,7 @@ void up_enable_irq(int channel)
 
   regaddr  = TMS570_VIM_FIRQPR(regndx);
   regval   = getreg32(regaddr);
-  regaddr &= ~bitmask;
+  regval  &= ~bitmask;
   putreg32(regval, regaddr);
 #endif
 
@@ -343,7 +345,7 @@ void up_enable_irq(int channel)
 
   regaddr  = TMS570_VIM_REQENASET(regndx);
   regval   = getreg32(regaddr);
-  regaddr |= bitmask;
+  regval  |= bitmask;
   putreg32(regval, regaddr);
 }
 
@@ -367,7 +369,6 @@ void up_enable_fiq(int channel)
 
   /* Offset to account for the "phantom" vector */
 
-  channel++;
   regndx  = VIM_REGNDX(channel);
   channel = VIM_REGBIT(channel);
   bitmask = (1 << channel);
@@ -376,14 +377,14 @@ void up_enable_fiq(int channel)
 
   regaddr  = TMS570_VIM_FIRQPR(regndx);
   regval   = getreg32(regaddr);
-  regaddr &= ~bitmask;
+  regval  &= ~bitmask;
   putreg32(regval, regaddr);
 
   /* Enable the FIQ by setting the corresponding REQENASET bit. */
 
   regaddr  = TMS570_VIM_REQENASET(regndx);
   regval   = getreg32(regaddr);
-  regaddr |= bitmask;
+  regval  |= bitmask;
   putreg32(regval, regaddr);
 }
 #endif

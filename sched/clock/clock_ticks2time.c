@@ -52,20 +52,20 @@
  * Description:
  *   Convert the system time tick value to a relative time.
  *
- * Parameters:
+ * Input Parameters:
  *   ticks - The number of system time ticks to convert.
  *   reltime - Return the converted system time here.
  *
- * Return Value:
+ * Returned Value:
  *   Always returns OK
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-int clock_ticks2time(ssystime_t ticks, FAR struct timespec *reltime)
+int clock_ticks2time(sclock_t ticks, FAR struct timespec *reltime)
 {
-  ssystime_t remainder;
+  sclock_t remainder;
 
   reltime->tv_sec  = ticks / TICK_PER_SEC;
   remainder        = ticks - TICK_PER_SEC * reltime->tv_sec;

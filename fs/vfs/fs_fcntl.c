@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_fcntl.c
  *
- *   Copyright (C) 2009, 2012-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009, 2012-2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,23 +61,30 @@
  *
  * Description:
  *   Similar to the standard vfcntl function except that is accepts a struct
- *   struct file instance instead of a file descriptor.  Currently used
- *   only by aio_fcntl();
+ *   struct file instance instead of a file descriptor.
+ *
+ * Input Parameters:
+ *   filep - Instance for struct file for the opened file.
+ *   cmd   - Indentifies the operation to be performed.
+ *   ap    - Variable argument following the command.
+ *
+ * Returned Value:
+ *   The nature of the return value depends on the command.  Non-negative
+ *   values indicate success.  Failures are reported as negated errno
+ *   values.
  *
  ****************************************************************************/
 
 #if CONFIG_NFILE_DESCRIPTORS > 0
 int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
 {
-  int errcode = 0;
-  int ret = OK;
+  int ret = -EINVAL;
 
   /* Was this file opened ? */
 
   if (!filep->f_inode)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   switch (cmd)
@@ -93,6 +101,8 @@ int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
          */
 
         {
+          /* Does not set the errno variable in the event of a failure */
+
           ret = file_dup(filep, va_arg(ap, int));
         }
         break;
@@ -112,7 +122,7 @@ int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
          * successful execution of one  of  the  exec  functions.
          */
 
-        errcode = ENOSYS;
+        ret = -ENOSYS;
         break;
 
       case F_GETFL:
@@ -144,6 +154,7 @@ int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
           oflags          &=  FFCNTL;
           filep->f_oflags &= ~FFCNTL;
           filep->f_oflags |=  oflags;
+          ret              =  OK;
         }
         break;
 
@@ -162,7 +173,7 @@ int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
          * fd does not refer to a socket, the results are unspecified.
          */
 
-        errcode = EBADF; /* Only valid on socket descriptors */
+        ret = -EBADF; /* Only valid on socket descriptors */
         break;
 
       case F_GETLK:
@@ -192,19 +203,11 @@ int file_vfcntl(FAR struct file *filep, int cmd, va_list ap)
          * not be done.
          */
 
-        errcode = ENOSYS; /* Not implemented */
+        ret = -ENOSYS; /* Not implemented */
         break;
 
       default:
-        errcode = EINVAL;
         break;
-    }
-
-errout:
-  if (errcode != 0)
-    {
-      set_errno(errcode);
-      return ERROR;
     }
 
   return ret;
@@ -212,7 +215,62 @@ errout:
 #endif /* CONFIG_NFILE_DESCRIPTORS > 0 */
 
 /****************************************************************************
+ * Name: file_fcntl
+ *
+ * Description:
+ *   Similar to the standard fcntl function except that is accepts a struct
+ *   struct file instance instead of a file descriptor.
+ *
+ * Input Parameters:
+ *   filep - Instance for struct file for the opened file.
+ *   cmd   - Identifies the operation to be performed.  Command specific
+ *           arguments may follow.
+ *
+ * Returned Value:
+ *   The nature of the return value depends on the command.  Non-negative
+ *   values indicate success.  Failures are reported as negated errno
+ *   values.
+ *
+ ****************************************************************************/
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+int file_fcntl(FAR struct file *filep, int cmd, ...)
+{
+  va_list ap;
+  int ret;
+
+  /* Setup to access the variable argument list */
+
+  va_start(ap, cmd);
+
+  /* Let file_vfcntl() do the real work.  The errno is not set on
+   * failures.
+   */
+
+  ret = file_vfcntl(filep, cmd, ap);
+
+  va_end(ap);
+  return ret;
+}
+#endif
+
+/****************************************************************************
  * Name: fcntl
+ *
+ * Description:
+ *   fcntl() will perform the operation specified by 'cmd' on an open file.
+ *
+ * Input Parameters:
+ *   fd  - File descriptor of the open file
+ *   cmd - Identifies the operation to be performed.  Command specific
+ *         arguments may follow.
+ *
+ * Returned Value:
+ *   The returned value depends on the nature of the command but for all
+ *   commands the return value of -1 (ERROR) indicates that an error has
+ *   occurred and, in this case, the errno variable will be set
+ *   appropriately
+ *
  ****************************************************************************/
 
 int fcntl(int fd, int cmd, ...)
@@ -236,19 +294,17 @@ int fcntl(int fd, int cmd, ...)
     {
       /* Get the file structure corresponding to the file descriptor. */
 
-      filep = fs_getfilep(fd);
-      if (!filep)
+      ret = fs_getfilep(fd, &filep);
+      if (ret >= 0)
         {
-          /* The errno value has already been set */
+          DEBUGASSERT(filep != NULL);
 
-          va_end(ap);
-          leave_cancellation_point();
-          return ERROR;
+          /* Let file_vfcntl() do the real work.  The errno is not set on
+           * failures.
+           */
+
+          ret = file_vfcntl(filep, cmd, ap);
         }
-
-      /* Let file_vfcntl() do the real work */
-
-      ret = file_vfcntl(filep, cmd, ap);
     }
   else
 #endif
@@ -258,7 +314,9 @@ int fcntl(int fd, int cmd, ...)
 #if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
       if ((unsigned int)fd < (CONFIG_NFILE_DESCRIPTORS+CONFIG_NSOCKET_DESCRIPTORS))
         {
-          /* Yes.. defer socket descriptor operations to net_vfcntl() */
+          /* Yes.. defer socket descriptor operations to net_vfcntl(). The
+           * errno is not set on failures.
+           */
 
           ret = net_vfcntl(fd, cmd, ap);
         }
@@ -267,11 +325,18 @@ int fcntl(int fd, int cmd, ...)
         {
           /* No.. this descriptor number is out of range */
 
-          ret = EBADF;
+          ret = -EBADF;
         }
     }
 
   va_end(ap);
+
+  if (ret < 0)
+    {
+      set_errno(-ret);
+      ret = ERROR;
+    }
+
   leave_cancellation_point();
   return ret;
 }

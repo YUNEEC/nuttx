@@ -1,7 +1,7 @@
 /****************************************************************************
  * arm/arm/src/efm32/efm32_spi.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Copyright (C) 2014 Bouteville Pierre-Noel. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Bouteville Pierre-Noel <pnb990@gmail.com>
@@ -437,18 +437,24 @@ static void spi_dma_timeout(int argc, uint32_t arg1, ...)
 static void spi_dmarxwait(struct efm32_spidev_s *priv)
 {
   irqstate_t flags;
+  int ret;
 
   /* Take the semaphore (perhaps waiting). */
 
   flags = enter_critical_section();
-  while (sem_wait(&priv->rxdmasem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->rxdmasem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      DEBUGASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Cancel the timeout only if both the RX and TX transfers have completed */
 
@@ -474,18 +480,24 @@ static void spi_dmarxwait(struct efm32_spidev_s *priv)
 static void spi_dmatxwait(struct efm32_spidev_s *priv)
 {
   irqstate_t flags;
+  int ret;
 
   /* Take the semaphore (perhaps waiting). */
 
   flags = enter_critical_section();
-  while (sem_wait(&priv->txdmasem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->txdmasem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      DEBUGASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Cancel the timeout only if both the RX and TX transfers have completed */
 
@@ -510,7 +522,7 @@ static void spi_dmatxwait(struct efm32_spidev_s *priv)
 #ifdef CONFIG_EFM32_SPI_DMA
 static inline void spi_dmarxwakeup(struct efm32_spidev_s *priv)
 {
-  (void)sem_post(&priv->rxdmasem);
+  (void)nxsem_post(&priv->rxdmasem);
 }
 #endif
 
@@ -525,7 +537,7 @@ static inline void spi_dmarxwakeup(struct efm32_spidev_s *priv)
 #ifdef CONFIG_EFM32_SPI_DMA
 static inline void spi_dmatxwakeup(struct efm32_spidev_s *priv)
 {
-  (void)sem_post(&priv->txdmasem);
+  (void)nxsem_post(&priv->txdmasem);
 }
 #endif
 
@@ -748,21 +760,25 @@ static int spi_lock(struct spi_dev_s *dev, bool lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
+          ret = nxsem_wait(&priv->exclsem);
+
           /* The only case that an error should occur here is if the wait
            * was awakened by a signal.
            */
 
-          DEBUGASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1477,7 +1493,7 @@ static void spi_exchange(struct spi_dev_s *dev, const void *txbuffer,
       ret = wd_start(priv->wdog, (int)ticks, spi_dma_timeout, 1, (uint32_t)priv);
       if (ret < 0)
         {
-          spierr("ERROR: Failed to start timeout\n");
+          spierr("ERROR: Failed to start timeout: %d\n", ret);
         }
 
       /* Then wait for each to complete.  TX should complete first */
@@ -1554,7 +1570,7 @@ static void spi_recvblock(struct spi_dev_s *dev, void *rxbuffer,
  *   Initialize the selected SPI port in its default state (Master, 8-bit,
  *   mode 0, etc.)
  *
- * Input Parameter:
+ * Input Parameters:
  *   priv - private SPI device structure
  *
  * Returned Value:
@@ -1605,7 +1621,7 @@ static int spi_portinitialize(struct efm32_spidev_s *priv)
 
   /* Initialize the SPI semaphore that enforces mutually exclusive access */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
 
 #ifdef CONFIG_EFM32_SPI_DMA
   /* Allocate two DMA channels... one for the RX and one for the TX side of
@@ -1639,15 +1655,15 @@ static int spi_portinitialize(struct efm32_spidev_s *priv)
 
   /* Initialized semaphores used to wait for DMA completion */
 
-  (void)sem_init(&priv->rxdmasem, 0, 0);
-  (void)sem_init(&priv->txdmasem, 0, 0);
+  (void)nxsem_init(&priv->rxdmasem, 0, 0);
+  (void)nxsem_init(&priv->txdmasem, 0, 0);
 
   /* These semaphores are used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-   sem_setprotocol(&priv->rxdmasem, SEM_PRIO_NONE);
-   sem_setprotocol(&priv->txdmasem, SEM_PRIO_NONE);
+   nxsem_setprotocol(&priv->rxdmasem, SEM_PRIO_NONE);
+   nxsem_setprotocol(&priv->txdmasem, SEM_PRIO_NONE);
 #endif
 
   /* Enable SPI */
@@ -1679,7 +1695,7 @@ errout:
  * Description:
  *   Initialize the selected SPI port
  *
- * Input Parameter:
+ * Input Parameters:
  *   port - SPI port number to initialize.  One of {0,1,2}
  *
  * Returned Value:

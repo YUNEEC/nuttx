@@ -56,7 +56,7 @@
 #include "stm32_exti.h"
 #include "stm32_rtc.h"
 
-#ifdef CONFIG_RTC
+#ifdef CONFIG_STM32_RTC
 
 /************************************************************************************
  * Pre-processor Definitions
@@ -76,38 +76,10 @@
 #  error "CONFIG_STM32_PWR must selected to use this driver"
 #endif
 
-#ifdef CONFIG_STM32_STM32L15XX
-#  if defined(CONFIG_RTC_HSECLOCK)
-#    error "RTC with HSE clock not yet implemented for STM32L15XXX"
-#  elif defined(CONFIG_RTC_LSICLOCK)
-#    error "RTC with LSI clock not yet implemented for STM32L15XXX"
-#  endif
-#endif
-
 /* Constants ************************************************************************/
 
 #define SYNCHRO_TIMEOUT  (0x00020000)
 #define INITMODE_TIMEOUT (0x00010000)
-
-/* Proxy definitions to make the same code work for all the STM32 series ************/
-
-#if defined(CONFIG_STM32_STM32L15XX)
-# define STM32_RCC_XXX       STM32_RCC_CSR
-# define RCC_XXX_YYYRST      RCC_CSR_RTCRST
-# define RCC_XXX_RTCEN       RCC_CSR_RTCEN
-# define RCC_XXX_RTCSEL_MASK RCC_CSR_RTCSEL_MASK
-# define RCC_XXX_RTCSEL_LSE  RCC_CSR_RTCSEL_LSE
-# define RCC_XXX_RTCSEL_LSI  RCC_CSR_RTCSEL_LSI
-# define RCC_XXX_RTCSEL_HSE  RCC_CSR_RTCSEL_HSE
-#else
-# define STM32_RCC_XXX       STM32_RCC_BDCR
-# define RCC_XXX_YYYRST      RCC_BDCR_BDRST
-# define RCC_XXX_RTCEN       RCC_BDCR_RTCEN
-# define RCC_XXX_RTCSEL_MASK RCC_BDCR_RTCSEL_MASK
-# define RCC_XXX_RTCSEL_LSE  RCC_BDCR_RTCSEL_LSE
-# define RCC_XXX_RTCSEL_LSI  RCC_BDCR_RTCSEL_LSI
-# define RCC_XXX_RTCSEL_HSE  RCC_BDCR_RTCSEL_HSE
-#endif
 
 /************************************************************************************
  * Private Data
@@ -132,16 +104,6 @@ volatile bool g_rtc_enabled = false;
  ************************************************************************************/
 /************************************************************************************
  * Name: rtc_dumpregs
- *
- * Description:
- *    Disable RTC write protection
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
  ************************************************************************************/
 
 #ifdef CONFIG_DEBUG_RTC_INFO
@@ -175,16 +137,6 @@ static void rtc_dumpregs(FAR const char *msg)
 
 /************************************************************************************
  * Name: rtc_dumptime
- *
- * Description:
- *    Disable RTC write protection
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
  ************************************************************************************/
 
 #ifdef CONFIG_DEBUG_RTC_INFO
@@ -474,7 +426,7 @@ static int rtc_setup(void)
 
       /* Configure RTC pre-scaler with the required values */
 
-#ifdef CONFIG_RTC_HSECLOCK
+#ifdef CONFIG_STM32_RTC_HSECLOCK
       /* For a 1 MHz clock this yields 0.9999360041 Hz on the second
        * timer - which is pretty close.
        */
@@ -535,29 +487,6 @@ static void rtc_resume(void)
 }
 
 /************************************************************************************
- * Name: rtc_wkup_interrupt
- *
- * Description:
- *    RTC WKUP interrupt service routine through the EXTI line
- *
- * Input Parameters:
- *   irq - The IRQ number that generated the interrupt
- *   context - Architecture specific register save information.
- *
- * Returned Value:
- *   Zero (OK) on success; A negated errno value on failure.
- *
- ************************************************************************************/
-
-#ifdef CONFIG_RTC_ALARM
-static int rtc_wkup_interrupt(int irq, void *context)
-{
-#warning "Missing logic"
-  return OK;
-}
-#endif
-
-/************************************************************************************
  * Public Functions
  ************************************************************************************/
 
@@ -607,57 +536,57 @@ int up_rtc_initialize(void)
        * rate clock
        */
 
-#ifdef CONFIG_RTC_HSECLOCK
+#ifdef CONFIG_STM32_RTC_HSECLOCK
       /* Use the HSE clock as the input to the RTC block */
 
-      modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_HSE);
+      modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_HSE);
 
-#elif defined(CONFIG_RTC_LSICLOCK)
+#elif defined(CONFIG_STM32_RTC_LSICLOCK)
       /* Use the LSI clock as the input to the RTC block */
 
-      modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_LSI);
+      modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_LSI);
 
-#elif defined(CONFIG_RTC_LSECLOCK)
+#elif defined(CONFIG_STM32_RTC_LSECLOCK)
       /* Use the LSE clock as the input to the RTC block */
 
-      modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_LSE);
+      modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_LSE);
 
 #endif
       /* Enable the RTC Clock by setting the RTCEN bit in the RCC register */
 
-      modifyreg32(STM32_RCC_XXX, 0, RCC_XXX_RTCEN);
+      modifyreg32(STM32_RCC_BDCR, 0, RCC_BDCR_RTCEN);
     }
   else /* The RTC is already in use: check if the clock source is changed */
     {
-#if defined(CONFIG_RTC_HSECLOCK) || defined(CONFIG_RTC_LSICLOCK) || \
-    defined(CONFIG_RTC_LSECLOCK)
+#if defined(CONFIG_STM32_RTC_HSECLOCK) || defined(CONFIG_STM32_RTC_LSICLOCK) || \
+    defined(CONFIG_STM32_RTC_LSECLOCK)
 
-      uint32_t clksrc = getreg32(STM32_RCC_XXX);
+      uint32_t clksrc = getreg32(STM32_RCC_BDCR);
 
-#if defined(CONFIG_RTC_HSECLOCK)
-      if ((clksrc & RCC_XXX_RTCSEL_MASK) != RCC_XXX_RTCSEL_HSE)
-#elif defined(CONFIG_RTC_LSICLOCK)
-      if ((clksrc & RCC_XXX_RTCSEL_MASK) != RCC_XXX_RTCSEL_LSI)
-#elif defined(CONFIG_RTC_LSECLOCK)
-      if ((clksrc & RCC_XXX_RTCSEL_MASK) != RCC_XXX_RTCSEL_LSE)
+#if defined(CONFIG_STM32_RTC_HSECLOCK)
+      if ((clksrc & RCC_BDCR_RTCSEL_MASK) != RCC_BDCR_RTCSEL_HSE)
+#elif defined(CONFIG_STM32_RTC_LSICLOCK)
+      if ((clksrc & RCC_BDCR_RTCSEL_MASK) != RCC_BDCR_RTCSEL_LSI)
+#elif defined(CONFIG_STM32_RTC_LSECLOCK)
+      if ((clksrc & RCC_BDCR_RTCSEL_MASK) != RCC_BDCR_RTCSEL_LSE)
 #endif
 #endif
         {
           tr_bkp = getreg32(STM32_RTC_TR);
           dr_bkp = getreg32(STM32_RTC_DR);
-          modifyreg32(STM32_RCC_XXX, 0, RCC_XXX_YYYRST);
-          modifyreg32(STM32_RCC_XXX, RCC_XXX_YYYRST, 0);
+          modifyreg32(STM32_RCC_BDCR, 0, RCC_BDCR_BDRST);
+          modifyreg32(STM32_RCC_BDCR, RCC_BDCR_BDRST, 0);
 
-#if defined(CONFIG_RTC_HSECLOCK)
+#if defined(CONFIG_STM32_RTC_HSECLOCK)
           /* Change to the new clock as the input to the RTC block */
 
-          modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_HSE);
+          modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_HSE);
 
-#elif defined(CONFIG_RTC_LSICLOCK)
-          modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_LSI);
+#elif defined(CONFIG_STM32_RTC_LSICLOCK)
+          modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_LSI);
 
-#elif defined(CONFIG_RTC_LSECLOCK)
-          modifyreg32(STM32_RCC_XXX, RCC_XXX_RTCSEL_MASK, RCC_XXX_RTCSEL_LSE);
+#elif defined(CONFIG_STM32_RTC_LSECLOCK)
+          modifyreg32(STM32_RCC_BDCR, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RTCSEL_LSE);
 #endif
 
           putreg32(tr_bkp, STM32_RTC_TR);
@@ -669,7 +598,7 @@ int up_rtc_initialize(void)
 
           /* Enable the RTC Clock by setting the RTCEN bit in the RCC register */
 
-          modifyreg32(STM32_RCC_XXX, 0, RCC_XXX_RTCEN);
+          modifyreg32(STM32_RCC_BDCR, 0, RCC_BDCR_RTCEN);
         }
     }
 
@@ -786,12 +715,7 @@ int up_rtc_initialize(void)
 int stm32_rtc_irqinitialize(void)
 {
 #ifdef CONFIG_RTC_ALARM
-#  warning "Missing EXTI setup logic"
-
-  /* Attach the ALARM interrupt handler */
-
-  irq_attach(STM32_IRQ_RTC_WKUP, rtc_interrupt, NULL);
-  up_enable_irq(STM32_IRQ_RTC_WKUP);
+#  warning "Missing logic"
 #endif
 
   return OK;
@@ -832,9 +756,12 @@ int up_rtc_getdatetime(FAR struct tm *tp)
   uint32_t tr;
   uint32_t tmp;
 
-  /* Sample the data time registers.  There is a race condition here... If we sample
-   * the time just before midnight on December 31, the date could be wrong because
-   * the day rolled over while were sampling.
+  /* Sample the data time registers.  There is a race condition here... If
+   * we sample the time just before midnight on December 31, the date could
+   * be wrong because the day rolled over while were sampling. Thus loop for
+   * checking overflow here is needed.  There is a race condition with
+   * subseconds too. If we sample TR register just before second rolling
+   * and subseconds are read at wrong second, we get wrong time.
    */
 
   do
@@ -843,16 +770,24 @@ int up_rtc_getdatetime(FAR struct tm *tp)
       tr  = getreg32(STM32_RTC_TR);
 #ifdef CONFIG_STM32_HAVE_RTC_SUBSECONDS
       ssr = getreg32(STM32_RTC_SSR);
+      tmp = getreg32(STM32_RTC_TR);
+      if (tmp != tr)
+        {
+          continue;
+        }
 #endif
       tmp = getreg32(STM32_RTC_DR);
+      if (tmp == dr)
+        {
+          break;
+        }
     }
-  while (tmp != dr);
+  while (1);
 
   rtc_dumpregs("Reading Time");
 
   /* Convert the RTC time to fields in struct tm format.  All of the STM32
-   * All of the ranges of values correspond between struct tm and the time
-   * register.
+   * ranges of values correspond between struct tm and the time register.
    */
 
   tmp = (tr & (RTC_TR_SU_MASK | RTC_TR_ST_MASK)) >> RTC_TR_SU_SHIFT;
@@ -887,7 +822,7 @@ int up_rtc_getdatetime(FAR struct tm *tp)
   tmp = (dr & RTC_DR_WDU_MASK) >> RTC_DR_WDU_SHIFT;
   tp->tm_wday = tmp % 7;
   tp->tm_yday = tp->tm_mday + clock_daysbeforemonth(tp->tm_mon, clock_isleapyear(tp->tm_year + 1900));
-  tp->tm_isdst = 0
+  tp->tm_isdst = 0;
 #endif
 
 #ifdef CONFIG_STM32_HAVE_RTC_SUBSECONDS
@@ -1140,4 +1075,4 @@ int stm32_rtc_setalarm(FAR const struct timespec *tp, alarmcb_t callback)
 }
 #endif
 
-#endif /* CONFIG_RTC */
+#endif /* CONFIG_STM32_RTC */

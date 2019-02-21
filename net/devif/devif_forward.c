@@ -81,15 +81,14 @@ void devif_forward(FAR struct forward_s *fwd)
 
   /* Copy the IOB chain that contains the L3L3 headers and any data payload */
 
-  DEBUGASSERT(offset + fwd->f_iob->io_pktlen <= NET_DEV_MTU(fwd->f_dev));
+  DEBUGASSERT(offset + fwd->f_iob->io_pktlen <= NETDEV_PKTSIZE(fwd->f_dev));
   ret = iob_copyout(&fwd->f_dev->d_buf[offset], fwd->f_iob,
                     fwd->f_iob->io_pktlen, 0);
 
   DEBUGASSERT(ret == fwd->f_iob->io_pktlen);
-  offset += fwd->f_iob->io_pktlen;
 
   fwd->f_dev->d_sndlen = 0;
-  fwd->f_dev->d_len    = offset;
+  fwd->f_dev->d_len    = fwd->f_iob->io_pktlen;
 
   UNUSED(ret);
 }

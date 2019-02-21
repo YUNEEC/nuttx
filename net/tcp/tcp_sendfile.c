@@ -106,7 +106,7 @@ struct sendfile_s
   uint32_t           snd_isn;     /* Initial sequence number */
   uint32_t           snd_acked;   /* The number of bytes acked */
 #ifdef CONFIG_NET_SOCKOPTS
-  systime_t          snd_time;    /* Last send time for determining timeout */
+  clock_t            snd_time;    /* Last send time for determining timeout */
 #endif
 };
 
@@ -120,7 +120,7 @@ struct sendfile_s
  * Description:
  *   Check for send timeout.
  *
- * Parameters:
+ * Input Parameters:
  *   pstate - send state structure
  *
  * Returned Value:
@@ -223,11 +223,25 @@ static uint16_t ack_eventhandler(FAR struct net_driver_s *dev,
 
   else if ((flags & TCP_DISCONN_EVENTS) != 0)
     {
+      FAR struct socket *psock = pstate->snd_sock;
+
       nwarn("WARNING: Lost connection\n");
+
+      /* We could get here recursively through the callback actions of
+       * tcp_lost_connection().  So don't repeat that action if we have
+       * already been disconnected.
+       */
+
+      DEBUGASSERT(psock != NULL);
+      if (_SS_ISCONNECTED(psock->s_flags))
+         {
+           /* Report not connected */
+
+           tcp_lost_connection(psock, pstate->snd_ackcb, flags);
+         }
 
       /* Report not connected */
 
-      tcp_lost_connection(pstate->snd_sock, pstate->snd_ackcb, flags);
       pstate->snd_sent = -ENOTCONN;
     }
 
@@ -239,7 +253,7 @@ static uint16_t ack_eventhandler(FAR struct net_driver_s *dev,
 
   /* Wake up the waiting thread */
 
-  sem_post(&pstate->snd_sem);
+  nxsem_post(&pstate->snd_sem);
 
   return flags;
 }
@@ -262,7 +276,7 @@ static uint16_t ack_eventhandler(FAR struct net_driver_s *dev,
  *   NOTE 3: If CONFIG_NET_ARP_SEND then we can be assured that the IP
  *   address mapping is already in the ARP table.
  *
- * Parameters:
+ * Input Parameters:
  *   conn  - The TCP connection structure
  *
  * Returned Value:
@@ -282,7 +296,7 @@ static inline bool sendfile_addrcheck(FAR struct tcp_conn_s *conn)
 #endif
     {
 #if !defined(CONFIG_NET_ARP_IPIN) && !defined(CONFIG_NET_ARP_SEND)
-      return (arp_find(conn->u.ipv4.raddr) != NULL);
+      return (arp_find(conn->u.ipv4.raddr, NULL) >= 0);
 #else
       return true;
 #endif
@@ -295,7 +309,7 @@ static inline bool sendfile_addrcheck(FAR struct tcp_conn_s *conn)
 #endif
     {
 #if !defined(CONFIG_NET_ICMPv6_NEIGHBOR)
-      return (neighbor_findentry(conn->u.ipv6.raddr) != NULL);
+      return (neighbor_lookup(conn->u.ipv6.raddr, NULL) >= 0);
 #else
       return true;
 #endif
@@ -314,7 +328,7 @@ static inline bool sendfile_addrcheck(FAR struct tcp_conn_s *conn)
  *   This function is called to perform the actual send operation when
  *   polled by the lower, device interfacing layer.
  *
- * Parameters:
+ * Input Parameters:
  *   dev      The structure of the network driver that caused the event
  *   conn     The connection structure associated with the socket
  *   flags    Set of events describing why the callback was invoked
@@ -352,11 +366,25 @@ static uint16_t sendfile_eventhandler(FAR struct net_driver_s *dev,
 
   if ((flags & TCP_DISCONN_EVENTS) != 0)
     {
+      FAR struct socket *psock = pstate->snd_sock;
+
       nwarn("WARNING: Lost connection\n");
+
+      /* We could get here recursively through the callback actions of
+       * tcp_lost_connection().  So don't repeat that action if we have
+       * already been disconnected.
+       */
+
+      DEBUGASSERT(psock != NULL);
+      if (_SS_ISCONNECTED(psock->s_flags))
+         {
+           /* Report not connected */
+
+           tcp_lost_connection(psock, pstate->snd_datacb, flags);
+         }
 
       /* Report not connected */
 
-      tcp_lost_connection(pstate->snd_sock, pstate->snd_datacb, flags);
       pstate->snd_sent = -ENOTCONN;
       goto end_wait;
     }
@@ -394,18 +422,16 @@ static uint16_t sendfile_eventhandler(FAR struct net_driver_s *dev,
                           pstate->snd_foffset + pstate->snd_sent, SEEK_SET);
           if (ret < 0)
             {
-              int errcode = get_errno();
-              nerr("ERROR: Failed to lseek: %d\n", errcode);
-              pstate->snd_sent = -errcode;
+              nerr("ERROR: Failed to lseek: %d\n", ret);
+              pstate->snd_sent = ret;
               goto end_wait;
             }
 
           ret = file_read(pstate->snd_file, dev->d_appdata, sndlen);
           if (ret < 0)
             {
-              int errcode = get_errno();
-              nerr("ERROR: Failed to read from input file: %d\n", errcode);
-              pstate->snd_sent = -errcode;
+              nerr("ERROR: Failed to read from input file: %d\n", (int)ret);
+              pstate->snd_sent = ret;
               goto end_wait;
             }
 
@@ -477,7 +503,7 @@ end_wait:
 
   /* Wake up the waiting thread */
 
-  sem_post(&pstate->snd_sem);
+  nxsem_post(&pstate->snd_sem);
 
 wait:
   return flags;
@@ -490,7 +516,7 @@ wait:
  *   Notify the appropriate device driver that we are have data ready to
  *   be send (TCP)
  *
- * Parameters:
+ * Input Parameters:
  *   psock - Socket state structure
  *   conn  - The TCP connection structure
  *
@@ -541,7 +567,7 @@ static inline void sendfile_txnotify(FAR struct socket *psock,
  *   The tcp_sendfile() call may be used only when the INET socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
@@ -621,8 +647,8 @@ ssize_t tcp_sendfile(FAR struct socket *psock, FAR struct file *infile,
    * priority inheritance enabled.
    */
 
-  sem_init(&state.snd_sem, 0, 0);           /* Doesn't really fail */
-  sem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
+  nxsem_init(&state.snd_sem, 0, 0);           /* Doesn't really fail */
+  nxsem_setprotocol(&state.snd_sem, SEM_PRIO_NONE);
 
   state.snd_sock    = psock;                /* Socket descriptor to use */
   state.snd_foffset = offset ? *offset : 0; /* Input file offset */
@@ -636,7 +662,7 @@ ssize_t tcp_sendfile(FAR struct socket *psock, FAR struct file *infile,
   if (state.snd_datacb == NULL)
     {
       nerr("ERROR: Failed to allocate data callback\n");
-      ret =- ENOMEM;
+      ret = -ENOMEM;
       goto errout_locked;
     }
 
@@ -697,10 +723,8 @@ errout_datacb:
 
 errout_locked:
 
-  sem_destroy(&state. snd_sem);
+  nxsem_destroy(&state. snd_sem);
   net_unlock();
-
-errout:
 
   if (ret < 0)
     {

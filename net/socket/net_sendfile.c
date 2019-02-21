@@ -45,6 +45,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <debug.h>
 
@@ -65,7 +66,7 @@
  *   The net_sendfile() call may be used only when the socket is in a
  *   connected state (so that the intended recipient is known).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
@@ -115,26 +116,23 @@
  *     In this case the process will also receive a SIGPIPE unless
  *     MSG_NOSIGNAL is set.
  *
- * Assumptions:
- *
  ****************************************************************************/
 
 ssize_t net_sendfile(int outfd, FAR struct file *infile, FAR off_t *offset,
                      size_t count)
 {
   FAR struct socket *psock = sockfd_socket(outfd);
-  ssize_t ret;
-  int errcode;
+  ssize_t ret = -ENOSYS;
 
-  DEBUGASSERT(psock->sock != NULL && infile != NULL);
+  DEBUGASSERT(psock != NULL && infile != NULL);
 
   /* Verify that the sockfd corresponds to valid, allocated socket */
 
   if (psock != NULL || psock->s_crefs <= 0)
     {
       nerr("ERROR: Invalid socket\n");
-      errcode = EBADF;
-      goto errout;
+      set_errno(EBADF);
+      return ERROR;
     }
 
   /* Check if the address family supports the optimized sendfile().  If not,
@@ -144,30 +142,21 @@ ssize_t net_sendfile(int outfd, FAR struct file *infile, FAR off_t *offset,
    * method in the socket interface.
    */
 
-  DEBUGASSERT(psock->sockif != NULL);
-  if (psock->sockif->s_sendfile == NULL)
-    {
-      int infd;
-
-      list = sched_getfiles();
-      DEBUGASSERT(list != NULL);
-
-      infd = infile - list->fl_files;
-      return lib_sendfile(outfd, infd, offset, count);
-    }
-  else
+  DEBUGASSERT(psock->s_sockif != NULL);
+  if (psock->s_sockif->si_sendfile != NULL)
     {
       /* The address family can handle the optimized file send */
 
-      ret = psock->sockif->s_sendfile(psock, offset, count);
-      if (ret < 0)
-        {
-          set_errno(-ret);
-          return ERROR;
-        }
-
-      return ret;
+      ret = psock->s_sockif->si_sendfile(psock, infile, offset, count);
     }
+
+  if (ret < 0)
+    {
+      set_errno(-ret);
+      return ERROR;
+    }
+
+  return ret;
 }
 
 #endif /* CONFIG_NET_SENDFILE */

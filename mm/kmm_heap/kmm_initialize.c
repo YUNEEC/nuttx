@@ -62,11 +62,11 @@ struct mm_heap_s g_kmmheap;
  *   Initialize the kernel heap data structures, providing the initial
  *   heap region.
  *
- * Parameters:
+ * Input Parameters:
  *   heap_start - Address of the beginning of the (initial) memory region
  *   heap_size  - The size (in bytes) if the (initial) memory region.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

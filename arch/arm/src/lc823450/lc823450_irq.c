@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_irq.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2016,2017,2018 Sony Video & Sound Products Inc.
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
@@ -47,6 +47,9 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
+#include <nuttx/board.h>
+
+#include <arch/armv7-m/nvicpri.h>
 
 #include "nvic.h"
 #include "ram_vectors.h"
@@ -56,8 +59,10 @@
 #include "lc823450_intc.h"
 
 #ifdef CONFIG_DVFS
-#  include "lc823450_dvfs.h"
+#  include "lc823450_dvfs2.h"
 #endif
+
+#include <arch/board/board.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -78,6 +83,10 @@
 #define NVIC_ENA_OFFSET    (0)
 #define NVIC_CLRENA_OFFSET (NVIC_IRQ0_31_CLEAR - NVIC_IRQ0_31_ENABLE)
 
+/* Size of the interrupt stack allocation */
+
+#define INTSTACK_ALLOC (CONFIG_SMP_NCPUS * INTSTACK_SIZE)
+
 /****************************************************************************
  * Public Data
  ****************************************************************************/
@@ -90,6 +99,24 @@
 volatile uint32_t *g_current_regs[CONFIG_SMP_NCPUS];
 #else
 volatile uint32_t *g_current_regs[1];
+#endif
+
+#if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
+/* In the SMP configuration, we will need two custom interrupt stacks.
+ * These definitions provide the aligned stack allocations.
+ */
+
+uint64_t g_instack_alloc[INTSTACK_ALLOC >> 3];
+
+/* These definitions provide the "top" of the push-down stacks. */
+
+const uint32_t g_cpu0_instack_base =
+  (uint32_t)g_instack_alloc + INTSTACK_SIZE;
+
+#if CONFIG_SMP_NCPUS > 1
+const uint32_t g_cpu1_instack_base =
+  (uint32_t)g_instack_alloc + 2 * INTSTACK_SIZE;
+#endif
 #endif
 
 /****************************************************************************
@@ -341,6 +368,7 @@ static void lc823450_extint_initialize(void)
 
   ret = irq_attach(LC823450_IRQ_EXTINT5, lc823450_extint_isr, NULL);
   DEBUGASSERT(ret == OK);
+  UNUSED(ret);
 
   up_enable_irq(LC823450_IRQ_EXTINT0);
   up_enable_irq(LC823450_IRQ_EXTINT1);
@@ -442,8 +470,8 @@ void up_irqinitialize(void)
 
   /* Disable all interrupts */
 
-  putreg32(0, NVIC_IRQ0_31_ENABLE);
-  putreg32(0, NVIC_IRQ32_63_ENABLE);
+  putreg32(0xffffffff, NVIC_IRQ0_31_CLEAR);
+  putreg32(0xffffffff, NVIC_IRQ32_63_CLEAR);
 
   /* Colorize the interrupt stack for debug purposes */
 
@@ -522,7 +550,7 @@ void up_irqinitialize(void)
    * Fault handler.
    */
 
-#ifdef CONFIG_ARMV7M_MPU
+#ifdef CONFIG_ARM_MPU
   irq_attach(LC823450_IRQ_MEMFAULT, up_memfault, NULL);
   up_enable_irq(LC823450_IRQ_MEMFAULT);
 #endif
@@ -531,9 +559,6 @@ void up_irqinitialize(void)
 
 #ifdef CONFIG_DEBUG
   irq_attach(LC823450_IRQ_NMI, lc823450_nmi, NULL);
-#ifndef CONFIG_ARMV7M_MPU
-  irq_attach(LC823450_IRQ_MEMFAULT, up_memfault, NULL);
-#endif
   irq_attach(LC823450_IRQ_BUSFAULT, lc823450_busfault, NULL);
   irq_attach(LC823450_IRQ_USAGEFAULT, lc823450_usagefault, NULL);
   irq_attach(LC823450_IRQ_PENDSV, lc823450_pendsv, NULL);
@@ -630,6 +655,7 @@ void up_enable_irq(int irq)
   uintptr_t regaddr;
   uint32_t regval;
   uint32_t bit;
+  irqstate_t flags;
 
 #ifdef CONFIG_LC823450_VIRQ
   if (irq >= LC823450_IRQ_VIRTUAL &&
@@ -655,6 +681,8 @@ void up_enable_irq(int irq)
        * set the bit in the System Handler Control and State Register.
        */
 
+      flags = spin_lock_irqsave();
+
       if (irq >= LC823450_IRQ_NIRQS)
         {
           /* Clear already asserted IRQ */
@@ -675,6 +703,8 @@ void up_enable_irq(int irq)
           regval |= bit;
           putreg32(regval, regaddr);
         }
+
+      spin_unlock_irqrestore(flags);
     }
 
   /* lc823450_dumpnvic("enable", irq); */
@@ -690,14 +720,26 @@ void up_enable_irq(int irq)
 
 void up_ack_irq(int irq)
 {
+  if (irq < LC823450_IRQ_SYSTICK)
+    {
+      return;
+    }
+
 #ifdef CONFIG_DVFS
   lc823450_dvfs_exit_idle(irq);
 #endif
 
-#ifdef CONFIG_LC823450_SLEEP_MODE
-  extern void up_update_idle_time(void);
-  up_update_idle_time();
+  board_autoled_on(LED_CPU0 + up_cpu_index());
+
+#ifdef CONFIG_SMP
+  if (irq > LC823450_IRQ_LPDSP0 && 1 == up_cpu_index())
+    {
+      /* IRQ should be handled on CPU0 */
+
+      DEBUGASSERT(false);
+    }
 #endif
+
 }
 
 /****************************************************************************
@@ -789,7 +831,7 @@ int lc823450_irq_srctype(int irq, enum lc823450_srctype_e srctype)
   port = (irq & 0x70) >> 4;
   gpio = irq & 0xf;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave();
 
   regaddr = INTC_REG(EXTINTnCND_BASE, port);
   regval = getreg32(regaddr);
@@ -799,7 +841,7 @@ int lc823450_irq_srctype(int irq, enum lc823450_srctype_e srctype)
 
   putreg32(regval, regaddr);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(flags);
 
   return OK;
 }

@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/aio/aio_signal.c
  *
- *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,8 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/signal.h>
+
 #include "aio/aio.h"
 
 #ifdef CONFIG_FS_AIO
@@ -80,7 +82,6 @@ int aio_signal(pid_t pid, FAR struct aiocb *aiocbp)
 #ifdef CONFIG_CAN_PASS_STRUCTS
   union sigval value;
 #endif
-  int errcode;
   int status;
   int ret;
 
@@ -90,35 +91,11 @@ int aio_signal(pid_t pid, FAR struct aiocb *aiocbp)
 
   /* Signal the client */
 
-  if (aiocbp->aio_sigevent.sigev_notify == SIGEV_SIGNAL)
+  ret = nxsig_notification(pid, &aiocbp->aio_sigevent, SI_ASYNCIO);
+  if (ret < 0)
     {
-#ifdef CONFIG_CAN_PASS_STRUCTS
-      status = sigqueue(pid, aiocbp->aio_sigevent.sigev_signo,
-                        aiocbp->aio_sigevent.sigev_value);
-#else
-      status = sigqueue(pid, aiocbp->aio_sigevent.sigev_sign,
-                        aiocbp->aio_sigevent.sigev_value.sival_ptr);
-#endif
-      if (status < 0)
-        {
-          errcode = get_errno();
-          ferr("ERROR: sigqueue #1 failed: %d\n", errcode);
-          ret = ERROR;
-        }
+      ferr("ERROR: nxsig_notification failed: %d\n", ret);
     }
-
-#ifdef CONFIG_SIG_EVTHREAD
-  /* Notify the client via a function call */
-
-  else if (aiocbp->aio_sigevent.sigev_notify == SIGEV_THREAD)
-    {
-      ret = sig_notification(pid, &aiocbp->aio_sigevent);
-      if (ret < 0)
-        {
-          ferr("ERROR: sig_notification failed: %d\n", ret);
-        }
-    }
-#endif
 
   /* Send the poll signal in any event in case the caller is waiting
    * on sig_suspend();
@@ -126,22 +103,24 @@ int aio_signal(pid_t pid, FAR struct aiocb *aiocbp)
 
 #ifdef CONFIG_CAN_PASS_STRUCTS
   value.sival_ptr = aiocbp;
-  status = sigqueue(pid, SIGPOLL, value);
+  status = nxsig_queue(pid, SIGPOLL, value);
 #else
-  status = sigqueue(pid, SIGPOLL, aiocbp);
+  status = nxsig_queue(pid, SIGPOLL, aiocbp);
 #endif
-  if (status && ret == OK)
+  if (status < 0)
     {
-      errcode = get_errno();
-      ferr("ERROR: sigqueue #2 failed: %d\n", errcode);
-      ret = ERROR;
+      ferr("ERROR: nxsig_queue #2 failed: %d\n", status);
+      if (ret >= OK)
+        {
+          ret = status;
+        }
     }
 
   /* Make sure that errno is set correctly on return */
 
   if (ret < 0)
     {
-      set_errno(errcode);
+      set_errno(-ret);
       return ERROR;
     }
 

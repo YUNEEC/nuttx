@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/xtensa/src/common/xtensa_assert.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
+#include <nuttx/syslog/syslog.h>
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <arch/board/board.h>
@@ -63,6 +64,10 @@
 #  undef CONFIG_ARCH_USBDUMP
 #endif
 
+#ifndef CONFIG_BOARD_RESET_ON_ASSERT
+#  define CONFIG_BOARD_RESET_ON_ASSERT 0
+#endif
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -77,10 +82,10 @@ static int usbtrace_syslog(FAR const char *fmt, ...)
   va_list ap;
   int ret;
 
-  /* Let vsyslog do the real work */
+  /* Let nx_vsyslog do the real work */
 
   va_start(ap, fmt);
-  ret = vsyslog(LOG_EMERG, fmt, ap);
+  ret = nx_vsyslog(LOG_EMERG, fmt, &ap);
   va_end(ap);
   return ret;
 }
@@ -112,18 +117,25 @@ static void xtensa_assert(int errorcode)
 #ifdef CONFIG_BOARD_CRASHDUMP
   /* Perform board-specific crash dump */
 
-  board_crashdump(up_getsp(), this_task(), filename, lineno);
+  board_crashdump(up_getsp(), running_task(), filename, lineno);
 #endif
+
+  /* Flush any buffered SYSLOG data (from the above) */
+
+  (void)syslog_flush();
 
   /* Are we in an interrupt handler or the idle task? */
 
-  if (CURRENT_REGS || this_task()->pid == 0)
+  if (CURRENT_REGS || running_task()->flink == NULL)
     {
        /* Blink the LEDs forever */
 
        (void)up_irq_save();
         for (; ; )
           {
+#if CONFIG_BOARD_RESET_ON_ASSERT >= 1
+            board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
+#endif
 #ifdef CONFIG_ARCH_LEDS
             board_autoled_on(LED_PANIC);
             up_mdelay(250);
@@ -136,6 +148,9 @@ static void xtensa_assert(int errorcode)
     {
       /* Assertions in other contexts only cause the thread to exit */
 
+#if CONFIG_BOARD_RESET_ON_ASSERT >= 2
+      board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
+#endif
       exit(errorcode);
     }
 }
@@ -151,10 +166,14 @@ static void xtensa_assert(int errorcode)
 void up_assert(const uint8_t *filename, int lineno)
 {
 #if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
-  struct tcb_s *rtcb = this_task();
+  struct tcb_s *rtcb = running_task();
 #endif
 
   board_autoled_on(LED_ASSERTION);
+
+  /* Flush any buffered SYSLOG data (from prior to the assertion) */
+
+  (void)syslog_flush();
 
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("Assertion failed at file:%s line: %d task: %s\n",
@@ -180,7 +199,7 @@ void up_assert(const uint8_t *filename, int lineno)
  *   - Co-processor exception
  *   - High priority level2-6 Exception.
  *
- * Input parameters:
+ * Input Parameters:
  *   xcptcode - Identifies the unhandled exception (see include/esp32/irq.h)
  *   regs - The register save are at the time of the interrupt.
  *
@@ -192,12 +211,16 @@ void up_assert(const uint8_t *filename, int lineno)
 void xtensa_panic(int xptcode, uint32_t *regs)
 {
 #if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
-  struct tcb_s *rtcb = this_task();
+  struct tcb_s *rtcb = running_task();
 #endif
 
   /* We get here when a un-dispatch-able, irrecoverable exception occurs */
 
   board_autoled_on(LED_ASSERTION);
+
+  /* Flush any buffered SYSLOG data (from prior to the panic) */
+
+  (void)syslog_flush();
 
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("Unhandled Exception %d task: %s\n", xptcode, rtcb->name);
@@ -280,7 +303,7 @@ void xtensa_panic(int xptcode, uint32_t *regs)
  *     cause varies 32..39.
  *   40..63 Reserved
  *
- * Input parameters:
+ * Input Parameters:
  *   exccause - Identifies the EXCCAUSE of the user exception
  *   regs - The register save are at the time of the interrupt.
  *
@@ -292,12 +315,16 @@ void xtensa_panic(int xptcode, uint32_t *regs)
 void xtensa_user(int exccause, uint32_t *regs)
 {
 #if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
-  struct tcb_s *rtcb = this_task();
+  struct tcb_s *rtcb = running_task();
 #endif
 
   /* We get here when a un-dispatch-able, irrecoverable exception occurs */
 
   board_autoled_on(LED_ASSERTION);
+
+  /* Flush any buffered SYSLOG data (from prior to the error) */
+
+  (void)syslog_flush();
 
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("User Exception: EXCCAUSE=%04x task: %s\n", exccause, rtcb->name);

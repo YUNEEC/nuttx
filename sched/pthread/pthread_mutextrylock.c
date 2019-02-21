@@ -66,10 +66,10 @@
  *   the signal handler the thread resumes waiting for the mutex as if it was
  *   not interrupted.
  *
- * Parameters:
+ * Input Parameters:
  *   mutex - A reference to the mutex to be locked.
  *
- * Return Value:
+ * Returned Value:
  *   0 on success or an errno value on failure.  Note that the errno EINTR
  *   is never returned by pthread_mutex_trylock().
  *

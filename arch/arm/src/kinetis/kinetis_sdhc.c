@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/kinetis/kinetis_sdhc.c
  *
- *   Copyright (C) 2011-2012, 2014, 2016-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014, 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,10 +84,6 @@
 #  error "Callback support requires CONFIG_SCHED_WORKQUEUE and CONFIG_SCHED_HPWORK"
 #endif
 
-#ifndef CONFIG_KINETIS_SDHC_PRIO
-#  define CONFIG_KINETIS_SDHC_PRIO NVIC_SYSH_PRIORITY_DEFAULT
-#endif
-
 #ifndef CONFIG_DEBUG_MEMCARD_INFO
 #  undef CONFIG_SDIO_XFRDEBUG
 #endif
@@ -98,10 +94,10 @@
  * So allow the board config to enable them.
  */
 
-#if defined(BOARD_SDHC_ENABLE_PULLUPS)
-#  define BOARD_SDHC_PULLUP_ENABLE _PIN_INPUT_PULLUP
+#if defined(CONFIG_KINETIS_SDHC_PULLUP)
+#  define SDHC_PULLUP_ENABLE _PIN_INPUT_PULLUP
 #else
-#  define BOARD_SDHC_PULLUP_ENABLE 0
+#  define SDHC_PULLUP_ENABLE 0
 #endif
 
 /* SDCLK frequencies corresponding to various modes of operation.  These
@@ -152,8 +148,10 @@
 #define SDHC_SNDDONE_INTS  (SCHC_XFRERR_INTS|SDHC_INT_BWR|SDHC_INT_TC)
 #define SDHC_XFRDONE_INTS  (SCHC_XFRERR_INTS|SDHC_INT_BRR|SDHC_INT_BWR|SDHC_INT_TC)
 
-#define SCHC_DMAERR_INTS   (SDHC_INT_DCE|SDHC_INT_DTOE|SDHC_INT_DEBE|SDHC_INT_DMAE)
-#define SDHC_DMADONE_INTS  (SCHC_DMAERR_INTS|SDHC_INT_DINT)
+/* For DMA operations DINT is not interesting TC will indicate completions */
+
+#define SCHC_DMAERR_INTS   (SCHC_XFRERR_INTS|SDHC_INT_DMAE)
+#define SDHC_DMADONE_INTS  (SCHC_DMAERR_INTS|SDHC_INT_TC)
 
 #define SDHC_WAITALL_INTS  (SDHC_RESPDONE_INTS|SDHC_XFRDONE_INTS|SDHC_DMADONE_INTS)
 
@@ -245,7 +243,7 @@ struct kinetis_sdhcregs_s
 /* Low-level helpers ********************************************************/
 
 static void kinetis_takesem(struct kinetis_dev_s *priv);
-#define     kinetis_givesem(priv) (sem_post(&priv->waitsem))
+#define     kinetis_givesem(priv) (nxsem_post(&priv->waitsem))
 static void kinetis_configwaitints(struct kinetis_dev_s *priv, uint32_t waitints,
               sdio_eventset_t waitevents, sdio_eventset_t wkupevents);
 static void kinetis_configxfrints(struct kinetis_dev_s *priv, uint32_t xfrints);
@@ -432,16 +430,21 @@ static struct kinetis_sdhcregs_s g_sampleregs[DEBUG_NSAMPLES];
 
 static void kinetis_takesem(struct kinetis_dev_s *priv)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&priv->waitsem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->waitsem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1021,6 +1024,7 @@ static void kinetis_endtransfer(struct kinetis_dev_s *priv, sdio_eventset_t wkup
 {
 #ifdef CONFIG_KINETIS_SDHC_DMA
   uint32_t regval;
+  uint32_t proctl;
 #endif
 
   /* Disable all transfer related interrupts */
@@ -1034,11 +1038,16 @@ static void kinetis_endtransfer(struct kinetis_dev_s *priv, sdio_eventset_t wkup
   /* If this was a DMA transfer, make sure that DMA is stopped */
 
 #ifdef CONFIG_KINETIS_SDHC_DMA
-  /* Stop the DMA by resetting the data path */
+  /* Stop the DMA by resetting the data path but first save the
+   * state of the SDHC_PROCTL as it will be reset (in bits 24-0)
+   * and we will loose the DTW (4bit mode) setting
+   */
 
+  proctl = getreg32(KINETIS_SDHC_PROCTL);
   regval = getreg32(KINETIS_SDHC_SYSCTL);
   regval |= SDHC_SYSCTL_RSTD;
   putreg32(regval, KINETIS_SDHC_SYSCTL);
+  putreg32(proctl, KINETIS_SDHC_PROCTL);
 #endif
 
   /* Mark the transfer finished */
@@ -1704,12 +1713,6 @@ static int kinetis_attach(FAR struct sdio_dev_s *dev)
       putreg32(0,            KINETIS_SDHC_IRQSIGEN);
       putreg32(SDHC_INT_ALL, KINETIS_SDHC_IRQSTAT);
 
-#ifdef CONFIG_ARCH_IRQPRIO
-      /* Set the interrupt priority */
-
-      up_prioritize_irq(KINETIS_IRQ_SDHC, CONFIG_KINETIS_SDHC_PRIO);
-#endif
-
       /* Enable SDIO interrupts at the NVIC.  They can now be enabled at
        * the SDIO controller as needed.
        */
@@ -1739,9 +1742,9 @@ static int kinetis_attach(FAR struct sdio_dev_s *dev)
 static int kinetis_sendcmd(FAR struct sdio_dev_s *dev, uint32_t cmd,
                            uint32_t arg)
 {
-  systime_t timeout;
-  systime_t start;
-  systime_t elapsed;
+  clock_t timeout;
+  clock_t start;
+  clock_t elapsed;
   uint32_t regval;
   uint32_t cmdidx;
 
@@ -2061,9 +2064,9 @@ static int kinetis_cancel(FAR struct sdio_dev_s *dev)
 
 static int kinetis_waitresponse(FAR struct sdio_dev_s *dev, uint32_t cmd)
 {
-  systime_t timeout;
-  systime_t start;
-  systime_t elapsed;
+  clock_t timeout;
+  clock_t start;
+  clock_t elapsed;
   uint32_t errors;
   int ret = OK;
 
@@ -2460,7 +2463,7 @@ static sdio_eventset_t kinetis_eventwait(FAR struct sdio_dev_s *dev,
       delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)kinetis_eventtimeout,
                        1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
           mcerr("ERROR: wd_start failed: %d\n", ret);
         }
@@ -2790,7 +2793,7 @@ static void kinetis_callback(void *arg)
  * Input Parameters:
  *   slotno - Not used.
  *
- * Returned Values:
+ * Returned Value:
  *   A reference to an SDIO interface structure.  NULL is returned on failures.
  *
  ****************************************************************************/
@@ -2807,13 +2810,13 @@ FAR struct sdio_dev_s *sdhc_initialize(int slotno)
   /* Initialize the SDHC slot structure data structure */
   /* Initialize semaphores */
 
-  sem_init(&priv->waitsem, 0, 0);
+  nxsem_init(&priv->waitsem, 0, 0);
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Create a watchdog timer */
 
@@ -2856,29 +2859,29 @@ FAR struct sdio_dev_s *sdhc_initialize(int slotno)
 #ifndef CONFIG_SDIO_MUXBUS
   /* Data width 1, 4 or 8 */
 
-  kinetis_pinconfig(PIN_SDHC0_D0 | BOARD_SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D0 | SDHC_PULLUP_ENABLE);
 
   /* Data width 4 or 8 */
 
 #ifndef CONFIG_KINETIS_SDHC_WIDTH_D1_ONLY
-  kinetis_pinconfig(PIN_SDHC0_D1 | BOARD_SDHC_PULLUP_ENABLE);
-  kinetis_pinconfig(PIN_SDHC0_D2 | BOARD_SDHC_PULLUP_ENABLE);
-  kinetis_pinconfig(PIN_SDHC0_D3 | BOARD_SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D1 | SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D2 | SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D3 | SDHC_PULLUP_ENABLE);
 
   /* Data width 8 (not supported) */
 
 #if 0
-  kinetis_pinconfig(PIN_SDHC0_D4 | BOARD_SDHC_PULLUP_ENABLE);
-  kinetis_pinconfig(PIN_SDHC0_D5 | BOARD_SDHC_PULLUP_ENABLE);
-  kinetis_pinconfig(PIN_SDHC0_D6 | BOARD_SDHC_PULLUP_ENABLE);
-  kinetis_pinconfig(PIN_SDHC0_D7 | BOARD_SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D4 | SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D5 | SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D6 | SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_D7 | SDHC_PULLUP_ENABLE);
 #endif
 #endif
 
   /* Clocking and CMD pins (all data widths) */
 
   kinetis_pinconfig(PIN_SDHC0_DCLK);
-  kinetis_pinconfig(PIN_SDHC0_CMD | BOARD_SDHC_PULLUP_ENABLE);
+  kinetis_pinconfig(PIN_SDHC0_CMD | SDHC_PULLUP_ENABLE);
 #endif
 
   /* Reset the card and assure that it is in the initial, unconfigured
@@ -2904,7 +2907,7 @@ FAR struct sdio_dev_s *sdhc_initialize(int slotno)
  *                card has been removed from the slot.  Only transitions
  *                (inserted->removed or removed->inserted should be reported)
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -2951,7 +2954,7 @@ void sdhc_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
  *   dev       - An instance of the SDIO driver device state structure.
  *   wrprotect - true is a card is writeprotected.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

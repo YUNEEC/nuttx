@@ -1,7 +1,8 @@
 /****************************************************************************
  * net/netdev/netdev_findbyaddr.c
  *
- *   Copyright (C) 2007-2009, 2014-2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2014-2015, 2017-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,30 +58,28 @@
 #include "netdev/netdev.h"
 
 /****************************************************************************
- * Private Functions
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: netdev_finddevice_ipv4addr
+ * Name: netdev_findby_lipv4addr
  *
  * Description:
  *   Find a previously registered network device by matching a local address
  *   with the subnet served by the device.  Only "up" devices are considered
  *   (since a "down" device has no meaningful address).
  *
- * Parameters:
- *   ripaddr - Remote address of a connection to use in the lookup
+ * Input Parameters:
+ *   lipaddr - Local, IPv4 address assigned to the network device.  Or any
+ *             IPv4 address on the sub-net served by the network device.
  *
  * Returned Value:
- *  Pointer to driver on success; null on failure
- *
- * Assumptions:
- *  Called from normal user mode
+ *   Pointer to driver on success; null on failure
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv4
-static FAR struct net_driver_s *netdev_finddevice_ipv4addr(in_addr_t ripaddr)
+FAR struct net_driver_s *netdev_findby_lipv4addr(in_addr_t lipaddr)
 {
   FAR struct net_driver_s *dev;
 
@@ -95,7 +94,7 @@ static FAR struct net_driver_s *netdev_finddevice_ipv4addr(in_addr_t ripaddr)
         {
           /* Yes.. check for an address match (under the netmask) */
 
-          if (net_ipv4addr_maskcmp(dev->d_ipaddr, ripaddr,
+          if (net_ipv4addr_maskcmp(dev->d_ipaddr, lipaddr,
                                    dev->d_netmask))
             {
               /* Its a match */
@@ -114,27 +113,24 @@ static FAR struct net_driver_s *netdev_finddevice_ipv4addr(in_addr_t ripaddr)
 #endif /* CONFIG_NET_IPv4 */
 
 /****************************************************************************
- * Name: netdev_finddevice_ipv6addr
+ * Name: netdev_findby_lipv6addr
  *
  * Description:
  *   Find a previously registered network device by matching a local address
  *   with the subnet served by the device.  Only "up" devices are considered
  *   (since a "down" device has no meaningful address).
  *
- * Parameters:
- *   ripaddr - Remote address of a connection to use in the lookup
+ * Input Parameters:
+ *   lipaddr - Local, IPv6 address assigned to the network device.  Or any
+ *             IPv6 address on the sub-net served by the network device.
  *
  * Returned Value:
- *  Pointer to driver on success; null on failure
- *
- * Assumptions:
- *  Called from normal user mode
+ *   Pointer to driver on success; null on failure
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv6
-static FAR struct net_driver_s *
-netdev_finddevice_ipv6addr(const net_ipv6addr_t ripaddr)
+FAR struct net_driver_s *netdev_findby_lipv6addr(const net_ipv6addr_t lipaddr)
 {
   FAR struct net_driver_s *dev;
 
@@ -149,7 +145,7 @@ netdev_finddevice_ipv6addr(const net_ipv6addr_t ripaddr)
         {
           /* Yes.. check for an address match (under the netmask) */
 
-          if (net_ipv6addr_maskcmp(dev->d_ipv6addr, ripaddr,
+          if (net_ipv6addr_maskcmp(dev->d_ipv6addr, lipaddr,
                                    dev->d_ipv6netmask))
             {
               /* Its a match */
@@ -168,31 +164,25 @@ netdev_finddevice_ipv6addr(const net_ipv6addr_t ripaddr)
 #endif /* CONFIG_NET_IPv6 */
 
 /****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-/****************************************************************************
- * Name: netdev_findby_ipv4addr
+ * Name: netdev_findby_ripv4addr
  *
  * Description:
- *   Find a previously registered network device by matching an arbitrary
- *   IPv4 address.
+ *   Find a previously registered network device by matching the remote
+ *   IPv4 address that can be reached by the device.
  *
- * Parameters:
- *   lipaddr - Local, bound address of a connection.
+ * Input Parameters:
+ *   lipaddr - Local, bound address of a connection (used only if ripaddr is
+ *             the broadcast address).
  *   ripaddr - Remote address of a connection to use in the lookup
  *
  * Returned Value:
- *  Pointer to driver on success; null on failure
- *
- * Assumptions:
- *  Called from normal user mode
+ *   Pointer to driver on success; null on failure
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv4
-FAR struct net_driver_s *netdev_findby_ipv4addr(in_addr_t lipaddr,
-                                                in_addr_t ripaddr)
+FAR struct net_driver_s *netdev_findby_ripv4addr(in_addr_t lipaddr,
+                                                 in_addr_t ripaddr)
 {
   struct net_driver_s *dev;
 #ifdef CONFIG_NET_ROUTE
@@ -212,25 +202,21 @@ FAR struct net_driver_s *netdev_findby_ipv4addr(in_addr_t lipaddr,
            * broadcast packet out ALL locally available networks.  I am not
            * sure of that and, in any event, there is nothing we can do
            * about that here.
-           *
-           * REVISIT:  For now, arbitrarily return the first network
-           * interface in the list of network devices.  The broadcast
-           * will be sent on that device only.
            */
 
-          return g_netdevices;
+          return netdev_default();
         }
       else
         {
           /* Return the device associated with the local address */
 
-          return netdev_finddevice_ipv4addr(lipaddr);
+          return netdev_findby_lipv4addr(lipaddr);
         }
     }
 
   /* Check if the address maps to a locally available network */
 
-  dev = netdev_finddevice_ipv4addr(ripaddr);
+  dev = netdev_findby_lipv4addr(ripaddr);
   if (dev)
     {
       return dev;
@@ -250,7 +236,7 @@ FAR struct net_driver_s *netdev_findby_ipv4addr(in_addr_t lipaddr,
        * router address
        */
 
-      dev = netdev_finddevice_ipv4addr(router);
+      dev = netdev_findby_lipv4addr(router);
       if (dev)
         {
           return dev;
@@ -259,40 +245,34 @@ FAR struct net_driver_s *netdev_findby_ipv4addr(in_addr_t lipaddr,
 #endif /* CONFIG_NET_ROUTE */
 
   /* The above lookup will fail if the packet is being sent out of our
-   * out subnet to a router and there is no routing information.
+   * out subnet to a router and there is no routing information. Let's
+   * try the default network device.
    */
 
-  /* If we will did not find the network device, then we might as well fail
-   * because we are not configured properly to determine the route to the
-   * destination.
-   */
-
-  return dev;
+  return netdev_default();
 }
 #endif /* CONFIG_NET_IPv4 */
 
 /****************************************************************************
- * Name: netdev_findby_ipv6addr
+ * Name: netdev_findby_ripv6addr
  *
  * Description:
- *   Find a previously registered network device by matching an arbitrary
- *   IPv6 address.
+ *   Find a previously registered network device by matching the remote
+ *   IPv6 address that can be reached by the device.
  *
- * Parameters:
- *   lipaddr - Local, bound address of a connection.
+ * Input Parameters:
+ *   lipaddr - Local, bound address of a connection (used only if ripaddr is
+ *             a multicast address).
  *   ripaddr - Remote address of a connection to use in the lookup
  *
  * Returned Value:
- *  Pointer to driver on success; null on failure
- *
- * Assumptions:
- *  Called from normal user mode
+ *   Pointer to driver on success; null on failure
  *
  ****************************************************************************/
 
 #ifdef CONFIG_NET_IPv6
-FAR struct net_driver_s *netdev_findby_ipv6addr(const net_ipv6addr_t lipaddr,
-                                                const net_ipv6addr_t ripaddr)
+FAR struct net_driver_s *netdev_findby_ripv6addr(const net_ipv6addr_t lipaddr,
+                                                 const net_ipv6addr_t ripaddr)
 {
   struct net_driver_s *dev;
 #ifdef CONFIG_NET_ROUTE
@@ -300,41 +280,35 @@ FAR struct net_driver_s *netdev_findby_ipv6addr(const net_ipv6addr_t lipaddr,
   int ret;
 #endif
 
-  /* First, check if this is the multicast IP address  We should actually
-   * pick off certain multicast address (all hosts multicast address, and
-   * the solicited-node multicast address).  We will cheat here and accept
-   * all multicast packets that are destined for the ff02::/16 addresses.
-   */
+  /* First, check if this is the multicast IP address */
 
-  if (ripaddr[0] == HTONS(0xff02))
+  if (net_is_addr_mcast(ripaddr))
     {
-      /* Yes.. Check the local, bound address.  Is it INADDR_ANY? */
+      /* Yes.. Check the local, bound address.  Is it the IPv6 unspecified
+       * address?
+       */
 
-      if (net_ipv6addr_cmp(lipaddr, g_ipv6_allzeroaddr))
+      if (net_ipv6addr_cmp(lipaddr, g_ipv6_unspecaddr))
         {
           /* Yes.. In this case, I think we are supposed to send the
            * broadcast packet out ALL locally available networks.  I am not
            * sure of that and, in any event, there is nothing we can do
            * about that here.
-           *
-           * REVISIT:  For now, arbitrarily return the first network
-           * interface in the list of network devices.  The broadcast
-           * will be sent on that device only.
            */
 
-          return g_netdevices;
+          return netdev_default();
         }
       else
         {
           /* Return the device associated with the local address */
 
-          return netdev_finddevice_ipv6addr(lipaddr);
+          return netdev_findby_lipv6addr(lipaddr);
         }
     }
 
   /* Check if the address maps to a locally available network */
 
-  dev = netdev_finddevice_ipv6addr(ripaddr);
+  dev = netdev_findby_lipv6addr(ripaddr);
   if (dev)
     {
       return dev;
@@ -354,7 +328,7 @@ FAR struct net_driver_s *netdev_findby_ipv6addr(const net_ipv6addr_t lipaddr,
        * router address
        */
 
-      dev = netdev_finddevice_ipv6addr(router);
+      dev = netdev_findby_lipv6addr(router);
       if (dev)
         {
           return dev;
@@ -363,15 +337,11 @@ FAR struct net_driver_s *netdev_findby_ipv6addr(const net_ipv6addr_t lipaddr,
 #endif /* CONFIG_NET_ROUTE */
 
   /* The above lookup will fail if the packet is being sent out of our
-   * out subnet to a router and there is no routing information.
+   * out subnet to a router and there is no routing information. Let's
+   * try the default network device.
    */
 
-  /* If we will did not find the network device, then we might as well fail
-   * because we are not configured properly to determine the route to the
-   * destination.
-   */
-
-  return dev;
+  return netdev_default();
 }
 #endif /* CONFIG_NET_IPv6 */
 

@@ -72,14 +72,14 @@ static bool pthread_notifywaiters(FAR struct join_s *pjoin)
 
   /* Are any tasks waiting for our exit value? */
 
-  status = sem_getvalue(&pjoin->exit_sem, &ntasks_waiting);
+  status = nxsem_getvalue(&pjoin->exit_sem, &ntasks_waiting);
   if (status == OK && ntasks_waiting < 0)
     {
       /* Set the data semaphore so that this thread will be
        * awakened when all waiting tasks receive the data
        */
 
-      (void)sem_init(&pjoin->data_sem, 0, (ntasks_waiting + 1));
+      (void)nxsem_init(&pjoin->data_sem, 0, (ntasks_waiting + 1));
 
       /* Post the semaphore to restart each thread that is waiting
        * on the semaphore
@@ -90,7 +90,7 @@ static bool pthread_notifywaiters(FAR struct join_s *pjoin)
           status = pthread_sem_give(&pjoin->exit_sem);
           if (status == OK)
             {
-              status = sem_getvalue(&pjoin->exit_sem, &ntasks_waiting);
+              status = nxsem_getvalue(&pjoin->exit_sem, &ntasks_waiting);
             }
         }
       while (ntasks_waiting < 0 && status == OK);
@@ -112,10 +112,10 @@ static bool pthread_notifywaiters(FAR struct join_s *pjoin)
  * Description:
  *   Remove a join structure from the local data set.
  *
- * Parameters:
+ * Input Parameters:
  *   pid
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -188,7 +188,7 @@ static void pthread_removejoininfo(FAR struct task_group_s *group,
  *   pthread_exit(), or through pthread_cancel().  In any event, we must
  *   complete any pending join events.
  *
- * Parameters:
+ * Input Parameters:
  *   exit_value
  *
  * Returned Value:
@@ -279,8 +279,8 @@ void pthread_destroyjoin(FAR struct task_group_s *group,
 
   /* Destroy its semaphores */
 
-  (void)sem_destroy(&pjoin->data_sem);
-  (void)sem_destroy(&pjoin->exit_sem);
+  (void)nxsem_destroy(&pjoin->data_sem);
+  (void)nxsem_destroy(&pjoin->exit_sem);
 
   /* And deallocate the pjoin structure */
 

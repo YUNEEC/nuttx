@@ -43,7 +43,6 @@ MKSYSCALL = "$(TOPDIR)$(DELIM)tools$(DELIM)mksyscall$(HOSTEXEEXT)"
 CSVFILE = "$(TOPDIR)$(DELIM)syscall$(DELIM)syscall.csv"
 
 STUB_SRCS += syscall_funclookup.c syscall_stublookup.c syscall_nparms.c
-STUB_SRCS += syscall_clock_systimer.c
 
 ASRCS =
 AOBJS = $(ASRCS:.S=$(OBJEXT))
@@ -87,15 +86,13 @@ $(BIN2): $(STUB_OBJS)
 
 depend: .depend
 
-$(MKSYSCALL):
-	$(Q) $(MAKE) -C $(TOPDIR)$(DELIM)tools -f Makefile.host mksyscall
-
 .context: syscall.csv
+	$(Q) $(MAKE) -C $(TOPDIR)$(DELIM)tools -f Makefile.host mksyscall
 	$(Q) (cd proxies; $(MKSYSCALL) -p $(CSVFILE);)
 	$(Q) (cd stubs; $(MKSYSCALL) -s $(CSVFILE);)
 	$(Q) touch $@
 
-context: $(MKSYSCALL) .context
+context: .context
 
 clean:
 	$(call DELFILE, $(BIN1))

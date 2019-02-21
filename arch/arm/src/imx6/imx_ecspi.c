@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/imx6/imx_ecspi.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Derives from the i.MX1 CSPI driver:
@@ -687,9 +687,9 @@ static int spi_transfer(struct imx_spidev_s *priv, const void *txbuffer,
     {
       /* Wait to be signaled from the interrupt handler */
 
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
     }
-  while (ret < 0 && errno == EINTR);
+  while (ret < 0 && ret == -EINTR);
 
 #else
   /* Perform the transfer using polling logic.  This will totally
@@ -763,7 +763,7 @@ static int spi_interrupt(int irq, void *context, FAR void *arg)
     {
       /* Yes, wake up the waiting thread */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   return OK;
@@ -794,26 +794,26 @@ static int spi_interrupt(int irq, void *context, FAR void *arg)
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   struct imx_spidev_s *priv = (struct imx_spidev_s *)dev;
+  int ret;
 
   if (lock)
     {
-      /* Take the semaphore (perhaps waiting) */
-
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait
-           * was awakened by a signal.
-           */
+          /* Take the semaphore (perhaps waiting) */
 
-          DEBUGASSERT(errno == EINTR);
+          ret = nxsem_wait(&priv->exclsem);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1058,7 +1058,7 @@ static uint8_t spi_status(FAR struct spi_dev_s *dev, uint32_t devid)
 
   DEBUGASSERT(priv != NULL);
 
-  if (priv->status != NULL);
+  if (priv->status != NULL)
     {
       ret = priv->select(dev, devid);
     }
@@ -1099,7 +1099,7 @@ static int spi_cmddata(FAR struct spi_dev_s *dev, uint32_t devid,
 
   DEBUGASSERT(priv != NULL);
 
-  if (priv->cmddata != NULL);
+  if (priv->cmddata != NULL)
     {
       ret = priv->cmddata(dev, devid, cmd);
     }
@@ -1209,7 +1209,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t nw
  *   required.  Theregore, all GPIO chip management is deferred to board-
  *   specific logic.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple SPI interfaces)
  *
  * Returned Value:
@@ -1308,10 +1308,10 @@ FAR struct spi_dev_s *imx_spibus_initialize(int port)
    * signaling and, hence, should not have priority inheritance enabled.
    */
 
-   sem_init(&priv->waitsem, 0, 0);
-   sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+   nxsem_init(&priv->waitsem, 0, 0);
+   nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 #endif
-   sem_init(&priv->exclsem, 0, 1);
+   nxsem_init(&priv->exclsem, 0, 1);
 
   /* Initialize control register: min frequency, ignore ready, master mode, mode=0, 8-bit */
 

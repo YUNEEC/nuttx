@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/z80/src/z8/z8_i2c.c
  *
- *   Copyright(C) 2009, 2011, 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright(C) 2009, 2011, 2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -140,19 +140,24 @@ const struct i2c_ops_s g_ops =
 
 static void z8_i2c_semtake(void)
 {
-  /* Take the I2C semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&g_i2csem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_i2csem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define z8_i2c_semgive() sem_post(&g_i2csem)
+#define z8_i2c_semgive() nxsem_post(&g_i2csem)
 
 /****************************************************************************
  * Name: z8_i2c_waittxempty
@@ -555,13 +560,13 @@ static int z8_i2c_transfer(FAR struct i2c_master_s *dev,
           /* No... Check if the next message should have a repeated start or
            * not.  The conditions for NO repeated start are:
            *
-           *   - I2C_M_NORESTART bit set
+           *   - I2C_M_NOSTART bit set
            *   - Same direction (I2C_M_READ)
            *   - Same address (and I2C_M_TEN)
            */
 
           next = &msgs[i + 1];
-          if ((msg->flags & I2C_M_NORESTART) != 0 &&
+          if ((msg->flags & I2C_M_NOSTART) != 0 &&
               (msg->flags & (I2C_M_READ | I2C_M_TEN)) == (next->flags & (I2C_M_READ | I2C_M_TEN)) &&
               msg->addr == next->addr)
             {
@@ -633,7 +638,7 @@ static int z8_i2c_reset(FAR struct i2c_master_s * dev)
  *   instances of the interface, each of which may be set up with a
  *   different frequency and slave address.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple I2C interfaces)
  *
  * Returned Value:
@@ -661,7 +666,7 @@ FAR struct i2c_master_s *z8_i2cbus_initialize(int port)
 
       /* This semaphore enforces serialized access for I2C transfers */
 
-      sem_init(&g_i2csem, 0, 1);
+      nxsem_init(&g_i2csem, 0, 1);
 
       /* Enable I2C -- no interrupts */
 

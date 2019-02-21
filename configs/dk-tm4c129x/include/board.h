@@ -92,13 +92,20 @@
 /* When the PLL is active, the system clock frequency (SysClk) is calculated using
  * the following equation:
  *
- *   SysClk = Fvco/ (sysdiv + 1)
+ *   SysClk = Fvco / (sysdiv + 1)
  *
  * The following setup generates Sysclk = 120MHz:
  */
 
 #define BOARD_PLL_SYSDIV     4         /* Sysclk = Fvco / 4 = 120MHz */
 #define SYSCLK_FREQUENCY     120000000 /* Resulting SysClk frequency */
+
+/* Peripheral Clock (PCLK)
+ *
+ * Same frequency as the SYSCLK
+ */
+
+#define PCLK_FREQUENCY       SYSCLK_FREQUENCY
 
 /* Alternate Clock (ALTCLK)
  *
@@ -250,24 +257,12 @@
 #ifndef __ASSEMBLY__
 
 /************************************************************************************
- * Name: tiva_boardinitialize
- *
- * Description:
- *   All Tiva architectures must provide the following entry point.  This entry
- *   point is called early in the initialization -- after all memory has been
- *   configured and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void tiva_boardinitialize(void);
-
-/************************************************************************************
  * Name: tiva_tmp100_initialize
  *
  * Description:
  *   Initialize and register the TMP-100 Temperature Sensor driver.
  *
- * Input parameters:
+ * Input Parameters:
  *   devpath - The full path to the driver to register. E.g., "/dev/temp0"
  *
  * Returned Value:

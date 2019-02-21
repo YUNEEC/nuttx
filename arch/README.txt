@@ -157,31 +157,41 @@ arch/arm - ARM-based micro-controllers
 
     MCU support
       arch/arm/include/a1x and arch/arm/src/a1x
+      arch/arm/include/am335x and arch/arm/src/am335x
       arch/arm/include/c5471 and arch/arm/src/c5471
       arch/arm/include/dm320 and arch/arm/src/dm320
       arch/arm/include/efm32 and arch/arm/src/efm32
       arch/arm/include/imx1 and arch/arm/src/imx1
       arch/arm/include/imx6 and arch/arm/src/imx6
+      arch/arm/include/imx6 and arch/arm/src/imrt
       arch/arm/include/kinetis and arch/arm/src/kinetis
       arch/arm/include/kl and arch/arm/src/kl
+      arch/arm/include/lpc11xx and arch/arm/src/lc823450
       arch/arm/include/lpc11xx and arch/arm/src/lpc11xx
       arch/arm/include/lpc17xx and arch/arm/src/lpc17xx
       arch/arm/include/lpc214x and arch/arm/src/lpc214x
       arch/arm/include/lpc2378 and arch/arm/src/lpc2378.
       arch/arm/include/lpc31xx and arch/arm/src/lpc31xx
       arch/arm/include/lpc43xx and arch/arm/src/lpc43xx
+      arch/arm/include/lpc43xx and arch/arm/src/lpc54xx
+      arch/arm/include/lpc43xx and arch/arm/src/max236xx
       arch/arm/include/moxart and arch/arm/src/moxart
+      arch/arm/include/nuc1xx and arch/arm/src/nrf52
       arch/arm/include/nuc1xx and arch/arm/src/nuc1xx
       arch/arm/include/sam34 and arch/arm/src/sam34
       arch/arm/include/sama45 and arch/arm/src/sama5
-      arch/arm/include/samdl and arch/arm/src/samdl
+      arch/arm/include/samd2l2 and arch/arm/src/samd2l2
+      arch/arm/include/samd2l2 and arch/arm/src/samd5e5
       arch/arm/include/samv7 and arch/arm/src/samv7
       arch/arm/include/stm32 and arch/arm/src/stm32
+      arch/arm/include/stm32f7 and arch/arm/src/stm32f0
       arch/arm/include/stm32f7 and arch/arm/src/stm32f7
+      arch/arm/include/stm32l4 and arch/arm/src/stm32h7
       arch/arm/include/stm32l4 and arch/arm/src/stm32l4
       arch/arm/include/str71x and arch/arm/src/str71x
       arch/arm/include/tiva and arch/arm/src/tiva
       arch/arm/include/tms570 and arch/arm/src/tms570
+      arch/arm/include/tms570 and arch/arm/src/xmc4
 
 arch/avr
     This directory is dedicated to ports to the Atmel AVR (8-bit) and AVR32 (32-bit)
@@ -221,6 +231,11 @@ arch/renesas - Support for Renesas and legacy Hitachi microcontrollers.
       arch/renesas/include/m16c and arch/renesas/src/m16c
       arch/renesas/include/sh1 and arch/renesas/src/sh1
 
+arch/or1k
+    This directory is dedicated to ports to OpenRISC architectures.
+
+    arch/or1k/include/mor1k and arch/or1k/src/mor1k
+
 arch/risc-v
     This directory is dedicated to ports to the RISC-V family.
 
@@ -228,6 +243,7 @@ arch/risc-v
       arch/risc-v/include/rv32im
 
     MCU support
+      arch/risc-v/include/gap8
       arch/risc-v/include/nr5m100
 
 arch/x86 - Intel x86 architectures
@@ -274,6 +290,7 @@ arch/z80 - ZiLOG 8-bit microcontrollers
       arch/z80/include and arch/z80/src/common
 
     MCU support
-      arch/z80/include/z80 and arch/z80/src/z80
-      arch/z80/include/z8 and arch/z80/src/z8
       arch/z80/include/ez80 and arch/z80/src/ez80
+      arch/z80/include/z80 and arch/z80/src/z180
+      arch/z80/include/z8 and arch/z80/src/z8
+      arch/z80/include/z80 and arch/z80/src/z80

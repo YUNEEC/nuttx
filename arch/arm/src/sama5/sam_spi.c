@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_spi.c
  *
- *   Copyright (C) 2013-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * This derives from SAM3/4 SPI driver:
@@ -734,7 +734,7 @@ static void spi_dmatimeout(int argc, uint32_t arg)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&spics->dmawait);
+  nxsem_post(&spics->dmawait);
 }
 #endif
 
@@ -781,7 +781,7 @@ static void spi_rxcallback(DMA_HANDLE handle, void *arg, int result)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&spics->dmawait);
+  nxsem_post(&spics->dmawait);
 }
 #endif
 
@@ -865,27 +865,34 @@ static int spi_lock(struct spi_dev_s *dev, bool lock)
 {
   struct sam_spics_s *spics = (struct sam_spics_s *)dev;
   struct sam_spidev_s *spi = spi_device(spics);
+  int ret;
 
   spiinfo("lock=%d\n", lock);
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&spi->spisem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+          /* Take the semaphore (perhaps waiting) */
+
+          ret = nxsem_wait(&spi->spisem);
+
+          /* The only case that an error should occur here is if the wait was
+           * awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&spi->spisem);
+      (void)nxsem_post(&spi->spisem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1513,33 +1520,27 @@ static void spi_exchange(struct spi_dev_s *dev, const void *txbuffer,
 
       ret = wd_start(spics->dmadog, DMA_TIMEOUT_TICKS,
                      (wdentry_t)spi_dmatimeout, 1, (uint32_t)spics);
-      if (ret != OK)
+      if (ret < 0)
         {
            spierr("ERROR: wd_start failed: %d\n", ret);
         }
 
       /* Wait for the DMA complete */
 
-      ret = sem_wait(&spics->dmawait);
+      ret = nxsem_wait(&spics->dmawait);
 
       /* Cancel the watchdog timeout */
 
       (void)wd_cancel(spics->dmadog);
 
-      /* Check if we were awakened by an error of some kind */
+      /* Check if we were awakened by an error of some kind.  EINTR is not a
+       * failure.  It simply means that the wait was awakened by a signal.
+       */
 
-      if (ret < 0)
+      if (ret < 0 && ret != -EINTR)
         {
-          /* EINTR is not a failure.  That simply means that the wait
-           * was awakened by a signel.
-           */
-
-          int errorcode = errno;
-          if (errorcode != EINTR)
-            {
-              DEBUGPANIC();
-              return;
-            }
+          DEBUGPANIC();
+          return;
         }
 
       /* Not that we might be awkened before the wait is over due to
@@ -1637,7 +1638,7 @@ static void spi_recvblock(struct spi_dev_s *dev, void *buffer, size_t nwords)
  * Description:
  *   Initialize the selected SPI port
  *
- * Input Parameter:
+ * Input Parameters:
  *   cs - Chip select number (identifying the "logical" SPI port)
  *
  * Returned Value:
@@ -1806,7 +1807,7 @@ struct spi_dev_s *sam_spibus_initialize(int port)
        * access to the SPI registers.
        */
 
-      sem_init(&spi->spisem, 0, 1);
+      nxsem_init(&spi->spisem, 0, 1);
       spi->initialized = true;
 
 #ifdef CONFIG_SAMA5_SPI_DMA
@@ -1815,8 +1816,8 @@ struct spi_dev_s *sam_spibus_initialize(int port)
        * signaling and, hence, should not have priority inheritance enabled.
        */
 
-      sem_init(&spics->dmawait, 0, 0);
-      sem_setprotocol(&spics->dmawait, SEM_PRIO_NONE);
+      nxsem_init(&spics->dmawait, 0, 0);
+      nxsem_setprotocol(&spics->dmawait, SEM_PRIO_NONE);
 
       /* Create a watchdog time to catch DMA timeouts */
 

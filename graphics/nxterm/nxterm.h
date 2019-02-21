@@ -45,8 +45,8 @@
 #include <stdint.h>
 #include <semaphore.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/fs.h>
-
 #include <nuttx/nx/nx.h>
 #include <nuttx/nx/nxtk.h>
 #include <nuttx/nx/nxfonts.h>
@@ -190,8 +190,8 @@ extern const struct file_operations g_nxterm_drvrops;
 int nxterm_semwait(FAR struct nxterm_state_s *priv);
 int nxterm_sempost(FAR struct nxterm_state_s *priv);
 #else
-#  define nxterm_semwait(p) sem_wait(&p->exclsem)
-#  define nxterm_sempost(p) sem_post(&p->exclsem)
+#  define nxterm_semwait(p) nxsem_wait(&p->exclsem)
+#  define nxterm_sempost(p) nxsem_post(&p->exclsem)
 #endif
 
 /* Common device registration */

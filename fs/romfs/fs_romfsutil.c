@@ -1,7 +1,7 @@
 /****************************************************************************
  * rm/romfs/fs_romfsutil.c
  *
- *   Copyright (C) 2008-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2009, 2013, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References: Linux/Documentation/filesystems/romfs.txt
@@ -62,25 +62,9 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: romfs_swap32
- *
- * Desciption:
- *   Convert the 32-bit big endian value to little endian
- *
- ****************************************************************************/
-
-#ifndef CONFIG_ENDIAN_BIG
-static inline uint32_t romfs_swap32(uint32_t value)
-{
-  return ((((value) & 0x000000ff) << 24) | (((value) & 0x0000ff00) << 8) |
-          (((value) & 0x00ff0000) >>  8) | (((value) & 0xff000000) >> 24));
-}
-#endif
-
-/****************************************************************************
  * Name: romfs_devread32
  *
- * Desciption:
+ * Description:
  *   Read the big-endian 32-bit value from the mount device buffer
  *
  * Assumption:
@@ -90,22 +74,16 @@ static inline uint32_t romfs_swap32(uint32_t value)
 
 static uint32_t romfs_devread32(struct romfs_mountpt_s *rm, int ndx)
 {
-  /* Extract the value */
-
-  uint32_t value = *(FAR uint32_t *)&rm->rm_buffer[ndx];
-
-  /* Value is begin endian -- return the native host endian-ness. */
-#ifdef CONFIG_ENDIAN_BIG
-  return value;
-#else
-  return romfs_swap32(value);
-#endif
+  return ((((uint32_t)rm->rm_buffer[ndx]     & 0xff) << 24) |
+          (((uint32_t)rm->rm_buffer[ndx + 1] & 0xff) << 16) |
+          (((uint32_t)rm->rm_buffer[ndx + 2] & 0xff) << 8) |
+           ((uint32_t)rm->rm_buffer[ndx + 3] & 0xff));
 }
 
 /****************************************************************************
  * Name: romfs_checkentry
  *
- * Desciption:
+ * Description:
  *   Check if the entry at offset is a directory or file path segment
  *
  ****************************************************************************/
@@ -181,7 +159,7 @@ static inline int romfs_checkentry(struct romfs_mountpt_s *rm,
 /****************************************************************************
  * Name: romfs_devcacheread
  *
- * Desciption:
+ * Description:
  *   Read the specified sector for specified offset into the sector cache.
  *   Return the index into the sector corresponding to the offset
  *
@@ -234,7 +212,7 @@ int16_t romfs_devcacheread(struct romfs_mountpt_s *rm, uint32_t offset)
 /****************************************************************************
  * Name: romfs_followhardlinks
  *
- * Desciption:
+ * Description:
  *   Given the offset to a file header, check if the file is a hardlink.
  *   If so, traverse the hard links until the terminal, non-linked header
  *   so found and return that offset.
@@ -280,7 +258,7 @@ static int romfs_followhardlinks(struct romfs_mountpt_s *rm, uint32_t offset,
 /****************************************************************************
  * Name: romfs_searchdir
  *
- * Desciption:
+ * Description:
  *   This is part of the romfs_finddirentry log.  Search the directory
  *   beginning at dirinfo->fr_firstoffset for entryname.
  *
@@ -353,16 +331,21 @@ static inline int romfs_searchdir(struct romfs_mountpt_s *rm,
 
 void romfs_semtake(struct romfs_mountpt_s *rm)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&rm->rm_sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&rm->rm_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(*get_errno_ptr() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -371,13 +354,13 @@ void romfs_semtake(struct romfs_mountpt_s *rm)
 
 void romfs_semgive(struct romfs_mountpt_s *rm)
 {
-   sem_post(&rm->rm_sem);
+   nxsem_post(&rm->rm_sem);
 }
 
 /****************************************************************************
  * Name: romfs_hwread
  *
- * Desciption: Read the specified sector into the sector buffer
+ * Description: Read the specified sector into the sector buffer
  *
  ****************************************************************************/
 
@@ -427,7 +410,7 @@ int romfs_hwread(struct romfs_mountpt_s *rm, uint8_t *buffer, uint32_t sector,
 /****************************************************************************
  * Name: romfs_filecacheread
  *
- * Desciption:
+ * Description:
  *   Read the specified sector into the sector cache
  *
  ****************************************************************************/
@@ -483,7 +466,7 @@ int romfs_filecacheread(struct romfs_mountpt_s *rm, struct romfs_file_s *rf,
 /****************************************************************************
  * Name: romfs_hwconfigure
  *
- * Desciption:
+ * Description:
  *   This function is called as part of the ROMFS mount operation   It
  *   configures the ROMFS filestem for use on this block driver.  This includes
  *   the accounting for the geometry of the device, setting up any XIP modes
@@ -556,7 +539,7 @@ int romfs_hwconfigure(struct romfs_mountpt_s *rm)
 /****************************************************************************
  * Name: romfs_fsconfigure
  *
- * Desciption:
+ * Description:
  *   This function is called as part of the ROMFS mount operation   It
  *   sets up the mount structure to include configuration information contained
  *   in the ROMFS header.  This is the place where we actually determine if
@@ -604,7 +587,7 @@ int romfs_fsconfigure(struct romfs_mountpt_s *rm)
 /****************************************************************************
  * Name: romfs_fileconfigure
  *
- * Desciption:
+ * Description:
  *   This function is called as part of the ROMFS file open operation   It
  *   sets up the file structure to handle buffer appropriately, depending
  *   upon XIP mode or not.
@@ -645,7 +628,7 @@ int romfs_fileconfigure(struct romfs_mountpt_s *rm, struct romfs_file_s *rf)
 /****************************************************************************
  * Name: romfs_checkmount
  *
- * Desciption: Check if the mountpoint is still valid.
+ * Description: Check if the mountpoint is still valid.
  *
  *   The caller should hold the mountpoint semaphore
  *
@@ -689,7 +672,7 @@ int romfs_checkmount(struct romfs_mountpt_s *rm)
 /****************************************************************************
  * Name: romfs_finddirentry
  *
- * Desciption:
+ * Description:
  *   Given a path to something that may or may not be in the file system,
  *   return the directory entry of the item.
  *
@@ -788,7 +771,7 @@ int romfs_finddirentry(struct romfs_mountpt_s *rm,
 /****************************************************************************
  * Name: romfs_parsedirentry
  *
- * Desciption:
+ * Description:
  *   Return the directory entry at this offset.  If rf is NULL, then the
  *   mount device resources are used.  Otherwise, file resources are used.
  *
@@ -842,7 +825,7 @@ int romfs_parsedirentry(struct romfs_mountpt_s *rm, uint32_t offset,
 /****************************************************************************
  * Name: romfs_parsefilename
  *
- * Desciption:
+ * Description:
  *   Return the filename from directory entry at this offset
  *
  ****************************************************************************/
@@ -909,7 +892,7 @@ int romfs_parsefilename(struct romfs_mountpt_s *rm, uint32_t offset,
 /****************************************************************************
  * Name: romfs_datastart
  *
- * Desciption:
+ * Description:
  *   Given the offset to a file header, return the offset to the start of
  *   the file data
  *

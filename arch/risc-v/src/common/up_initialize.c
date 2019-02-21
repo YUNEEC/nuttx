@@ -44,6 +44,9 @@
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
 #include <nuttx/mm/iob.h>
+#include <nuttx/serial/pty.h>
+#include <nuttx/syslog/syslog.h>
+#include <nuttx/drivers/drivers.h>
 
 #include <arch/board/board.h>
 
@@ -53,31 +56,6 @@
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: up_calibratedelay
- *
- * Description:
- *   Delay loops are provided for short timing loops.  This function, if
- *   enabled, will just wait for 100 seconds.  Using a stopwatch, you can
- *   can then determine if the timing loops are properly calibrated.
- *
- ****************************************************************************/
-
-#if defined(CONFIG_ARCH_CALIBRATION) && defined(CONFIG_DEBUG)
-static void up_calibratedelay(void)
-{
-  int i;
-  lldbg("Beginning 100s delay\n");
-  for (i = 0; i < 100; i++)
-    {
-      up_mdelay(1000);
-    }
-  lldbg("End 100s delay\n");
-}
-#else
-# define up_calibratedelay()
-#endif
 
 /****************************************************************************
  * Name: up_color_intstack
@@ -128,10 +106,6 @@ static inline void up_color_intstack(void)
 
 void up_initialize(void)
 {
-  /* Calibrate the timing loop */
-
-  up_calibratedelay();
-
   /* Colorize the interrupt stack */
 
   up_color_intstack();
@@ -182,17 +156,25 @@ void up_initialize(void)
 
 #if defined(CONFIG_DEV_LOWCONSOLE)
   lowconsole_init();
-#elif defined(CONFIG_SYSLOG_CONSOLE)
+#elif defined(CONFIG_CONSOLE_SYSLOG)
   syslog_console_init();
 #elif defined(CONFIG_RAMLOG_CONSOLE)
   ramlog_consoleinit();
 #endif
 
-  /* Initialize the system logging device */
+#if CONFIG_NFILE_DESCRIPTORS > 0 && defined(CONFIG_PSEUDOTERM_SUSV1)
+  /* Register the master pseudo-terminal multiplexor device */
 
-#ifdef CONFIG_SYSLOG_CHAR
-  syslog_initialize();
+  (void)ptmx_register();
 #endif
+
+  /* Early initialization of the system logging device.  Some SYSLOG channel
+   * can be initialized early in the initialization sequence because they
+   * depend on only minimal OS initialization.
+   */
+
+  syslog_initialize(SYSLOG_INIT_EARLY);
+
 #ifdef CONFIG_RAMLOG_SYSLOG
   ramlog_sysloginit();
 #endif

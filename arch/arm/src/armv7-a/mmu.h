@@ -897,7 +897,7 @@ struct section_mapping_s
  * Description:
  *   Disable the MMU
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
  ************************************************************************************/
@@ -919,7 +919,7 @@ struct section_mapping_s
  *   instruction that performs the operation. Software does not have to write a
  *   value to the register before issuing the MCR instruction.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
  ************************************************************************************/
@@ -934,14 +934,18 @@ struct section_mapping_s
  * Description:
  *   Invalidate unified TLB entry by MVA all ASID Inner Shareable
  *
- * Inputs:
+ * Input Parameters:
  *   vaddr - The virtual address to be invalidated
  *
  ************************************************************************************/
 
 	.macro	cp15_invalidate_tlb_bymva, vaddr
 	dsb
+#if defined(CONFIG_ARCH_CORTEXA8)
+	mcr		p15, 0, \vaddr, c8, c7, 1	/* TLBIMVA */
+#else
 	mcr		p15, 0, \vaddr, c8, c3, 3	/* TLBIMVAAIS */
+#endif
 	dsb
 	isb
 	.endm
@@ -952,7 +956,7 @@ struct section_mapping_s
  * Description:
  *   Write the Domain Access Control Register (DACR)
  *
- * Inputs:
+ * Input Parameters:
  *   dacr - The new value of the DACR
  *
  ************************************************************************************/
@@ -970,7 +974,7 @@ struct section_mapping_s
 	.endm
 
 /************************************************************************************
- * Name: cp14_wrttb
+ * Name: cp15_wrttb
  *
  * Description:
  *   The ARMv7-aA architecture supports two translation tables.  This
@@ -979,12 +983,12 @@ struct section_mapping_s
  *   Table Base Register 0 (TTBR0).  Then it clears the TTB control
  *   register (TTBCR), indicating that we are using TTBR0.
  *
- * Inputs:
+ * Input Parameters:
  *   ttb - The new value of the TTBR0 register
  *
  ************************************************************************************/
 
-	.macro	cp14_wrttb, ttb, scratch
+	.macro	cp15_wrttb, ttb, scratch
 	mcr		p15, 0, \ttb, c2, c0, 0
 	nop
 	nop
@@ -1012,7 +1016,7 @@ struct section_mapping_s
  *      ldr	r3, =MMUFLAGS			<-- L2 MMU flags
  *	pg_l2map r0, r1, r2, r3, r4
  *
- * Inputs:
+ * Input Parameters:
  *   l2 - Physical or virtual start address in the L2 page table, depending
  *        upon the context. (modified)
  *   ppage - The physical address of the start of the region to span. Must
@@ -1083,7 +1087,7 @@ struct section_mapping_s
  *	ldr	r4, =MMU_L1_PGTABFLAGS		<-- L1 MMU flags
  *	pg_l1span r0, r1, r2, r3, r4, r4
  *
- * Inputs (unmodified unless noted):
+ * Input Parameters (unmodified unless noted):
  *   l1 - Physical or virtual address in the L1 table to begin writing (modified)
  *   l2 - Physical start address in the L2 page table (modified)
  *   npages - Number of pages to required to span that memory region (modified)
@@ -1097,7 +1101,7 @@ struct section_mapping_s
  *   ppage - After the first page, this will be the full number of pages.
  *   tmp - scratch
  *
- * Return:
+ * Returned Value:
  *   Nothing of interest.
  *
  * Assumptions:
@@ -1159,7 +1163,7 @@ struct section_mapping_s
  * Description:
  *   Disable the MMU
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
  ************************************************************************************/
@@ -1188,7 +1192,7 @@ static inline void cp15_disable_mmu(void)
  *   instruction that performs the operation. Software does not have to write a
  *   value to the register before issuing the MCR instruction.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
  ************************************************************************************/
@@ -1210,7 +1214,7 @@ static inline void cp15_invalidate_tlbs(void)
  * Description:
  *   Invalidate unified TLB entry by MVA all ASID Inner Shareable
  *
- * Inputs:
+ * Input Parameters:
  *   vaddr - The virtual address to be invalidated
  *
  ************************************************************************************/
@@ -1220,7 +1224,11 @@ static inline void cp15_invalidate_tlb_bymva(uint32_t vaddr)
   __asm__ __volatile__
     (
       "\tdsb\n"
+#if defined(CONFIG_ARCH_CORTEXA8)
+      "\tmcr p15, 0, %0, c8, c7, 1\n" /* TLBIMVA */
+#else
       "\tmcr p15, 0, %0, c8, c3, 3\n" /* TLBIMVAAIS */
+#endif
       "\tdsb\n"
       "\tisb\n"
       :
@@ -1235,7 +1243,7 @@ static inline void cp15_invalidate_tlb_bymva(uint32_t vaddr)
  * Description:
  *   Write the Domain Access Control Register (DACR)
  *
- * Inputs:
+ * Input Parameters:
  *   dacr - The new value of the DACR
  *
  ************************************************************************************/
@@ -1260,7 +1268,7 @@ static inline void cp15_wrdacr(unsigned int dacr)
 }
 
 /************************************************************************************
- * Name: cp14_wrttb
+ * Name: cp15_wrttb
  *
  * Description:
  *   The ARMv7-aA architecture supports two translation tables.  This
@@ -1269,12 +1277,12 @@ static inline void cp15_wrdacr(unsigned int dacr)
  *   Table Base Register 0 (TTBR0).  Then it clears the TTB control
  *   register (TTBCR), indicating that we are using TTBR0.
  *
- * Inputs:
+ * Input Parameters:
  *   ttb - The new value of the TTBR0 register
  *
  ************************************************************************************/
 
-static inline void cp14_wrttb(unsigned int ttb)
+static inline void cp15_wrttb(unsigned int ttb)
 {
   __asm__ __volatile__
     (

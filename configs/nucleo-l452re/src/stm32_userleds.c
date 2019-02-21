@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/nucleo-l452re/src/stm32_userleds.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,6 @@
 #include <stdbool.h>
 #include <debug.h>
 
-#include <arch/board/board.h>
 #include <nuttx/power/pm.h>
 
 #include "chip.h"
@@ -51,6 +50,8 @@
 #include "up_internal.h"
 #include "stm32l4_gpio.h"
 #include "nucleo-l452re.h"
+
+#include <arch/board/board.h>
 
 #ifndef CONFIG_ARCH_LEDS
 
@@ -181,9 +182,9 @@ void board_userled_initialize(void)
 
 void board_userled(int led, bool ledon)
 {
-  if (led == 1)
+  if (led == BOARD_LD2)
     {
-      stm32l4_gpiowrite(GPIO_LD2, ldeon);
+      stm32l4_gpiowrite(GPIO_LD2, ledon);
     }
 }
 
@@ -193,10 +194,7 @@ void board_userled(int led, bool ledon)
 
 void board_userled_all(uint8_t ledset)
 {
-  if (led == 1)
-    {
-      stm32l4_gpiowrite(GPIO_LD2, (ledset & BOARD_LD2_BIT) != 0);
-    }
+  stm32l4_gpiowrite(GPIO_LD2, (ledset & BOARD_LD2_BIT) != 0);
 }
 
 /****************************************************************************

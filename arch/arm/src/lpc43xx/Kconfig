@@ -142,7 +142,7 @@ config LPC43_BOOT_FLASHA
 	bool "Running in internal FLASHA"
 
 config LPC43_BOOT_FLASHB
-	bool "Running in internal FLASHA"
+	bool "Running in internal FLASHB"
 
 config LPC43_BOOT_CS0FLASH
 	bool "Running in external FLASH CS0"
@@ -172,11 +172,11 @@ config LPC43_ATIMER
 	bool "Alarm timer"
 	default n
 
-config LPC43_CAN1
-	bool "C_CAN1"
+config LPC43_CAN0
+	bool "C_CAN0"
 	default n
 
-config LPC43_CAN2
+config LPC43_CAN1
 	bool "C_CAN1"
 	default n
 
@@ -254,6 +254,8 @@ config LPC43_SCT
 config LPC43_SDMMC
 	bool "SD/MMC"
 	default n
+	select ARCH_HAVE_SDIO
+	select SDIO_BLOCKSETUP
 
 config LPC43_SPI
 	bool "SPI"
@@ -337,19 +339,6 @@ config LPC43_WWDT
 	default n
 
 endmenu # LPC43xx Peripheral Support
-
-menu "ADC driver options"
-	depends on LPC43_ADC0 || LPC43_ADC1
-
-config ADC0_MASK
-	hex "ADC0 mask"
-	default 0x01
-
-config ADC0_FREQ
-	int "ADC0 frequency"
-	default 4500000
-
-endmenu # ADC driver options
 
 config LPC43_GPIO_IRQ
 	bool "GPIO interrupt support"
@@ -438,7 +427,7 @@ config LPC43_EXTSDRAM1
 	depends on ARCH_HAVE_EXTSDRAM1
 	select ARCH_HAVE_EXTSDRAM
 	---help---
-		Configure external SDRAM memoryand, if applicable, map then external
+		Configure external SDRAM memory, if applicable, map then external
 		SDRAM into the memory map.
 
 if LPC43_EXTSDRAM1
@@ -463,7 +452,7 @@ config LPC43_EXTSDRAM2
 	depends on ARCH_HAVE_EXTSDRAM2
 	select ARCH_HAVE_EXTSDRAM
 	---help---
-		Configure external SDRAM memoryand, if applicable, map then external
+		Configure external SDRAM memory, if applicable, map then external
 		SDRAM into the memory map.
 
 if LPC43_EXTSDRAM2
@@ -488,7 +477,7 @@ config LPC43_EXTSDRAM3
 	depends on ARCH_HAVE_EXTSDRAM3
 	select ARCH_HAVE_EXTSDRAM
 	---help---
-		Configure external SDRAM memoryand, if applicable, map then external
+		Configure external SDRAM memory, if applicable, map then external
 		SDRAM into the memory map.
 
 if LPC43_EXTSDRAM3
@@ -508,6 +497,32 @@ config LPC43_EXTSDRAM3_HEAP
 endif # LCP43_EXTSDRAM3
 
 endmenu # External Memory Configuration
+
+menu "SD/MMC Configuration"
+	depends on LPC43_SDMMC
+
+config LPC43_SDMMC_PWRCTRL
+	bool "Power-enable pin"
+	default n
+	---help---
+		Select if the board supports a power-enable pin that must be selected
+		to provide power to the SD card.
+
+config LPC43_SDMMC_DMA
+	bool "Support DMA data transfers"
+	default y
+	select SDIO_DMA
+	---help---
+		Support DMA data transfers.
+
+config LPC43_SDMMC_REGDEBUG
+		bool "Register level debug"
+		default n
+		depends on DEBUG_MEMCARD_INFO
+		---help---
+				Output detailed register-level SD/MMC debug information.
+
+endmenu # SD/MMC Configuration
 
 menu "Ethernet MAC configuration"
 	depends on LPC43_ETHERNET
@@ -643,26 +658,6 @@ config LPC43_RMII
 	bool
 	default y if !LPC43_MII
 
-choice
-	prompt "Work queue"
-	default LPC43_ETHERNET_LPWORK if SCHED_LPWORK
-	default LPC43_ETHERNET_HPWORK if !SCHED_LPWORK && SCHED_HPWORK
-	depends on SCHED_WORKQUEUE
-	---help---
-		Work queue support is required to use the Ethernet driver.  If the
-		low priority work queue is available, then it should be used by the
-		driver.
-
-config LPC43_ETHERNET_HPWORK
-	bool "High priority"
-	depends on SCHED_HPWORK
-
-config LPC43_ETHERNET_LPWORK
-	bool "Low priority"
-	depends on SCHED_LPWORK
-
-endchoice # Work queue
-
 config LPC43_ETHERNET_REGDEBUG
 	bool "Register-Level Debug"
 	default n
@@ -671,6 +666,19 @@ config LPC43_ETHERNET_REGDEBUG
 		Enable very low-level register access debug.  Depends on CONFIG_DEBUG_NET_INFO.
 
 endmenu # Ethernet MAC configuration
+
+menu "ADC driver options"
+	depends on LPC43_ADC0 || LPC43_ADC1
+
+config LPC43_ADC0_MASK
+	hex "ADC0 mask"
+	default 0x01
+
+config LPC43_ADC0_FREQ
+	int "ADC0 frequency"
+	default 4500000
+
+endmenu # ADC driver options
 
 menu "RS-485 Configuration"
 if LPC43_USART0
@@ -761,6 +769,45 @@ config LPC43_I2C0_SUPERFAST
 
 endmenu # I2C Configution
 endif # LPC43_I2C0
+
+menu "CAN driver options"
+	depends on LPC43_CAN0 || LPC43_CAN1
+
+config LPC43_CAN0_BAUD
+	int "CAN0 BAUD"
+	depends on LPC43_CAN0
+	default 1000000
+	---help---
+		CAN0 BAUD rate.
+
+config LPC43_CAN1_BAUD
+	int "CAN1 BAUD"
+	depends on LPC43_CAN1
+	default 1000000
+	---help---
+		CAN1 BAUD rate.
+
+config LPC43_CAN_TSEG1
+	int "TSEG1 quanta"
+	default 12
+	---help---
+		The number of CAN time quanta in segment 1. Default: 6
+
+config LPC43_CAN_TSEG2
+	int "TSEG2 quanta"
+	default 4
+	---help---
+		The number of CAN time quanta in segment 2. Default: 7
+
+config LPC43_CAN_REGDEBUG
+	bool "Register level debug"
+	depends on DEBUG_CAN_INFO
+	default n
+	---help---
+		Output detailed register-level CAN debug information.  Requires also
+		CONFIG_DEBUG_CAN_INFO.
+
+endmenu # CAN driver options
 
 if LPC43_USBOTG && USBHOST
 menu "USB host controller driver (HCD) options"

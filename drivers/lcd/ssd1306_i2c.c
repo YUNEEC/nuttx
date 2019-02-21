@@ -64,7 +64,7 @@
  *
  ****************************************************************************/
 
-void ssd1306_sendbyte(FAR struct ssd1306_dev_s *priv, uint8_t regval)
+int ssd1306_sendbyte(FAR struct ssd1306_dev_s *priv, uint8_t regval)
 {
   /* 8-bit data read sequence:
    *
@@ -102,6 +102,8 @@ void ssd1306_sendbyte(FAR struct ssd1306_dev_s *priv, uint8_t regval)
     {
       lcderr("ERROR: I2C_TRANSFER failed: %d\n", ret);
     }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -112,7 +114,7 @@ void ssd1306_sendbyte(FAR struct ssd1306_dev_s *priv, uint8_t regval)
  *
  ****************************************************************************/
 
-void ssd1306_sendblk(FAR struct ssd1306_dev_s *priv, uint8_t *data, uint8_t len)
+int ssd1306_sendblk(FAR struct ssd1306_dev_s *priv, uint8_t *data, uint8_t len)
 {
   struct i2c_msg_s msg[2];
   uint8_t transfer_mode;
@@ -137,7 +139,7 @@ void ssd1306_sendblk(FAR struct ssd1306_dev_s *priv, uint8_t *data, uint8_t len)
 
   msg[1].frequency = CONFIG_SSD1306_I2CFREQ;  /* I2C frequency */
   msg[1].addr      = priv->addr;              /* 7-bit address */
-  msg[1].flags     = I2C_M_NORESTART;         /* Write transaction with no RESTART */
+  msg[1].flags     = I2C_M_NOSTART;           /* Write transaction with no RESTART */
   msg[1].buffer    = data;                    /* Transfer from this address */
   msg[1].length    = len;                     /* Send the data, then STOP */
 
@@ -146,6 +148,8 @@ void ssd1306_sendblk(FAR struct ssd1306_dev_s *priv, uint8_t *data, uint8_t len)
     {
       lcderr("ERROR: I2C_TRANSFER failed: %d\n", ret);
     }
+
+  return ret;
 }
 
 #endif /* CONFIG_LCD_SSD1306 &7 CONFIG_LCD_SSD1306_I2C */

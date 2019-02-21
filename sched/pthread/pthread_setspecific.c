@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/pthread/pthread_setspecific.c
  *
- *   Copyright (C) 2007-2009, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,11 +68,11 @@
  *   after a key has been deleted with pthread_key_delete()
  *   is undefined.
  *
- * Parameters:
+ * Input Parameters:
  *   key = The data key to get or set
  *   value = The value to bind to the key.
  *
- * Return Value:
+ * Returned Value:
  *   If successful, pthread_setspecific() will return zero (OK).
  *   Otherwise, an error number will be returned:
  *
@@ -95,16 +95,15 @@
 int pthread_setspecific(pthread_key_t key, FAR const void *value)
 {
 #if CONFIG_NPTHREAD_KEYS > 0
-  FAR struct pthread_tcb_s *rtcb = (FAR struct pthread_tcb_s *)this_task();
-  FAR struct task_group_s *group = rtcb->cmn.group;
+  FAR struct tcb_s *rtcb = this_task();
+  FAR struct task_group_s *group = rtcb->group;
   int ret = EINVAL;
 
-  DEBUGASSERT(group &&
-              (rtcb->cmn.flags & TCB_FLAG_TTYPE_MASK) == TCB_FLAG_TTYPE_PTHREAD);
+  DEBUGASSERT(group != NULL && (unsigned)key < CONFIG_NPTHREAD_KEYS);
 
   /* Check if the key is valid. */
 
-  if (key < group->tg_nkeys)
+  if (key < CONFIG_NPTHREAD_KEYS && (group->tg_keyset & (1 << key)) != 0)
     {
       /* Store the data in the TCB. */
 

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/timers/rtc.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
 #include <errno.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/timers/rtc.h>
 
@@ -53,7 +54,7 @@
  * Private Types
  ****************************************************************************/
 
-#ifdef CONFIG_RTC_ALARM
+#if defined(CONFIG_RTC_ALARM) || defined(CONFIG_RTC_PERIODIC)
 struct rtc_alarminfo_s
 {
   bool active;            /* True: alarm is active */
@@ -79,6 +80,12 @@ struct rtc_upperhalf_s
 
   struct rtc_alarminfo_s alarminfo[CONFIG_RTC_NALARMS];
 #endif
+
+#ifdef CONFIG_RTC_PERIODIC
+  /* Currently only one periodic wakeup is supported. */
+
+  struct rtc_alarminfo_s periodicinfo;
+#endif
 };
 
 /****************************************************************************
@@ -93,6 +100,10 @@ static void    rtc_destroy(FAR struct rtc_upperhalf_s *upper);
 
 #ifdef CONFIG_RTC_ALARM
 static void    rtc_alarm_callback(FAR void *priv, int id);
+#endif
+
+#ifdef CONFIG_RTC_PERIODIC
+static void    rtc_periodic_callback(FAR void *priv, int id);
 #endif
 
 /* Character driver methods */
@@ -149,8 +160,7 @@ static const struct file_operations rtc_fops =
 static void rtc_destroy(FAR struct rtc_upperhalf_s *upper)
 {
   /* If the lower half driver provided a destroy method, then call that
-   * method now in order order to clean up resources used by the lower-half
-   * driver.
+   * method now in order to clean up resources used by the lower-half driver.
    */
 
   DEBUGASSERT(upper->lower && upper->lower->ops);
@@ -178,21 +188,58 @@ static void rtc_alarm_callback(FAR void *priv, int alarmid)
   DEBUGASSERT(upper != NULL && alarmid >= 0 && alarmid < CONFIG_RTC_NALARMS);
   alarminfo = &upper->alarminfo[alarmid];
 
-  /* Do we think that the alaram is active?  It might be due to some
+  /* Do we think that the alarm is active?  It might be due to some
    * race condition between a cancellation event and the alarm
    * expiration.
    */
 
   if (alarminfo->active)
     {
-      /* Yes.. signal the alarm expriration */
+      /* Yes.. signal the alarm expiration */
 
 #ifdef CONFIG_CAN_PASS_STRUCTS
-      (void)sigqueue(alarminfo->pid, alarminfo->signo,
-                     alarminfo->sigvalue);
+      (void)nxsig_queue(alarminfo->pid, alarminfo->signo,
+                        alarminfo->sigvalue);
 #else
-      (void)sigqueue(alarminfo->pid, alarminfo->signo,
-                     alarminfo->sigvalue->sival_ptr);
+      (void)nxsig_queue(alarminfo->pid, alarminfo->signo,
+                        alarminfo->sigvalue->sival_ptr);
+#endif
+    }
+
+  /* The alarm is no longer active */
+
+  alarminfo->active = false;
+}
+#endif
+
+/****************************************************************************
+ * Name: rtc_periodic_callback
+ ****************************************************************************/
+
+#ifdef CONFIG_RTC_PERIODIC
+static void rtc_periodic_callback(FAR void *priv, int alarmid)
+{
+  FAR struct rtc_upperhalf_s *upper = (FAR struct rtc_upperhalf_s *)priv;
+  FAR struct rtc_alarminfo_s *alarminfo;
+
+  DEBUGASSERT(upper != NULL && alarmid >= 0);
+  alarminfo = &upper->periodicinfo;
+
+  /* Do we think that the alarm is active?  It might be due to some
+   * race condition between a cancellation event and the alarm
+   * expiration.
+   */
+
+  if (alarminfo->active)
+    {
+      /* Yes.. signal the alarm expiration */
+
+#ifdef CONFIG_CAN_PASS_STRUCTS
+      (void)nxsig_queue(alarminfo->pid, alarminfo->signo,
+                        alarminfo->sigvalue);
+#else
+      (void)nxsig_queue(alarminfo->pid, alarminfo->signo,
+                        alarminfo->sigvalue->sival_ptr);
 #endif
     }
 
@@ -445,7 +492,6 @@ static int rtc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
      *           new relative alarm time to be set.
      */
 
-
     case RTC_SET_RELATIVE:
       {
         FAR const struct rtc_setrelative_s *alarminfo =
@@ -512,7 +558,7 @@ static int rtc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       }
       break;
 
-    /* RTC_WKALRM_CANCEL cancel the alarm.
+    /* RTC_CANCEL_ALARM cancel the alarm.
      *
      * Argument: An ALARM ID value that indicates which alarm should be
      *           canceled.
@@ -520,12 +566,20 @@ static int rtc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
     case RTC_CANCEL_ALARM:
       {
+        FAR struct rtc_alarminfo_s *upperinfo;
         int alarmid = (int)arg;
 
         DEBUGASSERT(alarmid >= 0 && alarmid < CONFIG_RTC_NALARMS);
+
+        upperinfo = &upper->alarminfo[alarmid];
+
         if (ops->cancelalarm)
           {
             ret = ops->cancelalarm(upper->lower, alarmid);
+            if (ret == OK)
+              {
+                upperinfo->active = false;
+              }
           }
       }
       break;
@@ -564,6 +618,105 @@ static int rtc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       }
       break;
 #endif /* CONFIG_RTC_ALARM */
+
+#ifdef CONFIG_RTC_PERIODIC
+    /* RTC_SET_PERIODIC set a periodic wakeup.
+     *
+     * Argument: A read-only reference to a struct rtc_setperiodic_s containing the
+     *           new wakeup period to be set.
+     */
+
+    case RTC_SET_PERIODIC:
+      {
+        FAR const struct rtc_setperiodic_s *alarminfo =
+          (FAR const struct rtc_setperiodic_s *)((uintptr_t)arg);
+        FAR struct rtc_alarminfo_s *upperinfo;
+        struct lower_setperiodic_s lowerinfo;
+        int id;
+
+        DEBUGASSERT(alarminfo != NULL);
+        id = alarminfo->id;
+        DEBUGASSERT(id >= 0);
+
+        /* Is the alarm active? */
+
+        upperinfo = &upper->periodicinfo;
+        if (upperinfo->active)
+          {
+            /* Yes, cancel it */
+
+            if (ops->cancelperiodic)
+              {
+                (void)ops->cancelperiodic(upper->lower, id);
+              }
+
+            upperinfo->active = false;
+          }
+
+        if (ops->setperiodic)
+          {
+            pid_t pid;
+
+            /* A PID of zero means to signal the calling task */
+
+            pid = alarminfo->pid;
+            if (pid == 0)
+              {
+                pid = getpid();
+              }
+
+            /* Save the signal info to be used to notify the caller when the
+             * alarm expires.
+             */
+
+            upperinfo->active   = true;
+            upperinfo->signo    = alarminfo->signo;
+            upperinfo->pid      = pid;
+            upperinfo->sigvalue = alarminfo->sigvalue;
+
+            /* Format the alarm info needed by the lower half driver. */
+
+            lowerinfo.id        = id;
+            lowerinfo.cb        = rtc_periodic_callback;
+            lowerinfo.priv      = (FAR void *)upper;
+            lowerinfo.period    = alarminfo->period;
+
+            /* Then set the periodic wakeup. */
+
+            ret = ops->setperiodic(upper->lower, &lowerinfo);
+            if (ret < 0)
+              {
+                upperinfo->active = false;
+              }
+          }
+      }
+      break;
+
+    /* RTC_CANCEL_PERIODIC cancel the periodic wakeup.
+     *
+     * Argument: An ID value that indicates which wakeup should be canceled.
+     */
+
+    case RTC_CANCEL_PERIODIC:
+      {
+        FAR struct rtc_alarminfo_s *upperinfo;
+        int id = (int)arg;
+
+        DEBUGASSERT(id >= 0);
+
+        upperinfo = &upper->periodicinfo;
+
+        if (ops->cancelperiodic)
+          {
+            ret = ops->cancelperiodic(upper->lower, id);
+            if (ret == OK)
+              {
+                upperinfo->active = false;
+              }
+          }
+      }
+      break;
+#endif /* CONFIG_RTC_PERIODIC */
 
     /* Forward any unrecognized IOCTLs to the lower half driver... they
      * may represent some architecture-specific command.
@@ -630,7 +783,7 @@ static int rtc_unlink(FAR struct inode *inode)
  *   provided to this function.  The resulting RTC driver will be registered
  *   at /dev/rtcN where N is the minor number provided to this function.
  *
- * Input parameters:
+ * Input Parameters:
  *   minor - The minor number of the RTC device.  The N in /dev/rtcN
  *   lower - The lower half driver instance.
  *

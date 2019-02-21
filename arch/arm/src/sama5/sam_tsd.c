@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/sama5/sam_tsd.c
  *
- *   Copyright (C) 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -270,7 +270,7 @@ static void sam_tsd_notify(struct sam_tsd_s *priv)
        * is no longer available.
        */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   /* If there are threads waiting on poll() for touchscreen data to become available,
@@ -287,7 +287,7 @@ static void sam_tsd_notify(struct sam_tsd_s *priv)
         {
           fds->revents |= POLLIN;
           iinfo("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 #endif
@@ -383,7 +383,7 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv, struct sam_sample_s *sampl
 
       iinfo("Waiting..\n");
       priv->nwaiters++;
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
       priv->nwaiters--;
 
       if (ret < 0)
@@ -392,9 +392,8 @@ static int sam_tsd_waitsample(struct sam_tsd_s *priv, struct sam_sample_s *sampl
            * the failure now.
            */
 
-          ierr("ERROR: sem_wait: %d\n", errno);
-          DEBUGASSERT(errno == EINTR);
-          ret = -EINTR;
+          ierr("ERROR: nxsem_wait: %d\n", ret);
+          DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
           goto errout;
         }
     }
@@ -433,7 +432,7 @@ errout:
  *   The ADC hardware can filter the touchscreen samples by averaging.  The
  *   function selects (or de-selects) that filtering.
  *
- * Input Parameters
+ * Input Parameters:
  *   priv - The touchscreen private data structure
  *   tsav - The new (shifted) value of the TSAV field of the ADC TSMR regsiter.
  *
@@ -495,7 +494,7 @@ static void sam_tsd_setaverage(struct sam_tsd_s *priv, uint32_t tsav)
  *   will re-enable TSD interrupts when it completes processing all pending
  *   TSD events.
  *
- * Input Parameters
+ * Input Parameters:
  *   arg - The touchscreen private data structure cast to (void *)
  *
  * Returned Value:
@@ -523,7 +522,7 @@ static void sam_tsd_bottomhalf(void *arg)
   uint32_t p;
   bool pendown;
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 
   /* Get the set of pending ADC interrupts and pen status */
 
@@ -598,7 +597,8 @@ static void sam_tsd_bottomhalf(void *arg)
        * this case; we rely on the timer expiry to get us going again.
        */
 
-      wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1, (uint32_t)priv);
+      (void)wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1,
+                     (uint32_t)priv);
       ier = 0;
       goto ignored;
     }
@@ -676,7 +676,8 @@ static void sam_tsd_bottomhalf(void *arg)
 
       /* Continue to sample the position while the pen is down */
 
-      wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1, (uint32_t)priv);
+      (void)wd_start(priv->wdog, TSD_WDOG_DELAY, sam_tsd_expiry, 1,
+                     (uint32_t)priv);
 
       /* Check the thresholds.  Bail if (1) this is not the first
        * measurement and (2) there is no significant difference from
@@ -1033,7 +1034,7 @@ errout:
 }
 
 /****************************************************************************
- * Name:sam_tsd_ioctl
+ * Name: sam_tsd_ioctl
  ****************************************************************************/
 
 static int sam_tsd_ioctl(struct file *filep, int cmd, unsigned long arg)
@@ -1674,8 +1675,8 @@ int sam_tsd_register(struct sam_adc_s *adc, int minor)
    * signaling and, hence, should not have priority inheritance enabled.
    */
 
-  sem_init(&priv->waitsem, 0, 0);
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_init(&priv->waitsem, 0, 0);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Register the device as an input device */
 
@@ -1696,7 +1697,7 @@ int sam_tsd_register(struct sam_adc_s *adc, int minor)
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->waitsem);
+  nxsem_destroy(&priv->waitsem);
   return ret;
 }
 
@@ -1706,7 +1707,7 @@ errout_with_priv:
  * Description:
  *   Handles ADC interrupts associated with touchscreen channels
  *
- * Input parmeters:
+ * Input Parameters:
  *   pending - Current set of pending interrupts being handled
  *
  * Returned Value:

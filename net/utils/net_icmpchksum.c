@@ -68,13 +68,13 @@
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING)
+#if defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_SOCKET)
 uint16_t icmp_chksum(FAR struct net_driver_s *dev, int len)
 {
   FAR struct icmp_iphdr_s *icmp = ICMPBUF;
   return net_chksum((FAR uint16_t *)&icmp->type, len);
 }
-#endif /* CONFIG_NET_ICMP && CONFIG_NET_ICMP_PING */
+#endif /* CONFIG_NET_ICMP && CONFIG_NET_ICMP_SOCKET */
 
 /****************************************************************************
  * Name: icmpv6_chksum
@@ -85,9 +85,9 @@ uint16_t icmp_chksum(FAR struct net_driver_s *dev, int len)
  ****************************************************************************/
 
 #ifdef CONFIG_NET_ICMPv6
-uint16_t icmpv6_chksum(FAR struct net_driver_s *dev)
+uint16_t icmpv6_chksum(FAR struct net_driver_s *dev, unsigned int iplen)
 {
-  return ipv6_upperlayer_chksum(dev, IP_PROTO_ICMP6);
+  return ipv6_upperlayer_chksum(dev, IP_PROTO_ICMP6, iplen);
 }
 #endif
 

@@ -1,7 +1,7 @@
 /****************************************************************************
  *  sched/group/group_leave.c
  *
- *   Copyright (C) 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,10 @@
 #include <nuttx/net/net.h>
 #include <nuttx/lib/lib.h>
 
+#ifdef CONFIG_BINFMT_LOADABLE
+#  include <nuttx/binfmt/binfmt.h>
+#endif
+
 #include "environ/environ.h"
 #include "signal/signal.h"
 #include "pthread/pthread.h"
@@ -67,10 +71,10 @@
  * Description:
  *   Remove a group from the list of groups.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The group to be removed.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -126,10 +130,10 @@ static void group_remove(FAR struct task_group_s *group)
  * Description:
  *   Release group resources after the last member has left the group.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The group to be removed.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:
@@ -149,7 +153,7 @@ static inline void group_release(FAR struct task_group_s *group)
 #ifndef CONFIG_DISABLE_SIGNALS
   /* Release pending signals */
 
-  sig_release(group);
+  nxsig_release(group);
 #endif
 
 #ifndef CONFIG_DISABLE_PTHREAD
@@ -190,7 +194,7 @@ static inline void group_release(FAR struct task_group_s *group)
 #ifndef CONFIG_DISABLE_MQUEUE
   /* Close message queues opened by members of the group */
 
-  mq_release(group);
+  nxmq_release(group);
 #endif
 
 #if defined(CONFIG_BUILD_KERNEL) && defined(CONFIG_MM_SHM)
@@ -260,6 +264,19 @@ static inline void group_release(FAR struct task_group_s *group)
 #  endif
 #endif
 
+#ifdef CONFIG_BINFMT_LOADABLE
+  /* If the exiting task was loaded into RAM from a file, then we need to
+   * lease all of the memory resource when the last thread exits the task
+   * group.
+   */
+
+  if (group->tg_bininfo != NULL)
+    {
+      binfmt_exit(group->tg_bininfo);
+      group->tg_bininfo = NULL;
+    }
+#endif
+
 #if defined(CONFIG_SCHED_WAITPID) && !defined(CONFIG_SCHED_HAVE_PARENT)
   /* If there are threads waiting for this group to be freed, then we cannot
    * yet free the memory resources.  Instead just mark the group deleted
@@ -285,11 +302,11 @@ static inline void group_release(FAR struct task_group_s *group)
  * Description:
  *   Remove a member from a group.
  *
- * Parameters:
+ * Input Parameters:
  *   group - The group from which to remove the member.
  *   pid - The member to be removed.
  *
- * Return Value:
+ * Returned Value:
  *   On success, returns the number of members remaining in the group (>=0).
  *   Can fail only if the member is not found in the group.  On failure,
  *   returns -ENOENT
@@ -343,10 +360,10 @@ static inline void group_removemember(FAR struct task_group_s *group, pid_t pid)
  *   reference count decrements to zero, then it frees the group and all of
  *   resources contained in the group.
  *
- * Parameters:
+ * Input Parameters:
  *   tcb - The TCB of the task that is exiting.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  * Assumptions:

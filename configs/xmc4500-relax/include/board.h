@@ -52,25 +52,27 @@
  ************************************************************************************/
 
 /* Clocking *************************************************************************/
-/* Default clock initialization
- *
- *   fXTAL = 12Mhz
- *      -> fPLL = (fXTAL / (2 * 1) * 48) = 288MHz
- *         -> fSYS = (fPLL / 1)          = 288MHz
- *            -> fCPU = (fSYS / 2)       = 144MHz
- *               -> fPERIPH = (fCPU / 1) = 144MHz
- *            -> fCCU = (fSYS / 2)       = 144MHz
- *            -> fETH                    = 72MHz   (REVISIT)
- *         -> fUSB                       = 48MHz   (REVISIT)
- *         -> fEBU                       = 72MHz   (REVISIT)
- *
- * fUSBPLL Disabled, only enabled if SCU_CLK_USBCLKCR_USBSEL_USBPLL is selected
- *
- *   fOFI                                = 24MHz
- *      -> fWDT                          = 24MHz   (REVISIT)
- */
 
-#undef BOARD_FOFI_CALIBRATION              /* Enable factory calibration */
+/* The maximum frequency for the XMC4500 is 120MHz. */
+
+#undef  BOARD_FCPU_144MHZ
+#define BOARD_FCPU_120MHZ     1
+
+/* Watchdog clock source selection */
+
+#define WDT_CLKSRC_FOFI       0              /* fOFI clock  */
+#define WDT_CLKSRC_FSTDY      1              /* fSTDY clock */
+#define WDT_CLKSRC_FPLL       2              /* fPLL clock  */
+
+/* External Clock source selection */
+
+#define EXT_CLKSRC_FSYS       0              /* fSYS clock                   */
+#define EXT_CLKSRC_FUSB       2              /* fUSB clock divided by ECKDIV */
+#define EXT_CLKSRC_FPLL       3              /* fPLL clock divided by ECKDIV */
+
+/* Factory Calibration */
+
+#undef BOARD_FOFI_CALIBRATION                /* Enable factory calibration */
 
 /* On-board crystals
  *
@@ -78,42 +80,154 @@
  *   is not available on XMC4500 Relax Lite Kit-V1.
  */
 
-#define BOARD_XTAL_FREQUENCY      12000000 /* 12MHz XTAL */
-#undef  BOARD_RTC_XTAL_FRQUENCY            /* 32.768KHz RTC XTAL not available */
+#define BOARD_XTAL_FREQUENCY        12000000 /* 12MHz XTAL */
+#undef  BOARD_RTC_XTAL_FRQUENCY              /* 32.768KHz RTC XTAL not available on the Relax Lite */
+/*
+ * TODO: enable the RTC osc, use RTC for time/date
+ */
 
 /* Select the external crystal as the PLL clock source */
 
-#define BOARD_PLL_CLOCKSRC_XTAL   1        /* PLL Clock source == extnernal crystal */
-#undef  BOARD_PLL_CLOCKSRC_OFI             /* PLL Clock source != internal fast oscillator */
+#  define BOARD_PLL_CLOCKSRC_XTAL   1        /* PLL Clock source == extnernal crystal */
+#  undef  BOARD_PLL_CLOCKSRC_OFI             /* PLL Clock source != internal fast oscillator */
 
 /* PLL Configuration:
  *
- * fPLL = (fPLLSRC / (pdiv * k2div) * ndiv
+ *   fXTAL = 12Mhz
+ *   260 MHz <= fVCO <= 520 MHz
  *
- * fPLL = (12000000 / (2 * 1)) * 48
- *      = 288MHz
+ * fVCO = fXTAL * ndiv / pdiv
+ * fPLL = fVCO / k2div
+ * fSYS = fPLL / sysdiv
+ * fETH = fSYS / 2          (fixed div by 2)
+ * fCCU = fSYS / ccudiv     (div by 1 or 2)
+ * fCPU = fSYS / cpudiv     (div by 1 or 2)
+ * fPERIPH = fCPU / pbdiv   (div by 1 or 2)
  */
 
-#define BOARD_ENABLE_PLL          1
-#define BOARD_PLL_PDIV            2
-#define BOARD_PLL_NDIV            48
-#define BOARD_PLL_K2DIV           1
-#define BOARD_PLL_FREQUENCY       288000000
+#  define BOARD_ENABLE_PLL          1   /* enable the PLL */
+#  define CPU_FREQ                  120 /* MHz */
 
-/* System frequency, fSYS, is divided down from PLL output */
+/* TODO: Automate PLL calculations */
 
-#define BOARD_SYSDIV              1        /* PLL Output divider to get fSYS */
-#define BOARD_SYS_FREQUENCY       288000000
+#if CPU_FREQ == 120
+/*
+ *      120 MHz
+ *
+ * fVCO = 12MHz * 40 / 2  = 480MHz
+ * fPLL = 480MHz / 2  = 240MHz
+ * fSYS = fPLL / 2    = 120MHz
+ * fCCU = fSYS / 2    =  60MHz
+ * fCPU = fSYS / 1    = 120MHz
+ * fPB  = fCPU / 2    =  60MHz
+ * fETH = fSYS / 2    =  60MHz
+ */
 
-/* CPU frequency, fCPU, may be divided down from system frequency */
+#  define BOARD_PLL_NDIV            40
+#  define BOARD_PLL_PDIV            1
+#  define BOARD_PLL_K2DIV           4
+#  define BOARD_PLL_SYSDIV          1
+#  define BOARD_PLL_CPUDIV          1
+#  define BOARD_PLL_PBDIV           2
+#  define BOARD_PLL_CCUDIV          2
+#  define BOARD_PLL_EBUDIV          4
 
-#define BOARD_CPUDIV_ENABLE       1        /* Enable PLL dive by 2 for fCPU */
-#define BOARD_CPU_FREQUENCY       144000000
+#elif CPU_FREQ == 144
+/*
+ *      144 MHz
+ *
+ * fVCO = 12MHz * 36 / 1  = 432MHz
+ * fPLL = 432MHz / 3  = 144MHz
+ * fSYS = fPLL / 1    = 144MHz
+ * fCCU = fSYS / 2    =  72MHz
+ * fCPU = fSYS / 1    = 144MHz
+ * fPB  = fCPU / 2    =  72MHz
+ * fETH = fSYS / 2    =  72MHz
+ */
 
-/* The peripheral clock, fPERIPH, derives from fCPU with no division */
+#  define BOARD_PLL_NDIV            36
+#  define BOARD_PLL_PDIV            1
+#  define BOARD_PLL_K2DIV           3
+#  define BOARD_PLL_SYSDIV          1
+#  define BOARD_PLL_CPUDIV          1
+#  define BOARD_PLL_PBDIV           2
+#  define BOARD_PLL_CCUDIV          2
+#  define BOARD_PLL_EBUDIV          2
 
-#define BOARD_PBDIV               1        /* No division */
-#define BOARD_PERIPH_FREQUENCY    144000000
+#else
+#  error "Illegal or Unsupported CPU Frequency"
+#endif
+
+
+#  define BOARD_CCUDIV_ENABLE       (BOARD_PLL_CCUDIV - 1)
+#  define BOARD_CPUDIV_ENABLE       (BOARD_PLL_CPUDIV - 1)
+
+#  define BOARD_VCO_FREQUENCY       (BOARD_XTAL_FREQUENCY * BOARD_PLL_NDIV / BOARD_PLL_PDIV)
+#  define BOARD_PLL_FREQUENCY       (BOARD_VCO_FREQUENCY / BOARD_PLL_K2DIV)
+#  define BOARD_SYS_FREQUENCY       (BOARD_PLL_FREQUENCY / BOARD_PLL_SYSDIV)
+#  define BOARD_CCU_FREQUENCY       (BOARD_SYS_FREQUENCY / BOARD_PLL_CCUDIV)
+#  define BOARD_CPU_FREQUENCY       (BOARD_SYS_FREQUENCY / BOARD_PLL_CPUDIV)
+#  define BOARD_PERIPH_FREQUENCY    (BOARD_CPU_FREQUENCY / BOARD_PLL_PBDIV)
+#  define BOARD_ETH_FREQUENCY       (BOARD_SYS_FREQUENCY / 2)
+
+#  define BOARD_WDT_SOURCE          WDT_CLKSRC_FOFI
+#  define BOARD_WDTDIV              1
+#  define BOARD_WDT_FREQUENCY       24000000
+
+#  define BOARD_EXT_SOURCE          EXT_CLKSRC_FPLL
+#  define BOARD_PLL_ECKDIV          480     /* [1,512] */
+
+#  define kHz_1     1000
+#  define MHz_1     (kHz_1 * kHz_1)
+#  define MHz_50    ( 50 * MHz_1)
+#  define MHz_260   (260 * MHz_1)
+#  define MHz_520   (520 * MHz_1)
+
+   /* range check VCO frequency */
+#  if (BOARD_VCO_FREQUENCY < MHz_260)
+#     error "VCO freq must be >= 260 MHz"
+#  endif
+
+#  if (BOARD_VCO_FREQUENCY > MHz_520)
+#     error "VCO freq must be <= 520 MHz"
+#  endif
+
+   /* range check Ethernet MAC frequency */
+#  if (BOARD_ETH_FREQUENCY <= MHz_50)
+#     error "ETH freq must be > 50 MHz"
+#  endif
+
+
+
+/* check ccudiv cpudiv pbdiv against Table 11-5
+ * of XMC4500 User Manual
+ */
+#define CLKDIV_INDEX        (4 * (BOARD_PLL_CCUDIV-1) + \
+                             2 * (BOARD_PLL_CPUDIV-1) + \
+                                 (BOARD_PLL_PBDIV-1) )
+
+#if (CLKDIV_INDEX == 3) || (CLKDIV_INDEX == 4) || (CLKDIV_INDEX > 6)
+#  error "Illegal combination of dividers!  Ref: Table 11-5 of UM"
+#endif
+
+
+/* EXT clock settings */
+#define BOARD_EXTCKL_ENABLE         1   /* 0 disables output */
+
+#if BOARD_EXTCKL_ENABLE
+#  define EXTCLK_PIN_P0_8           8
+#  define EXTCLK_PIN_P1_15          15
+#  define BOARD_EXTCLK_PIN          EXTCLK_PIN_P0_8
+#  define BOARD_EXT_SOURCE          EXT_CLKSRC_FPLL
+#  define BOARD_EXT_FREQUENCY       (250 * kHz_1)   /* Desired output freq */
+#  define BOARD_EXTDIV              (BOARD_PLL_FREQUENCY / BOARD_EXT_FREQUENCY)
+
+/* range check EXTDIV */
+#  if BOARD_EXTDIV > 512
+#    error "EXTCLK Divisor out of range!"
+#  endif
+#endif
+
 
 /* Standby clock source selection
  *
@@ -208,8 +322,30 @@
  */
 
 #define BOARD_UART0_DX    USIC_DXB
-#define GPIO_UART0_RXD0   GPIO_U0C0_DX0B
-#define GPIO_UART0_TXD0   (GPIO_U0C0_DOUT0_3 | GPIO_PADA1P_STRONGSOFT | GPIO_OUTPUT_SET)
+#define GPIO_UART0_RXD    GPIO_U0C0_DX0B
+#define GPIO_UART0_TXD    (GPIO_U0C0_DOUT0_3 | GPIO_PADA1P_STRONGSOFT | GPIO_OUTPUT_SET)
+
+/* USIC1 CH0 is used as SPI2
+ *
+ *  MOSI - P0.5  (UC1C0.DOUT0)
+ *  MISO - P0.4  (UC1C0.DX0A)
+ *  SCLK - P0.11 (UC1C0.SCLKOUT)
+ */
+
+#define BOARD_SPI_DX      USIC_DXA
+#define GPIO_SPI2_MOSI    (GPIO_U1C0_DOUT0_2 | GPIO_PADA2_STRONGMEDIUM)
+#define GPIO_SPI2_MISO    (GPIO_U1C0_DX0A)
+#define GPIO_SPI2_SCLK    (GPIO_U1C0_SCLKOUT_1 | GPIO_PADA2_STRONGMEDIUM)
+
+/* USIC1 CH1 is used as UART3
+ *
+ *  RX - P0.0
+ *  TX - P0.1
+ */
+
+#define BOARD_UART3_DX    USIC_DXD
+#define GPIO_UART3_RXD    (GPIO_U1C1_DX0D | GPIO_INPUT_PULLUP)
+#define GPIO_UART3_TXD    (GPIO_U1C1_DOUT0_2 | GPIO_PADA1P_STRONGSOFT | GPIO_OUTPUT_SET)
 
 /************************************************************************************
  * Public Data

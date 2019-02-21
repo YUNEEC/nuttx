@@ -72,10 +72,10 @@
  *   Waiting for an empty signal set stops a task without freeing any
  *   resources.
  *
- * Parameters:
+ * Input Parameters:
  *   set - signal mask to use while suspended.
  *
- * Return Value:
+ * Returned Value:
  *   -1 (ERROR) always
  *
  * Assumptions:
@@ -93,11 +93,8 @@
 int sigsuspend(FAR const sigset_t *set)
 {
   FAR struct tcb_s *rtcb = this_task();
-  sigset_t intersection;
   sigset_t saved_sigprocmask;
-  FAR sigpendq_t *sigpend;
   irqstate_t flags;
-  int unblocksigno;
 
   /* sigsuspend() is a cancellation point */
 
@@ -112,37 +109,35 @@ int sigsuspend(FAR const sigset_t *set)
   sched_lock();  /* Not necessary */
   flags = enter_critical_section();
 
+  /* Save a copy of the old sigprocmask and install
+   * the new (temporary) sigprocmask
+   */
+
+  saved_sigprocmask = rtcb->sigprocmask;
+  rtcb->sigprocmask = *set;
+  rtcb->sigwaitmask = NULL_SIGNAL_SET;
+
   /* Check if there is a pending signal corresponding to one of the
    * signals that will be unblocked by the new sigprocmask.
    */
 
-  intersection = ~(*set) & sig_pendingset(rtcb);
-  if (intersection != NULL_SIGNAL_SET)
+  if (nxsig_unmask_pendingsignal())
     {
-      /* One or more of the signals in intersections is sufficient to cause
-       * us to not wait.  Pick the lowest numbered signal and mark it not
-       * pending.
+      /* Dispatching one or more of the signals is sufficient to cause
+       * us to not wait. Restore the original sigprocmask.
        */
 
-      unblocksigno = sig_lowest(&intersection);
-      sigpend = sig_removependingsignal(rtcb, unblocksigno);
-      ASSERT(sigpend);
-
-      sig_releasependingsignal(sigpend);
+      rtcb->sigprocmask = saved_sigprocmask;
       leave_critical_section(flags);
     }
   else
     {
-      /* Its time to wait. Save a copy of the old sigprocmask and install
-       * the new (temporary) sigprocmask
+      /* Its time to wait until one of the unblocked signals is posted,
+       * but first, ensure this is not the idle task, descheduling that
+       * isn't going to end well.
        */
 
-      saved_sigprocmask = rtcb->sigprocmask;
-      rtcb->sigprocmask = *set;
-      rtcb->sigwaitmask = NULL_SIGNAL_SET;
-
-      /* And wait until one of the unblocked signals is posted */
-
+      DEBUGASSERT(NULL != rtcb->flink);
       up_block_task(rtcb, TSTATE_WAIT_SIG);
 
       /* We are running again, restore the original sigprocmask */
@@ -155,10 +150,11 @@ int sigsuspend(FAR const sigset_t *set)
        * sigprocmask will unblock the signal.
        */
 
-      sig_unmaskpendingsignal();
+      nxsig_unmask_pendingsignal();
     }
 
   sched_unlock();
   leave_cancellation_point();
-  return ERROR; /* ??REVISIT:  Always returns ERROR?? */
+  set_errno(EINTR);
+  return ERROR;
 }

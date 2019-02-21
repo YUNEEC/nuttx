@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/syslog/syslog.h
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -188,6 +188,24 @@ int syslog_console_channel(void);
 #endif
 
 /****************************************************************************
+ * Name: syslog_register
+ *
+ * Description:
+ *   Register a simple character driver at /dev/syslog whose write() method
+ *   will transfer data to the SYSLOG device.  This can be useful if, for
+ *   example, you want to redirect the output of a program to the SYSLOG.
+ *
+ *   NOTE that unlike other syslog output, this data is unformatted raw
+ *   byte output with no time-stamping or any other SYSLOG features
+ *   supported.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_SYSLOG_CHARDEV
+void syslog_register(void);
+#endif
+
+/****************************************************************************
  * Name: syslog_add_intbuffer
  *
  * Description:
@@ -272,26 +290,6 @@ int syslog_putc(int ch);
 ssize_t syslog_write(FAR const char *buffer, size_t buflen);
 
 /****************************************************************************
- * Name: syslog_default_write
- *
- * Description:
- *   This provides a default write method for syslog devices that do not
- *   support multiple byte writes  This functions simply loops, outputting
- *   one cahracter at a time.
- *
- * Input Parameters:
- *   buffer - The buffer containing the data to be output
- *   buflen - The number of bytes in the buffer
- *
- * Returned Value:
- *   On success, the number of characters written is returned.  A negated
- *   errno value is returned on any failure.
- *
- ****************************************************************************/
-
-ssize_t syslog_default_write(FAR const char *buffer, size_t buflen);
-
-/****************************************************************************
  * Name: syslog_force
  *
  * Description:
@@ -303,8 +301,8 @@ ssize_t syslog_default_write(FAR const char *buffer, size_t buflen);
  *   ch - The character to add to the SYSLOG (must be positive).
  *
  * Returned Value:
- *   On success, the character is echoed back to the caller.  A negated
- *   errno value is returned on any failure.
+ *   On success, the character is echoed back to the caller. A negated errno
+ *   value is returned on any failure.
  *
  ****************************************************************************/
 
@@ -322,8 +320,8 @@ int syslog_force(int ch);
  *   buflen - The number of bytes in the buffer
  *
  * Returned Value:
- *   On success, the character is echoed back to the caller.  Minus one
- *   is returned on any failure with the errno set correctly.
+ *   On success, the character is echoed back to the caller. A negated errno
+ *   value is returned on any failure.
  *
  ****************************************************************************/
 

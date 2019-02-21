@@ -51,10 +51,6 @@ ifeq ($(CONFIG_NET_DM90x0),y)
   CSRCS += dm90x0.c
 endif
 
-ifeq ($(CONFIG_NET_CS89x0),y)
-  CSRCS += cs89x0.c
-endif
-
 ifeq ($(CONFIG_ENC28J60),y)
   CSRCS += enc28j60.c
 endif
@@ -73,6 +69,10 @@ endif
 
 ifeq ($(CONFIG_NET_FTMAC100),y)
   CSRCS += ftmac100.c
+endif
+
+ifeq ($(CONFIG_NET_LAN91C111),y)
+  CSRCS += lan91c111.c
 endif
 
 ifeq ($(CONFIG_ARCH_PHY_INTERRUPT),y)

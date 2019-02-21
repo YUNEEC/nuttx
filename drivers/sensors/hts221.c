@@ -234,7 +234,7 @@ static int32_t hts221_write_reg8(FAR struct hts221_dev_s *priv,
     {
       .frequency = CONFIG_HTS221_I2C_FREQUENCY,
       .addr      = priv->addr,
-      .flags     = I2C_M_NORESTART,
+      .flags     = I2C_M_NOSTART,
       .buffer    = (FAR void *)&command[1],
       .length    = 1
     }
@@ -321,7 +321,7 @@ static int hts221_config_ctrl_reg3(FAR struct hts221_dev_s *priv,
   uint8_t data_to_write[2] = { 0 };
 
   ret = hts221_read_reg(priv, &addr, &regval);
-  hts221_dbg("CTRL_REG3: 0x%02X\n", regval);
+  hts221_dbg("CTRL_REG%d: 0x%02X\n", 3, regval);
   if (ret < 0)
     {
       return ERROR;
@@ -336,6 +336,15 @@ static int hts221_config_ctrl_reg3(FAR struct hts221_dev_s *priv,
   data_to_write[1] = regval;
 
   ret = hts221_write_reg8(priv, data_to_write);
+  if (ret >= 0)
+    {
+      ret = hts221_read_reg(priv, &addr, &regval);
+      if (ret >= 0)
+        {
+          hts221_dbg("wrote 0x%02X => CTRL_REG%d: 0x%02X\n",
+                     data_to_write[1], 3, regval);
+        }
+    }
 
   return ret;
 }
@@ -348,21 +357,65 @@ static int hts221_config_ctrl_reg2(FAR struct hts221_dev_s *priv,
   uint8_t addr = HTS221_CTRL_REG2;
   const uint8_t mask = 0x80;
   uint8_t data_to_write[2] = { 0 };
+  int retries = 5;
+
+  if (!settings->is_boot)
+    {
+      return OK;
+    }
 
   ret = hts221_read_reg(priv, &addr, &regval);
-  hts221_dbg("CTRL_REG2: 0x%02X\n", regval);
+  hts221_dbg("CTRL_REG%d: 0x%02X\n", 2, regval);
+
   if (ret < 0)
     {
       return ERROR;
     }
 
   regval &= ~mask;
-  regval |= (uint8_t)(settings->is_boot ? HTS221_CTRL_REG2_BOOT : 0);
+  regval |= HTS221_CTRL_REG2_BOOT;
 
   data_to_write[0] = addr;
   data_to_write[1] = regval;
 
   ret = hts221_write_reg8(priv, data_to_write);
+  if (ret >= 0)
+    {
+      /* Wait until boot bit is cleared. */
+
+      do
+        {
+          ret = hts221_read_reg(priv, &addr, &regval);
+          if (ret >= 0)
+            {
+              hts221_dbg("wrote 0x%02X => CTRL_REG%d: 0x%02X\n",
+                         data_to_write[1], 2, regval);
+            }
+          else
+            {
+              break;
+            }
+
+          if ((regval & HTS221_CTRL_REG2_BOOT) == 0)
+            {
+              /* After boot bit is cleared, wait additional 5 msec as
+               * recommended in HTS221 application note.
+               */
+
+              up_mdelay(5);
+              break;
+            }
+
+          usleep(10 * 1000);
+          retries--;
+        }
+      while (retries);
+
+      if (ret >= 0 && (regval & HTS221_CTRL_REG2_BOOT) != 0)
+        {
+          ret = -ETIMEDOUT;
+        }
+    }
 
   return ret;
 }
@@ -377,7 +430,7 @@ static int hts221_config_ctrl_reg1(FAR struct hts221_dev_s *priv,
   uint8_t data_to_write[2] = { 0 };
 
   ret = hts221_read_reg(priv, &addr, &regval);
-  hts221_dbg("CTRL_REG1: 0x%02X\n", regval);
+  hts221_dbg("CTRL_REG%d: 0x%02X\n", 1, regval);
   if (ret < 0)
     {
       return ERROR;
@@ -391,6 +444,15 @@ static int hts221_config_ctrl_reg1(FAR struct hts221_dev_s *priv,
   data_to_write[1] = regval;
 
   ret = hts221_write_reg8(priv, data_to_write);
+  if (ret >= 0)
+    {
+      ret = hts221_read_reg(priv, &addr, &regval);
+      if (ret >= 0)
+        {
+          hts221_dbg("wrote 0x%02X => CTRL_REG%d: 0x%02X\n",
+                     data_to_write[1], 1, regval);
+        }
+    }
 
   return ret;
 }
@@ -403,7 +465,7 @@ static int hts221_power_on_off(FAR struct hts221_dev_s *priv, bool on)
   uint8_t data_to_write[2];
 
   ret = hts221_read_reg(priv, &addr, &regval);
-  hts221_dbg("CTRL_REG1: 0x%02X\n", regval);
+  hts221_dbg("CTRL_REG%d: 0x%02X\n", 1, regval);
   if (ret < 0)
     {
       return ret;
@@ -421,6 +483,15 @@ static int hts221_power_on_off(FAR struct hts221_dev_s *priv, bool on)
   data_to_write[1] = regval;
 
   ret = hts221_write_reg8(priv, data_to_write);
+  if (ret >= 0)
+    {
+      ret = hts221_read_reg(priv, &addr, &regval);
+      if (ret >= 0)
+        {
+          hts221_dbg("wrote 0x%02X => CTRL_REG%d: 0x%02X\n",
+                     data_to_write[1], 1, regval);
+        }
+    }
 
   return ret;
 }
@@ -430,6 +501,12 @@ static int hts221_config(FAR struct hts221_dev_s *priv,
 {
   int ret = OK;
 
+  ret = hts221_config_ctrl_reg2(priv, cfgr); /* Performs sensor reset. */
+  if (ret < 0)
+    {
+      return ERROR;
+    }
+
   ret = hts221_cfgr_resolution(priv, cfgr);
   if (ret < 0)
     {
@@ -437,12 +514,6 @@ static int hts221_config(FAR struct hts221_dev_s *priv,
     }
 
   ret = hts221_config_ctrl_reg3(priv, cfgr);
-  if (ret < 0)
-    {
-      return ERROR;
-    }
-
-  ret = hts221_config_ctrl_reg2(priv, cfgr);
   if (ret < 0)
     {
       return ERROR;
@@ -511,7 +582,7 @@ static int hts221_read_raw_data(FAR struct hts221_dev_s *priv,
   uint8_t addr_humid_high = HTS221_HUM_OUT_H;
   uint8_t addr_temp_low = HTS221_TEMP_OUT_L;
   uint8_t addr_temp_high = HTS221_TEMP_OUT_H;
-  uint32_t flags;
+  irqstate_t flags;
 
   ret = hts221_read_reg(priv, &addr_humid_low, &data->humid_low_bits);
   if (ret < 0)
@@ -820,16 +891,26 @@ static int hts221_open(FAR struct file *filep)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hts221_dev_s *priv = inode->i_private;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   priv->config->set_power(priv->config, true);
   priv->config->irq_enable(priv->config, true);
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   hts221_dbg("Sensor is powered on\n");
   return OK;
 }
@@ -838,18 +919,27 @@ static int hts221_close(FAR struct file *filep)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hts221_dev_s *priv = inode->i_private;
-  int ret = OK;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   priv->config->irq_enable(priv->config, false);
   ret = hts221_power_on_off(priv, false);
   priv->config->set_power(priv->config, false);
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   hts221_dbg("CLOSED\n");
   return ret;
 }
@@ -859,14 +949,23 @@ static ssize_t hts221_read(FAR struct file *filep, FAR char *buffer,
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hts221_dev_s *priv = inode->i_private;
-  int ret = OK;
-  ssize_t length = 0;
   hts221_conv_data_t data;
+  ssize_t length = 0;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   ret = hts221_read_convert_data(priv, &data);
   if (ret < 0)
@@ -885,7 +984,7 @@ static ssize_t hts221_read(FAR struct file *filep, FAR char *buffer,
         }
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return length;
 }
 
@@ -900,12 +999,21 @@ static int hts221_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hts221_dev_s *priv = inode->i_private;
-  int ret = OK;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   switch (cmd)
     {
@@ -944,7 +1052,7 @@ static int hts221_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -986,7 +1094,7 @@ static void hts221_notify(FAR struct hts221_dev_s *priv)
         {
           fds->revents |= POLLIN;
           hts221_dbg("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 }
@@ -996,9 +1104,9 @@ static int hts221_poll(FAR struct file *filep, FAR struct pollfd *fds,
 {
   FAR struct inode *inode;
   FAR struct hts221_dev_s *priv;
-  int ret = OK;
+  irqstate_t flags;
+  int ret;
   int i;
-  uint32_t flags;
 
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
@@ -1006,10 +1114,19 @@ static int hts221_poll(FAR struct file *filep, FAR struct pollfd *fds,
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct hts221_dev_s *)inode->i_private;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   if (setup)
     {
@@ -1068,7 +1185,7 @@ static int hts221_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 out:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif /* !CONFIG_DISABLE_POLL */
@@ -1105,7 +1222,9 @@ int hts221_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
   priv->addr   = addr;
   priv->i2c    = i2c;
   priv->config = config;
-  sem_init(&priv->devsem, 0, 1);
+  nxsem_init(&priv->devsem, 0, 1);
+
+  priv->config->set_power(priv->config, true);
 
   ret = hts221_load_calibration_data(priv);
   if (ret < 0)
@@ -1133,5 +1252,6 @@ int hts221_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
 
   priv->config->irq_attach(priv->config, hts221_int_handler, priv);
   priv->config->irq_enable(priv->config, false);
+  priv->config->set_power(priv->config, false);
   return OK;
 }

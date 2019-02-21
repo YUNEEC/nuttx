@@ -1,7 +1,7 @@
 /****************************************************************************
  * config/shenzhou/src/stm32_appinit.c
  *
- *   Copyright (C) 2012, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,7 +150,7 @@
  *   arg - The boardctl() argument is passed to the board_app_initialize()
  *         implementation without modification.  The argument has no
  *         meaning to NuttX; the meaning of the argument is a contract
- *         between the board-specific initalization logic and the
+ *         between the board-specific initialization logic and the
  *         matching application logic.  The value cold be such things as a
  *         mode enumeration value, a set of DIP switch switch settings, a
  *         pointer to configuration data read from a file or serial FLASH,
@@ -167,9 +167,9 @@ int board_app_initialize(uintptr_t arg)
 {
   int ret;
 
+#ifdef HAVE_W25
   /* Initialize and register the W25 FLASH file system. */
 
-#ifdef HAVE_W25
   ret = stm32_w25initialize(CONFIG_NSH_W25MINOR);
   if (ret < 0)
     {
@@ -179,9 +179,9 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#ifdef HAVE_MMCSD
   /* Initialize the SPI-based MMC/SD slot */
 
-#ifdef HAVE_MMCSD
   ret = stm32_sdinitialize(CONFIG_NSH_MMCSDMINOR);
   if (ret < 0)
     {
@@ -191,16 +191,26 @@ int board_app_initialize(uintptr_t arg)
     }
 #endif
 
+#ifdef HAVE_USBHOST
   /* Initialize USB host operation.  stm32_usbhost_initialize() starts a thread
    * will monitor for USB connection and disconnection events.
    */
 
-#ifdef HAVE_USBHOST
   ret = stm32_usbhost_initialize();
   if (ret != OK)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize USB host: %d\n", ret);
       return ret;
+    }
+#endif
+
+#ifdef CONFIG_INPUT_ADS7843E
+  /* Initialize the touchscreen */
+
+  ret = stm32_tsc_setup(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_tsc_setup failed: %d\n", ret);
     }
 #endif
 

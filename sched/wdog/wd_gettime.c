@@ -55,10 +55,10 @@
  *   This function returns the time remaining before the specified watchdog
  *   timer expires.
  *
- * Parameters:
+ * Input Parameters:
  *   wdog - watchdog ID
  *
- * Return Value:
+ * Returned Value:
  *   The time in system ticks remaining until the watchdog time expires.
  *   Zero means either that wdog is not valid or that the wdog has already
  *   expired.
@@ -88,6 +88,7 @@ int wd_gettime(WDOG_ID wdog)
           delay += curr->lag;
           if (curr == wdog)
             {
+              delay -= wd_elapse();
               leave_critical_section(flags);
               return delay;
             }

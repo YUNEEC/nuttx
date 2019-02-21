@@ -60,6 +60,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/mtd/mtd.h>
@@ -407,7 +408,7 @@ static void sst26_waitwritecomplete(struct sst26_dev_s *priv)
       if ((status & SST26_SR_WIP) != 0)
         {
           sst26_unlock(priv->dev);
-          usleep(1000);
+          nxsig_usleep(1000);
           sst26_lock(priv->dev);
         }
     }
@@ -943,6 +944,7 @@ FAR struct mtd_dev_s *sst26_initialize_spi(FAR struct spi_dev_s *dev)
       priv->mtd.write  = sst26_write;
 #endif
       priv->mtd.ioctl  = sst26_ioctl;
+      priv->mtd.name   = "sst26";
       priv->dev        = dev;
 
       /* Deselect the FLASH */
@@ -966,12 +968,6 @@ FAR struct mtd_dev_s *sst26_initialize_spi(FAR struct spi_dev_s *dev)
           sst26_writeenable(priv);
           sst26_globalunlock(priv);
           sst26_writedisable(priv);
-
-#ifdef CONFIG_MTD_REGISTRATION
-          /* Register the MTD with the procfs system if enabled */
-
-          mtd_register(&priv->mtd, "sst26");
-#endif
         }
     }
 

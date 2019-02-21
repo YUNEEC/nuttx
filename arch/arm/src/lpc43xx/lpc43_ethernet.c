@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc43/lpc43_eth.c
  *
- *   Copyright (C) 2011-2015, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2015, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -85,18 +85,18 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Work queue support is required
-#else
-
-  /* Select work queue */
-
-#  if defined(CONFIG_LPC43_ETHERNET_HPWORK)
-#    define ETHWORK HPWORK
-#  elif defined(CONFIG_LPC43_ETHERNET_LPWORK)
-#    define ETHWORK LPWORK
-#  else
-#    error Neither CONFIG_LPC43_ETHERNET_HPWORK nor CONFIG_LPC43_ETHERNET_LPWORK defined
-#  endif
 #endif
+
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
+
+#define ETHWORK LPWORK
 
 #ifndef CONFIG_LPC43_PHYADDR
 #  error "CONFIG_LPC43_PHYADDR must be defined in the NuttX configuration"
@@ -164,7 +164,7 @@
  * will use the 16-byte alignment in all cases.
  */
 
-#define OPTIMAL_ETH_BUFSIZE ((CONFIG_NET_ETH_MTU + 4 + 15) & ~15)
+#define OPTIMAL_ETH_BUFSIZE ((CONFIG_NET_ETH_PKTSIZE + 4 + 15) & ~15)
 
 #ifndef CONFIG_LPC43_ETH_BUFSIZE
 #  define CONFIG_LPC43_ETH_BUFSIZE OPTIMAL_ETH_BUFSIZE
@@ -615,13 +615,13 @@ static int  lpc43_ifdown(struct net_driver_s *dev);
 static void lpc43_txavail_work(FAR void *arg);
 static int  lpc43_txavail(struct net_driver_s *dev);
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int  lpc43_addmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int  lpc43_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
-#ifdef CONFIG_NETDEV_PHY_IOCTL
+#ifdef CONFIG_NETDEV_IOCTL
 static int  lpc43_ioctl(struct net_driver_s *dev, int cmd,
               unsigned long arg);
 #endif
@@ -791,7 +791,7 @@ static void lpc43_checksetup(void)
  * Description:
  *   Initialize the free buffer list.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -828,7 +828,7 @@ static void lpc43_initbuffer(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Allocate one buffer from the free buffer list.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -854,7 +854,7 @@ static inline uint8_t *lpc43_allocbuffer(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Return a buffer to the free buffer list.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *   buffer - A pointer to the buffer to be freed
  *
@@ -881,7 +881,7 @@ static inline void lpc43_freebuffer(FAR struct lpc43_ethmac_s *priv, uint8_t *bu
  * Description:
  *   Return TRUE if the free buffer list is not empty.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -907,7 +907,7 @@ static inline bool lpc43_isfreebuffer(FAR struct lpc43_ethmac_s *priv)
  *   Start hardware transmission.  Called either from the txdone interrupt
  *   handling or from watchdog based polling.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1028,7 +1028,7 @@ static int lpc43_transmit(FAR struct lpc43_ethmac_s *priv)
 
       /* Set frame size */
 
-      DEBUGASSERT(priv->dev.d_len <= CONFIG_NET_ETH_MTU);
+      DEBUGASSERT(priv->dev.d_len <= CONFIG_NET_ETH_PKTSIZE);
       txdesc->tdes1 = priv->dev.d_len;
 
       /* Set the Buffer1 address pointer */
@@ -1118,7 +1118,7 @@ static int lpc43_transmit(FAR struct lpc43_ethmac_s *priv)
  *   2. When the preceding TX packet send timesout and the interface is reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1165,44 +1165,47 @@ static int lpc43_txpoll(struct net_driver_s *dev)
         }
 #endif /* CONFIG_NET_IPv6 */
 
-      /* Send the packet */
-
-      lpc43_transmit(priv);
-      DEBUGASSERT(dev->d_len == 0 && dev->d_buf == NULL);
-
-      /* Check if the next TX descriptor is owned by the Ethernet DMA or CPU.  We
-       * cannot perform the TX poll if we are unable to accept another packet for
-       * transmission.
-       *
-       * In a race condition, ETH_TDES0_OWN may be cleared BUT still not available
-       * because lpc43_freeframe() has not yet run.  If lpc43_freeframe() has run,
-       * the buffer1 pointer (tdes2) will be nullified (and inflight should be <
-       * CONFIG_LPC43_ETH_NTXDESC).
-       */
-
-      if ((priv->txhead->tdes0 & ETH_TDES0_OWN) != 0 ||
-           priv->txhead->tdes2 != 0)
+      if (!devif_loopback(&priv->dev))
         {
-          /* We have to terminate the poll if we have no more descriptors
-           * available for another transfer.
+          /* Send the packet */
+
+          lpc43_transmit(priv);
+          DEBUGASSERT(dev->d_len == 0 && dev->d_buf == NULL);
+
+          /* Check if the next TX descriptor is owned by the Ethernet DMA or CPU.  We
+           * cannot perform the TX poll if we are unable to accept another packet for
+           * transmission.
+           *
+           * In a race condition, ETH_TDES0_OWN may be cleared BUT still not available
+           * because lpc43_freeframe() has not yet run.  If lpc43_freeframe() has run,
+           * the buffer1 pointer (tdes2) will be nullified (and inflight should be <
+           * CONFIG_LPC43_ETH_NTXDESC).
            */
 
-          return -EBUSY;
-        }
+          if ((priv->txhead->tdes0 & ETH_TDES0_OWN) != 0 ||
+               priv->txhead->tdes2 != 0)
+            {
+              /* We have to terminate the poll if we have no more descriptors
+               * available for another transfer.
+               */
 
-      /* We have the descriptor, we can continue the poll. Allocate a new
-       * buffer for the poll.
-       */
+              return -EBUSY;
+            }
 
-      dev->d_buf = lpc43_allocbuffer(priv);
+          /* We have the descriptor, we can continue the poll. Allocate a new
+           * buffer for the poll.
+           */
 
-      /* We can't continue the poll if we have no buffers */
+          dev->d_buf = lpc43_allocbuffer(priv);
 
-      if (dev->d_buf == NULL)
-        {
-          /* Terminate the poll. */
+          /* We can't continue the poll if we have no buffers */
 
-          return -ENOMEM;
+          if (dev->d_buf == NULL)
+            {
+              /* Terminate the poll. */
+
+              return -ENOMEM;
+            }
         }
     }
 
@@ -1225,7 +1228,7 @@ static int lpc43_txpoll(struct net_driver_s *dev)
  *   3. After a TX timeout to restart the sending process
  *      (lpc43_txtimeout_process).
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1286,7 +1289,7 @@ static void lpc43_dopoll(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Enable a "normal" interrupt
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1314,7 +1317,7 @@ static void lpc43_enableint(FAR struct lpc43_ethmac_s *priv, uint32_t ierbit)
  * Description:
  *   Disable a normal interrupt.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1353,7 +1356,7 @@ static void lpc43_disableint(FAR struct lpc43_ethmac_s *priv, uint32_t ierbit)
  *   The function is called when a frame is received using the DMA receive
  *   interrupt.  It scans the RX descriptors to the received frame.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1409,7 +1412,7 @@ static void lpc43_freesegment(FAR struct lpc43_ethmac_s *priv,
  *
  *   NOTE: This function will silently discard any packets containing errors.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1572,7 +1575,7 @@ static int lpc43_recvframe(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   An interrupt was received indicating the availability of a new RX packet
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1603,7 +1606,7 @@ static void lpc43_receive(FAR struct lpc43_ethmac_s *priv)
        * (this should not happen)
        */
 
-      if (dev->d_len > CONFIG_NET_ETH_MTU)
+      if (dev->d_len > CONFIG_NET_ETH_PKTSIZE)
         {
           nwarn("WARNING: Dropped, Too big: %d\n", dev->d_len);
           /* Free dropped packet buffer */
@@ -1749,7 +1752,7 @@ static void lpc43_receive(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Scans the TX descriptors and frees the buffers of completed TX transfers.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1845,7 +1848,7 @@ static void lpc43_freeframe(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   An interrupt was received indicating that the last TX packet(s) is done
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -1888,7 +1891,7 @@ static void lpc43_txdone(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Perform interrupt related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() was called.
  *
  * Returned Value:
@@ -1991,7 +1994,7 @@ static void lpc43_interrupt_work(FAR void *arg)
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -2045,7 +2048,7 @@ static int lpc43_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -2081,7 +2084,7 @@ static void lpc43_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -2121,7 +2124,7 @@ static void lpc43_txtimeout_expiry(int argc, uint32_t arg, ...)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -2193,7 +2196,7 @@ static void lpc43_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -2221,7 +2224,7 @@ static void lpc43_poll_expiry(int argc, uint32_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2276,7 +2279,7 @@ static int lpc43_ifup(struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2323,7 +2326,7 @@ static int lpc43_ifdown(struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg  - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -2360,7 +2363,7 @@ static void lpc43_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2396,7 +2399,7 @@ static int lpc43_txavail(struct net_driver_s *dev)
  * Description:
  *   Function to calculate the CRC used by LPC43 to check an Ethernet frame
  *
- * Parameters:
+ * Input Parameters:
  *   data   - the data to be checked
  *   length - length of the data
  *
@@ -2407,7 +2410,7 @@ static int lpc43_txavail(struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static uint32_t lpc43_calcethcrc(const uint8_t *data, size_t length)
 {
   uint32_t crc = 0xffffffff;
@@ -2441,7 +2444,7 @@ static uint32_t lpc43_calcethcrc(const uint8_t *data, size_t length)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -2452,7 +2455,7 @@ static uint32_t lpc43_calcethcrc(const uint8_t *data, size_t length)
  *
  ****************************************************************************/
 
-#if defined(CONFIG_NET_IGMP) || defined(CONFIG_NET_ICMPv6)
+#if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int lpc43_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   uint32_t crc;
@@ -2498,7 +2501,7 @@ static int lpc43_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -2509,7 +2512,7 @@ static int lpc43_addmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lpc43_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   uint32_t crc;
@@ -2560,7 +2563,7 @@ static int lpc43_rmmac(struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Initializes the DMA TX descriptors in chain mode.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -2642,7 +2645,7 @@ static void lpc43_txdescinit(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Initializes the DMA RX descriptors in chain mode.
  *
- * Parameters:
+ * Input Parameters:
  *   priv  - Reference to the driver state structure
  *
  * Returned Value:
@@ -2733,7 +2736,7 @@ static void lpc43_rxdescinit(FAR struct lpc43_ethmac_s *priv)
  *  is specified using the req->reg_no struct field and use req->val_in as
  *  its input.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Ethernet device structure
  *   cmd - SIOCxMIIxxx command code
  *   arg - Request structure also used to return values
@@ -2744,16 +2747,17 @@ static void lpc43_rxdescinit(FAR struct lpc43_ethmac_s *priv)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NETDEV_PHY_IOCTL
+#ifdef CONFIG_NETDEV_IOCTL
 static int lpc43_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
 {
-#ifdef CONFIG_ARCH_PHY_INTERRUPT
+#if defined(CONFIG_NETDEV_PHY_IOCTL) && defined(CONFIG_ARCH_PHY_INTERRUPT)
   FAR struct lpc43_ethmac_s *priv = (FAR struct lpc43_ethmac_s *)dev->d_private;
 #endif
   int ret;
 
   switch (cmd)
   {
+#ifdef CONFIG_NETDEV_PHY_IOCTL
 #ifdef CONFIG_ARCH_PHY_INTERRUPT
   case SIOCMIINOTIFY: /* Set up for PHY event notifications */
     {
@@ -2791,6 +2795,7 @@ static int lpc43_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
       ret = lpc43_phywrite(req->phy_id, req->reg_num, req->val_in);
     }
     break;
+#endif /* ifdef CONFIG_NETDEV_PHY_IOCTL */
 
   default:
     ret = -ENOTTY;
@@ -2799,7 +2804,7 @@ static int lpc43_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
 
   return ret;
 }
-#endif /* CONFIG_NETDEV_PHY_IOCTL */
+#endif /* CONFIG_NETDEV_IOCTL */
 
 /****************************************************************************
  * Function: lpc43_phyintenable
@@ -2813,7 +2818,7 @@ static int lpc43_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
  *    is received.
  *  - Interrupt status is cleared when the interrupt is re-enabled.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -2835,7 +2840,7 @@ static int lpc43_phyintenable(struct lpc43_ethmac_s *priv)
  * Description:
  *  Read a PHY register.
  *
- * Parameters:
+ * Input Parameters:
  *   phydevaddr - The PHY device address
  *   phyregaddr - The PHY register address
  *   value - The location to return the 16-bit PHY register value.
@@ -2890,7 +2895,7 @@ static int lpc43_phyread(uint16_t phydevaddr, uint16_t phyregaddr, uint16_t *val
  * Description:
  *  Write to a PHY register.
  *
- * Parameters:
+ * Input Parameters:
  *   phydevaddr - The PHY device address
  *   phyregaddr - The PHY register address
  *   value - The 16-bit value to write to the PHY register value.
@@ -2953,7 +2958,7 @@ static int lpc43_phywrite(uint16_t phydevaddr, uint16_t phyregaddr, uint16_t val
  *   fundamental issue with the PHY clocking initialization, but the
  *   root cause has not been studied (nor will it be with this workaround).
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3015,7 +3020,7 @@ static inline int lpc43_dm9161(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *  Configure the PHY and determine the link speed/duplex.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3210,11 +3215,11 @@ static int lpc43_phyinit(FAR struct lpc43_ethmac_s *priv)
 #else /* Auto-negotion not selected */
 
 #ifdef CONFIG_LPC43_ETHFD
-  priv->mbps100 = 1;
+  priv->fduplex = 1;
 #endif
 
 #ifdef CONFIG_LPC43_ETH100MBPS
-  priv->fduplex = 1;
+  priv->mbps100 = 1;
 #endif
 
   phyval = 0;
@@ -3238,11 +3243,14 @@ static int lpc43_phyinit(FAR struct lpc43_ethmac_s *priv)
 
   up_mdelay(PHY_CONFIG_DELAY);
 
-  /* Remember the selected speed and duplex modes */
+  /* Remember the selected speed and duplex modes
+   * REVISIT:  Isn't this redundant?
+   */
 
 #ifdef CONFIG_LPC43_ETHFD
   priv->fduplex = 1;
 #endif
+
 #ifdef CONFIG_LPC43_ETH100MBPS
   priv->mbps100 = 1;
 #endif
@@ -3309,7 +3317,7 @@ static inline void lpc43_selectrmii(void)
  * Description:
  *  Configure GPIOs for the Ethernet interface.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3378,7 +3386,7 @@ static inline void lpc43_ethgpioconfig(FAR struct lpc43_ethmac_s *priv)
   lpc43_pin_config(PINCONF_ENET_RXD1);
   lpc43_pin_config(PINCONF_ENET_TXD0);
   lpc43_pin_config(PINCONF_ENET_TXD1);
-  lpc43_pin_config(PINCONF_ENET_TXEN);
+  lpc43_pin_config(PINCONF_ENET_TX_EN);
 
 #ifdef PINCONF_ENET_RESET
   lpc43_pin_config(PINCONF_ENET_RESET);
@@ -3398,7 +3406,7 @@ static inline void lpc43_ethgpioconfig(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *  Reset the Ethernet block.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3435,7 +3443,7 @@ static void lpc43_ethreset(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *  Configure the Ethernet MAC for DMA operation.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3518,7 +3526,7 @@ static int lpc43_macconfig(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Configure the selected MAC address.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3560,7 +3568,7 @@ static void lpc43_macaddress(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *   Configure the IPv6 multicast MAC address.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3633,7 +3641,7 @@ static void lpc43_ipv6multicast(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *  Enable normal MAC operation.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3720,7 +3728,7 @@ static int lpc43_macenable(FAR struct lpc43_ethmac_s *priv)
  * Description:
  *  Configure the Ethernet interface for DMA operation.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - A reference to the private driver state structure
  *
  * Returned Value:
@@ -3816,16 +3824,16 @@ static inline int lpc43_ethinitialize(void)
   priv->dev.d_ifup    = lpc43_ifup;     /* I/F up (new IP address) callback */
   priv->dev.d_ifdown  = lpc43_ifdown;   /* I/F down callback */
   priv->dev.d_txavail = lpc43_txavail;  /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   priv->dev.d_addmac  = lpc43_addmac;   /* Add multicast MAC address */
   priv->dev.d_rmmac   = lpc43_rmmac;    /* Remove multicast MAC address */
 #endif
-#ifdef CONFIG_NETDEV_PHY_IOCTL
+#ifdef CONFIG_NETDEV_IOCTL
   priv->dev.d_ioctl   = lpc43_ioctl;    /* Support PHY ioctl() calls */
 #endif
   priv->dev.d_private = (void *)&g_lpc43ethmac; /* Used to recover private state from dev */
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmission */
 
   priv->txpoll       = wd_create();   /* Create periodic poll timer */
   priv->txtimeout    = wd_create();   /* Create TX timeout timer */
@@ -3860,7 +3868,7 @@ static inline int lpc43_ethinitialize(void)
  *   This is the "standard" network initialization logic called from the
  *   low-level initialization logic in up_initialize.c.
  *
- * Parameters:
+ * Input Parameters:
  *   None.
  *
  * Returned Value:

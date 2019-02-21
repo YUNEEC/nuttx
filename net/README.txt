@@ -9,6 +9,7 @@ Directory Structure
    `- net/
        |
        +- arp        - Address resolution protocol (IPv4)
+       +- bluetooth  - PF_BLUETOOTH socket interface
        +- devif      - Stack/device interface layer
        +- icmp       - Internet Control Message Protocol (IPv4)
        +- icmpv6     - Internet Control Message Protocol (IPv6)
@@ -17,8 +18,10 @@ Directory Structure
        +- ipforward  - IP forwarding logic
        +- local      - Unix domain (local) sockets
        +- loopback   - Local loopback
+       +- mld        - Multicast Listener Discovery (MLD)
        +- neighbor   - Neighbor Discovery Protocol (IPv6)
        +- netdev     - Socket network device interface
+       +- netlink    - Netlink IPC socket interface
        +- pkt        - "Raw" packet socket support
        +- sixlowpan  - 6LoWPAN implementation
        +- socket     - BSD socket interface
@@ -27,7 +30,6 @@ Directory Structure
        +- udp        - User Datagram Protocol
        +- usrsock    - User socket API for user-space networking stack
        `- utils      - Miscellaneous utility functions
-
 
     +-------------------------------------------------------------------++------------------------+
     |                     Application layer                             || usrsock daemon         |

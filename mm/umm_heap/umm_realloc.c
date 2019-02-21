@@ -55,11 +55,11 @@
  * Description:
  *   Re-allocate memory in the user heap.
  *
- * Parameters:
+ * Input Parameters:
  *   oldmem  - The old memory allocated
  *   newsize - Size (in bytes) of the new memory region to be re-allocated.
  *
- * Return Value:
+ * Returned Value:
  *   The address of the re-allocated memory (NULL on failure to re-allocate)
  *
  ****************************************************************************/

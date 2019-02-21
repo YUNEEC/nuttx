@@ -69,7 +69,7 @@
  *   associated with it are freed; if the descriptor was the last reference
  *   to a file which has been removed using unlink(2) the file is deleted.
  *
- * Parameters:
+ * Input Parameters:
  *   fd   file descriptor to close
  *
  * Returned Value:
@@ -102,6 +102,12 @@ int close(int fd)
       if ((unsigned int)fd < (CONFIG_NFILE_DESCRIPTORS+CONFIG_NSOCKET_DESCRIPTORS))
         {
           ret = net_close(fd);
+          if (ret < 0)
+            {
+              errcode = -ret;
+              goto errout;
+            }
+
           leave_cancellation_point();
           return ret;
         }

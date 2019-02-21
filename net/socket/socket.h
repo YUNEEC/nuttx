@@ -67,7 +67,7 @@
 #define _SF_LISTENING       0x10  /* Bit 4: SOCK_STREAM is listening */
 #define _SF_BOUND           0x20  /* Bit 5: SOCK_STREAM is bound to an address */
                                   /* Bits 6-7: Connection state */
-#define _SF_CONNECTED       0x40  /* Bit 6: SOCK_STREAM is connected */
+#define _SF_CONNECTED       0x40  /* Bit 6: SOCK_STREAM/SOCK_DGRAM is connected */
 #define _SF_CLOSED          0x80  /* Bit 7: SOCK_STREAM was gracefully disconnected */
 
 /* Connection state encoding:
@@ -95,24 +95,24 @@
 
 /* These define bit positions for each socket option (see sys/socket.h) */
 
-#define _SO_DEBUG        _SO_BIT(SO_DEBUG)
 #define _SO_ACCEPTCONN   _SO_BIT(SO_ACCEPTCONN)
 #define _SO_BROADCAST    _SO_BIT(SO_BROADCAST)
-#define _SO_REUSEADDR    _SO_BIT(SO_REUSEADDR)
+#define _SO_DEBUG        _SO_BIT(SO_DEBUG)
+#define _SO_DONTROUTE    _SO_BIT(SO_DONTROUTE)
+#define _SO_ERROR        _SO_BIT(SO_ERROR)
 #define _SO_KEEPALIVE    _SO_BIT(SO_KEEPALIVE)
 #define _SO_LINGER       _SO_BIT(SO_LINGER)
 #define _SO_OOBINLINE    _SO_BIT(SO_OOBINLINE)
-#define _SO_SNDBUF       _SO_BIT(SO_SNDBUF)
 #define _SO_RCVBUF       _SO_BIT(SO_RCVBUF)
-#define _SO_ERROR        _SO_BIT(SO_ERROR)
-#define _SO_TYPE         _SO_BIT(SO_TYPE)
-#define _SO_DONTROUTE    _SO_BIT(SO_DONTROUTE)
 #define _SO_RCVLOWAT     _SO_BIT(SO_RCVLOWAT)
 #define _SO_RCVTIMEO     _SO_BIT(SO_RCVTIMEO)
+#define _SO_REUSEADDR    _SO_BIT(SO_REUSEADDR)
+#define _SO_SNDBUF       _SO_BIT(SO_SNDBUF)
 #define _SO_SNDLOWAT     _SO_BIT(SO_SNDLOWAT)
 #define _SO_SNDTIMEO     _SO_BIT(SO_SNDTIMEO)
+#define _SO_TYPE         _SO_BIT(SO_TYPE)
 
-/* This is the larget option value */
+/* This is the largest option value.  REVISIT: belongs in sys/socket.h */
 
 #define _SO_MAXOPT       (15)
 
@@ -166,7 +166,7 @@ extern "C"
 int sockfd_allocate(int minsd);
 
 /****************************************************************************
- * Name: sock_release
+ * Name: psock_release
  *
  * Description:
  *   Free a socket.
@@ -179,7 +179,7 @@ int sockfd_allocate(int minsd);
  *
  ****************************************************************************/
 
-void sock_release(FAR struct socket *psock);
+void psock_release(FAR struct socket *psock);
 
 /****************************************************************************
  * Name: sockfd_release
@@ -220,8 +220,10 @@ FAR struct socket *sockfd_socket(int sockfd);
  * Description:
  *   Return the socket interface associated with this address family.
  *
- * Parameters:
- *   family - Address family
+ * Input Parameters:
+ *   family   - Socket address family
+ *   type     - Socket type
+ *   protocol - Socket protocol
  *
  * Returned Value:
  *   On success, a non-NULL instance of struct sock_intf_s is returned.  NULL
@@ -229,43 +231,8 @@ FAR struct socket *sockfd_socket(int sockfd);
  *
  ****************************************************************************/
 
-FAR const struct sock_intf_s *net_sockif(sa_family_t family);
-
-/****************************************************************************
- * Name: psock_close
- *
- * Description:
- *   Performs the close operation on a socket instance
- *
- * Parameters:
- *   psock   Socket instance
- *
- * Returned Value:
- *   0 on success; -1 on error with errno set appropriately.
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-int psock_close(FAR struct socket *psock);
-
-/****************************************************************************
- * Name: net_close
- *
- * Description:
- *   Performs the close operation on socket descriptors
- *
- * Parameters:
- *   sockfd   Socket descriptor of socket
- *
- * Returned Value:
- *   0 on success; -1 on error with errno set appropriately.
- *
- * Assumptions:
- *
- ****************************************************************************/
-
-int net_close(int sockfd);
+FAR const struct sock_intf_s *
+  net_sockif(sa_family_t family, int type, int protocol);
 
 /****************************************************************************
  * Name: net_timeo
@@ -274,7 +241,7 @@ int net_close(int sockfd);
  *   Check if a timeout has elapsed.  This can be called from a socket poll
  *   function to determine if a timeout has occurred.
  *
- * Parameters:
+ * Input Parameters:
  *   start_time Timeout start time in system clock ticks
  *   timeout    Timeout value in deciseconds.
  *
@@ -286,7 +253,7 @@ int net_close(int sockfd);
  ****************************************************************************/
 
 #ifdef CONFIG_NET_SOCKOPTS
-int net_timeo(systime_t start_time, socktimeo_t timeo);
+int net_timeo(clock_t start_time, socktimeo_t timeo);
 #endif
 
 /****************************************************************************
@@ -299,7 +266,7 @@ int net_timeo(systime_t start_time, socktimeo_t timeo);
  *   send() is equivalent to write(). Also, send(sockfd,buf,len,flags) is
  *   equivalent to sendto(sockfd,buf,len,flags,NULL,0).
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send

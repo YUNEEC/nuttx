@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/serial/ptmx.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -129,19 +129,24 @@ static struct ptmx_dev_s g_ptmx;
 
 static void ptmx_semtake(void)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&g_ptmx.px_exclsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_ptmx.px_exclsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      DEBUGASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define ptmx_semgive() sem_post(&g_ptmx.px_exclsem)
+#define ptmx_semgive() nxsem_post(&g_ptmx.px_exclsem)
 
 /****************************************************************************
  * Name: ptmx_minor_allocate
@@ -243,8 +248,8 @@ static int ptmx_open(FAR struct file *filep)
   /* Open the master device:  /dev/ptyN, where N=minor */
 
   snprintf(devname, 16, "/dev/pty%d", minor);
-  fd = open(devname, O_RDWR);
-  DEBUGASSERT(fd >= 0);  /* open() should never fail */
+  fd = nx_open(devname, O_RDWR);
+  DEBUGASSERT(fd >= 0);  /* nx_open() should never fail */
 
   /* No unlink the master.  This will remove it from the VFS namespace,
    * the driver will still persist because of the open count on the
@@ -310,7 +315,7 @@ int ptmx_register(void)
 {
   /* Initialize driver state */
 
-  sem_init(&g_ptmx.px_exclsem, 0, 1);
+  nxsem_init(&g_ptmx.px_exclsem, 0, 1);
 
   /* Register the PTMX driver */
 

@@ -58,6 +58,7 @@
 #include <debug.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/mtd/mtd.h>
@@ -85,9 +86,9 @@
 
 /* Get the part configuration based on the size configuration */
 
-#if CONFIG_AT24XX_SIZE == 2       /* AT24C02: 2Kbits = 256; 16 * 16 =  256 */
-#  define AT24XX_NPAGES     16
-#  define AT24XX_PAGESIZE   16
+#if CONFIG_AT24XX_SIZE == 2       /* AT24C02: 2Kbits = 256; 32 * 8 =  256 */
+#  define AT24XX_NPAGES     32
+#  define AT24XX_PAGESIZE   8
 #  define AT24XX_ADDRSIZE   1
 #elif CONFIG_AT24XX_SIZE == 4     /* AT24C04: 4Kbits = 512B; 32 * 16 = 512 */
 #  define AT24XX_NPAGES     32
@@ -283,7 +284,7 @@ static int at24c_eraseall(FAR struct at24c_dev_s *priv)
               return -ETIMEDOUT;
             }
 
-          usleep(1000);
+          nxsig_usleep(1000);
         }
 
       at24c_i2c_write(priv, at24addr, buf, AT24XX_PAGESIZE + AT24XX_ADDRSIZE);
@@ -349,7 +350,7 @@ static ssize_t at24c_read_internal(FAR struct at24c_dev_s *priv, off_t offset,
           return -ETIMEDOUT;
         }
 
-      usleep(1000);
+      nxsig_usleep(1000);
     }
 
   /* Then transfer the following bytes */
@@ -472,7 +473,7 @@ static ssize_t at24c_bwrite(FAR struct mtd_dev_s *dev, off_t startblock, size_t 
               return -ETIMEDOUT;
             }
 
-          usleep(1000);
+          nxsig_usleep(1000);
         }
 
       memcpy(&buf[AT24XX_ADDRSIZE], buffer, priv->pagesize);
@@ -683,13 +684,8 @@ FAR struct mtd_dev_s *at24c_initialize(FAR struct i2c_master_s *dev)
       priv->mtd.bwrite = at24c_bwrite;
       priv->mtd.read   = at24c_read;
       priv->mtd.ioctl  = at24c_ioctl;
+      priv->mtd.name   = "at24xx";
       priv->dev        = dev;
-
-      /* Register the MTD with the procfs system if enabled */
-
-#ifdef CONFIG_MTD_REGISTRATION
-      mtd_register(&priv->mtd, "at24xx");
-#endif
       priv->initd      = true;
     }
 

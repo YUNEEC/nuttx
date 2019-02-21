@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/wqueue/work_process.c
  *
- *   Copyright (C) 2009-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2014, 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
 #include <nuttx/wqueue.h>
 
 #include "wqueue/wqueue.h"
@@ -67,6 +68,12 @@
 #  define WORK_CLOCK CLOCK_REALTIME
 #endif
 
+#ifdef CONFIG_SYSTEM_TIME64
+#  define WORK_DELAY_MAX UINT64_MAX
+#else
+#  define WORK_DELAY_MAX UINT32_MAX
+#endif
+
 #ifndef MIN
 #  define MIN(a,b) ((a) < (b) ? (a) : (b))
 #endif
@@ -84,7 +91,7 @@
  *   part of the internal implementation of each work queue; it should not
  *   be called from application level logic.
  *
- * Input parameters:
+ * Input Parameters:
  *   wqueue - Describes the work queue to be processed
  *
  * Returned Value:
@@ -92,26 +99,26 @@
  *
  ****************************************************************************/
 
-void work_process(FAR struct kwork_wqueue_s *wqueue, systime_t period, int wndx)
+void work_process(FAR struct kwork_wqueue_s *wqueue, int wndx)
 {
   volatile FAR struct work_s *work;
   worker_t  worker;
   irqstate_t flags;
   FAR void *arg;
-  systime_t elapsed;
-  systime_t remaining;
-  systime_t stick;
-  systime_t ctick;
-  systime_t next;
+  clock_t elapsed;
+  clock_t remaining;
+  clock_t stick;
+  clock_t ctick;
+  clock_t next;
 
   /* Then process queued work.  We need to keep interrupts disabled while
    * we process items in the work list.
    */
 
-  next  = period;
+  next  = WORK_DELAY_MAX;
   flags = enter_critical_section();
 
-  /* Get the time that we started this polling cycle in clock ticks. */
+  /* Get the time that we started processing the queue in clock ticks. */
 
   stick = clock_systimer();
 
@@ -214,15 +221,16 @@ void work_process(FAR struct kwork_wqueue_s *wqueue, systime_t period, int wndx)
         }
     }
 
-#if defined(CONFIG_SCHED_LPWORK) && CONFIG_SCHED_LPNTHREADS > 0
-  /* Value of zero for period means that we should wait indefinitely until
-   * signalled.  This option is used only for the case where there are
-   * multiple, low-priority worker threads.  In that case, only one of
-   * the threads does the poll... the others simple.  In all other cases
-   * period will be non-zero and equal to wqueue->delay.
+  /* When multiple worker threads are created for this work queue, only
+   * thread 0 (wndx = 0) will monitor the unexpired works.
+   *
+   * Other worker threads (wndx > 0) just process no-delay or expired
+   * works, then sleep. The unexpired works are left in the queue. They
+   * will be handled by thread 0 when it finishes current work and iterate
+   * over the queue again.
    */
 
-  if (period == 0)
+  if (wndx > 0 || next == WORK_DELAY_MAX)
     {
       sigset_t set;
 
@@ -232,35 +240,19 @@ void work_process(FAR struct kwork_wqueue_s *wqueue, systime_t period, int wndx)
       sigaddset(&set, SIGWORK);
 
       wqueue->worker[wndx].busy = false;
-      DEBUGVERIFY(sigwaitinfo(&set, NULL));
+      DEBUGVERIFY(nxsig_waitinfo(&set, NULL));
       wqueue->worker[wndx].busy = true;
     }
   else
-#endif
     {
-      /* Get the delay (in clock ticks) since we started the sampling */
+      /* Wait a while to check the work list.  We will wait here until
+       * either the time elapses or until we are awakened by a signal.
+       * Interrupts will be re-enabled while we wait.
+       */
 
-      elapsed = clock_systimer() - stick;
-      if (elapsed < period && next > 0)
-        {
-          /* How much time would we need to delay to get to the end of the
-           * sampling period?  The amount of time we delay should be the smaller
-           * of the time to the end of the sampling period and the time to the
-           * next work expiry.
-           */
-
-          remaining = period - elapsed;
-          next      = MIN(next, remaining);
-
-          /* Wait awhile to check the work list.  We will wait here until
-           * either the time elapses or until we are awakened by a signal.
-           * Interrupts will be re-enabled while we wait.
-           */
-
-          wqueue->worker[wndx].busy = false;
-          usleep(next * USEC_PER_TICK);
-          wqueue->worker[wndx].busy = true;
-        }
+      wqueue->worker[wndx].busy = false;
+      nxsig_usleep(next * USEC_PER_TICK);
+      wqueue->worker[wndx].busy = true;
     }
 
   leave_critical_section(flags);

@@ -25,9 +25,7 @@ Configurations
 Each EK-TM4C1294XL configuration is maintained in a
 sub-directory and can be selected as follow:
 
-    cd tools
-    ./configure.sh tm4c1294-launchpad/<subdir>
-    cd -
+    tools/configure.sh tm4c1294-launchpad/<subdir>
 
 Where <subdir> is one of the following:
 
@@ -123,7 +121,7 @@ Where <subdir> is one of the following:
          CONFIG_NET_ARP=y
          CONFIG_NET_ARP_SEND=y (optional)
          CONFIG_NET_ICMP=y
-         CONFIG_NET_ICMP_PING=y
+         CONFIG_NET_ICMP_SOCKET=y
 
          CONFIG_NETDB_DNSCLIENT=y
          CONFIG_NETUTILS_TELNETD=y

@@ -1,8 +1,7 @@
 /****************************************************************************
  * net/ieee802154/ieee802154_sendto.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,8 +56,8 @@
 #include <nuttx/mm/iob.h>
 #include <nuttx/net/radiodev.h>
 #include <nuttx/net/net.h>
-#include <nuttx/net/ip.h>
 
+#include "utils/utils.h"
 #include "netdev/netdev.h"
 #include "devif/devif.h"
 #include "socket/socket.h"
@@ -71,14 +70,14 @@
  ****************************************************************************/
 
 /* This structure holds the state of the send operation until it can be
- * operated upon from the interrupt level.
+ * operated upon by the event handler.
  */
 
 struct ieee802154_sendto_s
 {
   FAR struct socket *is_sock;            /* Points to the parent socket structure */
   FAR struct devif_callback_s *is_cb;    /* Reference to callback instance */
-  struct ieee802154_saddr_s is_destaddr; /* Frame destinatin address */
+  struct ieee802154_saddr_s is_destaddr; /* Frame destination address */
   sem_t is_sem;                          /* Used to wake up the waiting thread */
   FAR const uint8_t *is_buffer;          /* User buffer of data to send */
   size_t is_buflen;                      /* Number of bytes in the is_buffer */
@@ -96,7 +95,7 @@ struct ieee802154_sendto_s
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   addr    - The address to check
  *   addrlen - The length of the address in bytes
  *
@@ -125,7 +124,7 @@ static bool ieee802154_anyaddrnull(FAR const uint8_t *addr, uint8_t addrlen)
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   eaddr - The short address to check
  *
  * Returned Value:
@@ -145,7 +144,7 @@ static inline bool ieee802154_saddrnull(FAR const uint8_t *saddr)
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   eaddr - The extended address to check
  *
  * Returned Value:
@@ -163,7 +162,7 @@ static inline bool ieee802154_eaddrnull(FAR const uint8_t *eaddr)
  *
  * Description:
  *   Based on the collected attributes and addresses, construct the MAC meta
- *   data structure that we need to interface with the IEEE802.15.4 MAC.
+ *   data structure that we need to interface with the IEEE 802.15.4 MAC.
  *
  * Input Parameters:
  *   radio   - Radio network driver state instance.
@@ -179,9 +178,9 @@ static inline bool ieee802154_eaddrnull(FAR const uint8_t *eaddr)
  *
  ****************************************************************************/
 
-void ieee802154_meta_data(FAR struct radio_driver_s *radio,
-                          FAR struct ieee802154_sendto_s *pstate,
-                          FAR struct ieee802154_frame_meta_s *meta)
+static void ieee802154_meta_data(FAR struct radio_driver_s *radio,
+                                 FAR struct ieee802154_sendto_s *pstate,
+                                 FAR struct ieee802154_frame_meta_s *meta)
 {
   FAR struct ieee802154_saddr_s *destaddr;
   FAR struct ieee802154_saddr_s *srcaddr;
@@ -347,7 +346,7 @@ static uint16_t ieee802154_sendto_eventhandler(FAR struct net_driver_s *dev,
 
       /* Allocate an IOB to hold the frame data */
 
-      iob = iob_alloc(0);
+      iob = net_ioballoc(false);
       if (iob == NULL)
         {
           nwarn("WARNING: Failed to allocate IOB\n");
@@ -385,7 +384,7 @@ static uint16_t ieee802154_sendto_eventhandler(FAR struct net_driver_s *dev,
 
       /* Wake up the waiting thread */
 
-      sem_post(&pstate->is_sem);
+      nxsem_post(&pstate->is_sem);
     }
 
   return flags;
@@ -400,7 +399,7 @@ errout:
 
   /* Wake up the waiting thread */
 
-  sem_post(&pstate->is_sem);
+  nxsem_post(&pstate->is_sem);
   return flags;
 }
 
@@ -417,7 +416,7 @@ errout:
  *   may be returned when they are not NULL and 0), and the error ENOTCONN is
  *   returned when the socket was not actually connected.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    A pointer to a NuttX-specific, internal socket structure
  *   buf      Data to send
  *   len      Length of data to send
@@ -427,8 +426,8 @@ errout:
  *
  * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
- *   -1 is returned, and errno is set appropriately.  See sendto()
- *   for the complete list of return values.
+ *   a negated errno value is retruend.  See sendto() for the complete list
+ *   of return values.
  *
  ****************************************************************************/
 
@@ -440,15 +439,13 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
   FAR struct radio_driver_s *radio;
   FAR struct ieee802154_conn_s *conn;
   struct ieee802154_sendto_s state;
-  int errcode;
   int ret = OK;
 
   /* Verify that the sockfd corresponds to valid, allocated socket */
 
   if (psock == NULL || psock->s_crefs <= 0)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   conn = (FAR struct ieee802154_conn_s *)psock->s_conn;
@@ -460,8 +457,7 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
 
   if (tolen < sizeof(struct ieee802154_saddr_s))
     {
-      errcode = EDESTADDRREQ;
-      goto errout;
+      return -EDESTADDRREQ;
     }
 
   /* Get the device driver that will service this transfer */
@@ -469,8 +465,7 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
   radio = ieee802154_find_device(conn, &conn->laddr);
   if (radio == NULL)
     {
-      errcode = ENODEV;
-      goto errout;
+      return -ENODEV;
     }
 
   /* Set the socket state to sending */
@@ -479,9 +474,9 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
 
   /* Perform the send operation */
 
-  /* Initialize the state structure. This is done with interrupts
-   * disabled because we don't want anything to happen until we
-   * are ready.
+  /* Initialize the state structure. This is done with the network
+   * locked because we don't want anything to happen until we are
+   * ready.
    */
 
   net_lock();
@@ -491,8 +486,8 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&state.is_sem, 0, 0); /* Doesn't really fail */
-  (void)sem_setprotocol(&state.is_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&state.is_sem, 0, 0); /* Doesn't really fail */
+  (void)nxsem_setprotocol(&state.is_sem, SEM_PRIO_NONE);
 
   state.is_sock   = psock;          /* Socket descriptor to use */
   state.is_buflen = len;            /* Number of bytes to send */
@@ -521,35 +516,32 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
 
           netdev_txnotify_dev(&radio->r_dev);
 
-          /* Wait for the send to complete or an error to occur: NOTES: (1)
-           * net_lockedwait will also terminate if a signal is received, (2)
-           * interrupts may be disabled! They will be re-enabled while the
-           * task sleeps and automatically re-enabled when the task restarts.
+          /* Wait for the send to complete or an error to occur.
+           * net_lockedwait will also terminate if a signal is received.
            */
 
           ret = net_lockedwait(&state.is_sem);
 
-          /* Make sure that no further interrupts are processed */
+          /* Make sure that no further events are processed */
 
           ieee802154_callback_free(&radio->r_dev, conn, state.is_cb);
         }
     }
 
-  sem_destroy(&state.is_sem);
+  nxsem_destroy(&state.is_sem);
   net_unlock();
 
   /* Set the socket state to idle */
 
   psock->s_flags = _SS_SETSTATE(psock->s_flags, _SF_IDLE);
 
-  /* Check for a errors, Errors are signalled by negative errno values
+  /* Check for a errors, Errors are signaled by negative errno values
    * for the send length
    */
 
   if (state.is_sent < 0)
     {
-      errcode = state.is_sent;
-      goto errout;
+      return state.is_sent;
     }
 
   /* If net_lockedwait failed, then we were probably reawakened by a signal. In
@@ -558,17 +550,12 @@ ssize_t psock_ieee802154_sendto(FAR struct socket *psock, FAR const void *buf,
 
   if (ret < 0)
     {
-      errcode = -ret;
-      goto errout;
+      return ret;
     }
 
   /* Return the number of bytes actually sent */
 
   return state.is_sent;
-
-errout:
-  set_errno(errcode);
-  return ERROR;
 }
 
 #endif /* CONFIG_NET_IEEE802154 */

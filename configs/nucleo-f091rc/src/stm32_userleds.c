@@ -49,7 +49,7 @@
 #include "chip.h"
 #include "up_arch.h"
 #include "up_internal.h"
-#include "stm32f0_gpio.h"
+#include "stm32_gpio.h"
 #include "nucleo-f091rc.h"
 
 #ifndef CONFIG_ARCH_LEDS
@@ -172,7 +172,7 @@ void board_userled_initialize(void)
 {
   /* Configure LD2 GPIO for output */
 
-  stm32f0_configgpio(GPIO_LD2);
+  stm32_configgpio(GPIO_LD2);
 }
 
 /****************************************************************************
@@ -181,9 +181,9 @@ void board_userled_initialize(void)
 
 void board_userled(int led, bool ledon)
 {
-  if (led == 1)
+  if (led == BOARD_LD2)
     {
-      stm32f0_gpiowrite(GPIO_LD2, ldeon);
+      stm32_gpiowrite(GPIO_LD2, ledon);
     }
 }
 
@@ -193,18 +193,15 @@ void board_userled(int led, bool ledon)
 
 void board_userled_all(uint8_t ledset)
 {
-  if (led == 1)
-    {
-      stm32f0_gpiowrite(GPIO_LD2, (ledset & BOARD_LD2_BIT) != 0);
-    }
+  stm32_gpiowrite(GPIO_LD2, (ledset & BOARD_LD2_BIT) != 0);
 }
 
 /****************************************************************************
- * Name: stm32f0_led_pminitialize
+ * Name: stm32_led_pminitialize
  ****************************************************************************/
 
 #ifdef CONFIG_PM
-void stm32f0_led_pminitialize(void)
+void stm32_led_pminitialize(void)
 {
   /* Register to receive power management callbacks */
 

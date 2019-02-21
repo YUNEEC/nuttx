@@ -104,15 +104,12 @@ static int smps_open(FAR struct file *filep)
   FAR struct inode      *inode = filep->f_inode;
   FAR struct smps_dev_s *dev   = inode->i_private;
   uint8_t                tmp;
-  int                    ret   = OK;
+  int                    ret;
 
   /* If the port is the middle of closing, wait until the close is finished */
 
-  if (sem_wait(&dev->closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->closesem);
+  if (ret >= 0)
     {
       /* Increment the count of references to the device.  If this the first
        * time that the driver has been opened for this device, then initialize
@@ -147,7 +144,7 @@ static int smps_open(FAR struct file *filep)
             }
         }
 
-      sem_post(&dev->closesem);
+      nxsem_post(&dev->closesem);
     }
 
   return OK;
@@ -164,16 +161,13 @@ static int smps_open(FAR struct file *filep)
 
 static int smps_close(FAR struct file *filep)
 {
-  FAR struct inode     *inode = filep->f_inode;
+  FAR struct inode     *inode  = filep->f_inode;
   FAR struct smps_dev_s *dev   = inode->i_private;
   irqstate_t            flags;
-  int                   ret = OK;
+  int                   ret;
 
-  if (sem_wait(&dev->closesem) != OK)
-    {
-      ret = -errno;
-    }
-  else
+  ret = nxsem_wait(&dev->closesem);
+  if (ret >= 0)
     {
       /* Decrement the references to the driver.  If the reference count will
        * decrement to 0, then uninitialize the driver.
@@ -182,7 +176,7 @@ static int smps_close(FAR struct file *filep)
       if (dev->ocount > 1)
         {
           dev->ocount--;
-          sem_post(&dev->closesem);
+          nxsem_post(&dev->closesem);
         }
       else
         {
@@ -196,7 +190,7 @@ static int smps_close(FAR struct file *filep)
           dev->ops->shutdown(dev);               /* Disable the SMPS */
           leave_critical_section(flags);
 
-          sem_post(&dev->closesem);
+          nxsem_post(&dev->closesem);
         }
     }
 
@@ -427,7 +421,7 @@ static int smps_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
           if (smps->limits.v_out > 0 && params->v_out > smps->limits.v_out)
             {
-              pwrerr("ERROR: params->v_out > limits.v_out: %d > %d\n",
+              pwrerr("ERROR: params->v_out > limits.v_out: %.2f > %.2f\n",
                      params->v_out, smps->limits.v_out);
 
               ret = -EPERM;
@@ -438,7 +432,7 @@ static int smps_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
           if (smps->limits.i_out > 0 && params->i_out > smps->limits.i_out)
             {
-              pwrerr("ERROR: params->i_out > limits.i_out: %d > %d\n",
+              pwrerr("ERROR: params->i_out > limits.i_out: %.2f > %.2f\n",
                      params->i_out, smps->limits.i_out);
 
               ret = -EPERM;
@@ -449,7 +443,7 @@ static int smps_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
           if (smps->limits.p_out > 0 && params->p_out > smps->limits.p_out)
             {
-              pwrerr("ERROR: params->p_out > limits.p_out: %d > %d\n",
+              pwrerr("ERROR: params->p_out > limits.p_out: %.2f > %.2f\n",
                      params->p_out, smps->limits.p_out);
 
               ret = -EPERM;
@@ -512,13 +506,13 @@ int smps_register(FAR const char *path, FAR struct smps_dev_s *dev, FAR void *lo
   DEBUGASSERT(dev->ops->fault_clean != NULL);
   DEBUGASSERT(dev->ops->ioctl != NULL);
 
-  /* Initialize the HRTIM device structure */
+  /* Initialize the SMPS device structure */
 
   dev->ocount = 0;
 
   /* Initialize semaphores */
 
-  sem_init(&dev->closesem, 0, 1);
+  nxsem_init(&dev->closesem, 0, 1);
 
   /* Connect SMPS driver with lower level interface */
 
@@ -529,7 +523,7 @@ int smps_register(FAR const char *path, FAR struct smps_dev_s *dev, FAR void *lo
   ret = register_driver(path, &smps_fops, 0444, dev);
   if (ret < 0)
     {
-      sem_destroy(&dev->closesem);
+      nxsem_destroy(&dev->closesem);
     }
 
   return ret;

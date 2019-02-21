@@ -75,7 +75,7 @@
  * Description:
  *   Dump a data buffer to the SYSLOG.
  *
- * Parameters:
+ * Input Parameters:
  *   buffer - The buffer to be dumped
  *   buflen - The length of the buffer in bytes.
  *
@@ -126,7 +126,7 @@ static void spirit_dump_buffer(FAR const uint8_t *buffer, unsigned int buflen)
  * Description:
  *   Dump a register access.
  *
- * Parameters:
+ * Input Parameters:
  *   msg    - Describes the access
  *   header - Two byte header before the access
  *   buffer - The buffer to be dumped
@@ -154,7 +154,7 @@ static void spirit_regdebug(FAR const char *msg, FAR uint8_t *header,
  * Description:
  *   Dump a FIFO access.
  *
- * Parameters:
+ * Input Parameters:
  *   msg    - Describes the access
  *   header - Two byte header before the access
  *   buffer - The buffer to be dumped
@@ -185,7 +185,7 @@ static void spirit_fifodebug(FAR const char *msg, FAR uint8_t *header,
  *   multiple devices on the bus because while the bus was unlocked, another
  *   device may have re-configured the SPIO.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -227,7 +227,7 @@ static void spirit_lock(FAR struct spi_dev_s *spi)
  *   Un-lock the SPI bus after each transfer, possibly losing the current
  *   configuration if we are sharing the SPI bus with other devices.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -254,7 +254,7 @@ static void spirit_unlock(FAR struct spi_dev_s *spi)
  * Description:
  *   Read single or multiple SPIRIT1 register
  *
- * Input parameters:
+ * Input Parameters:
  *
  *   regaddr: Base register's address to be read
  *   buffer:  Pointer to the buffer of registers' values to be read
@@ -309,7 +309,7 @@ int spirit_reg_read(FAR struct spirit_library_s *spirit, uint8_t regaddr,
  * Description:
  *   Read single or multiple SPIRIT1 register.
  *
- * Input parameters:
+ * Input Parameters:
  *   spirit  - Reference to an instance of the driver state stucture.
  *   regaddr - Base register's address to write
  *   buffer  - Pointer to the buffer of register values to write
@@ -363,7 +363,7 @@ int spirit_reg_write(FAR struct spirit_library_s *spirit, uint8_t regaddr,
  * Description:
  *   Perform atomic read/modify/write on a single SPIRIT1 register.
  *
- * Input parameters:
+ * Input Parameters:
  *   spirit  - Reference to an instance of the driver state stucture.
  *   regaddr - Base register's address to write
  *   clrbits - Bits to clear in the register
@@ -442,7 +442,7 @@ int spirit_reg_modify(FAR struct spirit_library_s *spirit, uint8_t regaddr,
  * Description:
  *   Send a command
  *
- * Input parameters:
+ * Input Parameters:
  *   spirit - Reference to an instance of the driver state stucture.
  *   cmd    - Command code to be sent
  *
@@ -489,7 +489,7 @@ int spirit_command(FAR struct spirit_library_s *spirit, uint8_t cmd)
  * Description:
  *   Read data from RX FIFO
  *
- * Input parameters:
+ * Input Parameters:
  *   spirit - Reference to an instance of the driver state stucture.
  *   buffer - Pointer to the buffer of data values to write
  *   buflen - Number of bytes to be written
@@ -543,7 +543,7 @@ int spirit_fifo_read(FAR struct spirit_library_s *spirit, FAR uint8_t *buffer,
  * Description:
  *   Write data into TX FIFO.
  *
- * Input parameters:
+ * Input Parameters:
  *   spirit  - Reference to an instance of the driver state stucture.
  *   buffer  - Pointer to the buffer of data values to write
  *   buflen  - Number of data values to be written.
@@ -624,7 +624,7 @@ int spirit_update_status(FAR struct spirit_library_s *spirit)
  *   Poll until the Spirit status is the requested value or until a timeout
  *   occurs.
  *
- * Parameters:
+ * Input Parameters:
  *   spirit - Reference to a Spirit library state structure instance
  *   state  - That that we are waiting for.
  *   msec   - Timeout in millisedonds
@@ -640,9 +640,9 @@ int spirit_update_status(FAR struct spirit_library_s *spirit)
 int spirit_waitstatus(FAR struct spirit_library_s *spirit,
                       enum spirit_state_e state, unsigned int msec)
 {
-  systime_t start;
-  systime_t ticks;
-  systime_t elapsed;
+  clock_t start;
+  clock_t ticks;
+  clock_t elapsed;
   int ret;
 
 #ifdef CONFIG_DEBUG_SPI_INFO
@@ -664,7 +664,7 @@ int spirit_waitstatus(FAR struct spirit_library_s *spirit,
 #if (MSEC_PER_TICK * USEC_PER_MSEC) == USEC_PER_TICK
   ticks = (msec + (MSEC_PER_TICK - 1)) / MSEC_PER_TICK;
 #else
-  ticks = ((systime_t)msec * USEC_PER_MSEC + (USEC_PER_TICK - 1)) /
+  ticks = ((clock_t)msec * USEC_PER_MSEC + (USEC_PER_TICK - 1)) /
            USEC_PER_TICK;
 #endif
 

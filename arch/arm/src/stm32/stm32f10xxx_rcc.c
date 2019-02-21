@@ -367,10 +367,10 @@ static inline void rcc_enableapb1(void)
   regval |= RCC_APB1ENR_PWREN;
 #endif
 
-#if defined(CONFIG_STM32_DAC1) || defined(CONFIG_STM32_DAC2)
-  /* DAC interface clock enable */
+#if defined(CONFIG_STM32_DAC1)
+  /* DAC1 interface clock enable */
 
-  regval |= RCC_APB1ENR_DACEN;
+  regval |= RCC_APB1ENR_DAC1EN;
 #endif
 
 #ifdef CONFIG_STM32_CEC
@@ -751,7 +751,7 @@ static void stm32_stdclockconfig(void)
 
   while ((getreg32(STM32_RCC_CFGR) & RCC_CFGR_SWS_MASK) != STM32_SYSCLK_SWS);
 
-#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_RTC_LSICLOCK)
+#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_STM32_RTC_LSICLOCK)
   /* Low speed internal clock source LSI */
 
   stm32_rcc_enablelsi();
@@ -769,7 +769,7 @@ static inline void rcc_enableperipherals(void)
   rcc_enableapb2();
   rcc_enableapb1();
 
-#if defined(CONFIG_RTC_LSECLOCK)
+#if defined(CONFIG_STM32_RTC_LSECLOCK)
   /* Low speed external clock source LSE
    * For F1 it requires PWR and BKP from APB1
    */

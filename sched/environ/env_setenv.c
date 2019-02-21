@@ -66,12 +66,12 @@
  *   'overwrite' is non-zero; if 'overwrite' is zero, then the value of name
  *   unaltered.
  *
- * Parameters:
+ * Input Parameters:
  *   name - The name of the variable to change
  *   value - The new value of the variable
  *   overwrite - Replace any existing value if non-zero.
  *
- * Return Value:
+ * Returned Value:
  *   Zero on success
  *
  * Assumptions:

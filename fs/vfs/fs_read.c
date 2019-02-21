@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_read.c
  *
- *   Copyright (C) 2007-2009, 2012-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012-2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +48,7 @@
 #include <errno.h>
 
 #include <nuttx/cancelpt.h>
+#include <nuttx/net/net.h>
 
 #include "inode/inode.h"
 
@@ -58,16 +60,22 @@
  * Name: file_read
  *
  * Description:
- *   This is the internal implementation of read().
+ *   file_read() is an interanl OS interface.  It is functionally similar to
+ *   the standard read() interface except:
  *
- * Parameters:
- *   file     File structure instance
- *   buf      User-provided to save the data
- *   nbytes   The maximum size of the user-provided buffer
+ *    - It does not modify the errno variable,
+ *    - It is not a cancellation point,
+ *    - It does not handle socket descriptors, and
+ *    - It accepts a file structure instance instead of file descriptor.
  *
- * Return:
+ * Input Parameters:
+ *   filep  - File structure instance
+ *   buf    - User-provided to save the data
+ *   nbytes - The maximum size of the user-provided buffer
+ *
+ * Returned Value:
  *   The positive non-zero number of bytes read on success, 0 on if an
- *   end-of-file condition, or -1 on failure with errno set appropriately.
+ *   end-of-file condition, or a negated errno value on any failure.
  *
  ****************************************************************************/
 
@@ -102,17 +110,79 @@ ssize_t file_read(FAR struct file *filep, FAR void *buf, size_t nbytes)
       ret = (int)inode->u.i_ops->read(filep, (FAR char *)buf, (size_t)nbytes);
     }
 
-  /* If an error occurred, set errno and return -1 (ERROR) */
-
-  if (ret < 0)
-    {
-      set_errno(-ret);
-      return ERROR;
-    }
-
-  /* Otherwise, return the number of bytes read */
+  /* Return the number of bytes read (or possibly an error code) */
 
   return ret;
+}
+
+/****************************************************************************
+ * Name: nx_read
+ *
+ * Description:
+ *   nx_read() is an internal OS interface.  It is functionally similar to
+ *   the standard read() interface except:
+ *
+ *    - It does not modify the errno variable, and
+ *    - It is not a cancellation point.
+ *
+ * Input Parameters:
+ *   fd     - File descriptor to read from
+ *   buf    - User-provided to save the data
+ *   nbytes - The maximum size of the user-provided buffer
+ *
+ * Returned Value:
+ *   The positive non-zero number of bytes read on success, 0 on if an
+ *   end-of-file condition, or a negated errno value on any failure.
+ *
+ ****************************************************************************/
+
+ssize_t nx_read(int fd, FAR void *buf, size_t nbytes)
+{
+  /* Did we get a valid file descriptor? */
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+  if ((unsigned int)fd >= CONFIG_NFILE_DESCRIPTORS)
+#endif
+    {
+#if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
+      /* No.. If networking is enabled, read() is the same as recv() with
+       * the flags parameter set to zero.
+       */
+
+      return nx_recv(fd, buf, nbytes, 0);
+#else
+      /* No networking... it is a bad descriptor in any event */
+
+      return -EBADF;
+#endif
+    }
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+  else
+    {
+      FAR struct file *filep;
+      ssize_t ret;
+
+      /* The descriptor is in a valid range to file descriptor... do the
+       * read.  First, get the file structure.  Note that on failure,
+       * fs_getfilep() will set the errno variable.
+       */
+
+      ret = (ssize_t)fs_getfilep(fd, &filep);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      /* Then let file_read do all of the work. */
+
+      return file_read(filep, buf, nbytes);
+    }
+#else
+  /* I don't think we can get here */
+
+  return -ENOSYS;
+#endif
 }
 
 /****************************************************************************
@@ -121,12 +191,12 @@ ssize_t file_read(FAR struct file *filep, FAR void *buf, size_t nbytes)
  * Description:
  *   The standard, POSIX read interface.
  *
- * Parameters:
- *   file     File structure instance
- *   buf      User-provided to save the data
- *   nbytes   The maximum size of the user-provided buffer
+ * Input Parameters:
+ *   fd     - File descriptor to read from
+ *   buf    - User-provided to save the data
+ *   nbytes - The maximum size of the user-provided buffer
  *
- * Return:
+ * Returned Value:
  *   The positive non-zero number of bytes read on success, 0 on if an
  *   end-of-file condition, or -1 on failure with errno set appropriately.
  *
@@ -140,54 +210,14 @@ ssize_t read(int fd, FAR void *buf, size_t nbytes)
 
   (void)enter_cancellation_point();
 
-  /* Did we get a valid file descriptor? */
+  /* Let nx_read() do the real work */
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
-  if ((unsigned int)fd >= CONFIG_NFILE_DESCRIPTORS)
-#endif
+  ret = nx_read(fd, buf, nbytes);
+  if (ret < 0)
     {
-#if defined(CONFIG_NET) && CONFIG_NSOCKET_DESCRIPTORS > 0
-      /* No.. If networking is enabled, read() is the same as recv() with
-       * the flags parameter set to zero.  Note that recv() sets
-       * the errno variable.
-       */
-
-      ret = recv(fd, buf, nbytes, 0);
-#else
-      /* No networking... it is a bad descriptor in any event */
-
-      set_errno(EBADF);
+      set_errno(-ret);
       ret = ERROR;
-#endif
     }
-
-#if CONFIG_NFILE_DESCRIPTORS > 0
-  else
-    {
-      FAR struct file *filep;
-
-      /* The descriptor is in a valid range to file descriptor... do the
-       * read.  First, get the file structure.  Note that on failure,
-       * fs_getfilep() will set the errno variable.
-       */
-
-      filep = fs_getfilep(fd);
-      if (filep == NULL)
-        {
-          /* The errno value has already been set */
-
-          ret = ERROR;
-        }
-      else
-        {
-          /* Then let file_read do all of the work.  Note that file_read()
-           * sets the errno variable.
-           */
-
-          ret = file_read(filep, buf, nbytes);
-        }
-    }
-#endif
 
   leave_cancellation_point();
   return ret;

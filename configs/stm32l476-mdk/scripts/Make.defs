@@ -59,6 +59,7 @@ CC = $(CROSSDEV)gcc
 CXX = $(CROSSDEV)g++
 CPP = $(CROSSDEV)gcc -E
 LD = $(CROSSDEV)ld
+STRIP = $(CROSSDEV)strip --strip-unneeded
 AR = $(ARCROSSDEV)ar rcs
 NM = $(ARCROSSDEV)nm
 OBJCOPY = $(CROSSDEV)objcopy
@@ -104,10 +105,6 @@ endif
 ifeq ($(CONFIG_DEBUG_SYMBOLS),y)
   LDFLAGS += -g
 endif
-
-LDFLAGS += -Map=${TOPDIR}/nuttx.map
-#CFLAGS += -Wa,-adhln
-#CXXFLAGS += -Wa,-adhln
 
 HOSTCC = gcc
 HOSTINCLUDES = -I.

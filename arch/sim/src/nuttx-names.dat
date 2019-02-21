@@ -6,6 +6,7 @@ basename       NXbasename
 calloc         NXcalloc
 chdir          NXchdir
 clearenv       NXclearenv
+clock          NXclock
 clock_gettime  NXclock_gettime
 close          NXclose
 closedir       NXclosedir
@@ -34,6 +35,8 @@ getpid         NXgetpid
 gettimeofday   NXgettimeofday
 htons          NXhtons
 ntohs          NXhntohs
+if_indextoname NXif_indextoname
+if_nametoindex NXif_nametoindex
 ioctl          NXioctl
 isatty         NXisatty
 kill           NXkill

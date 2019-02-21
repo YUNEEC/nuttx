@@ -62,20 +62,20 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_desalloc
+ * Name: nxmq_alloc_des
  *
  * Description:
  *   Allocate a message queue descriptor.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   Reference to the allocated mq descriptor.
  *
  ****************************************************************************/
 
-static mqd_t mq_desalloc(void)
+static mqd_t nxmq_alloc_des(void)
 {
   mqd_t mqdes;
 
@@ -89,7 +89,7 @@ static mqd_t mq_desalloc(void)
     {
       /* Add another block of message descriptors to the list */
 
-      mq_desblockalloc();
+      nxmq_alloc_desblock();
 
       /* And try again */
 
@@ -104,24 +104,24 @@ static mqd_t mq_desalloc(void)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_descreate
+ * Name: nxmq_create_des
  *
  * Description:
  *   Create a message queue descriptor for the specified TCB
  *
- * Inputs:
+ * Input Parameters:
  *   mtcb   - task that needs the descriptor.
  *   msgq   - Named message queue containing the message
  *   oflags - access rights for the descriptor
  *
- * Return Value:
+ * Returned Value:
  *   On success, the message queue descriptor is returned.  NULL is returned
  *   on a failure to allocate.
  *
  ****************************************************************************/
 
-mqd_t mq_descreate(FAR struct tcb_s *mtcb, FAR struct mqueue_inode_s *msgq,
-                   int oflags)
+mqd_t nxmq_create_des(FAR struct tcb_s *mtcb,
+                      FAR struct mqueue_inode_s *msgq, int oflags)
 {
   FAR struct task_group_s *group;
   mqd_t mqdes;
@@ -140,7 +140,7 @@ mqd_t mq_descreate(FAR struct tcb_s *mtcb, FAR struct mqueue_inode_s *msgq,
 
   /* Create a message queue descriptor for the TCB */
 
-  mqdes = mq_desalloc();
+  mqdes = nxmq_alloc_des();
   if (mqdes)
     {
       /* Initialize the message queue descriptor */

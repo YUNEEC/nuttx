@@ -1,7 +1,7 @@
 /************************************************************************************************
  * arch/arm/src/armv7-m/gnu/up_lazyexcption.S
  *
- *   Copyright (C) 2009-2010, 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2010, 2013-2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,13 +40,15 @@
 #include <nuttx/config.h>
 
 #include <arch/irq.h>
-#include "exc_return.h"
+#include <arch/armv7-m/nvicpri.h>
 
 #include "chip.h"
+#include "exc_return.h"
 
 /************************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************************/
+
 /* Configuration ********************************************************************************/
 
 #ifdef CONFIG_ARCH_HIPRI_INTERRUPT
@@ -85,6 +87,25 @@
 	.syntax		unified
 	.thumb
 	.file		"up_lazyexception.S"
+
+/************************************************************************************************
+ * Macro Definitions
+ ************************************************************************************************/
+
+/************************************************************************************************
+ * Name: setintstack
+ *
+ * Description:
+ *   Set the current stack pointer to the  "top" the interrupt stack.  Single CPU case.  Must be
+ *   provided by MCU-specific logic in chip.h for the SMP case.
+ *
+ ************************************************************************************************/
+
+#if !defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
+	.macro	setintstack, tmp1, tmp2
+	ldr		sp, =g_intstackbase
+	.endm
+#endif
 
 /************************************************************************************************
  * .text
@@ -140,6 +161,7 @@ exception_common:
 
 	mov		r2, sp					/* R2=Copy of the main/process stack pointer */
 	add		r2, #HW_XCPT_SIZE		/* R2=MSP/PSP before the interrupt was taken */
+
 #ifdef CONFIG_ARMV7M_USEBASEPRI
 	mrs		r3, basepri				/* R3=Current BASEPRI setting */
 #else
@@ -167,22 +189,6 @@ exception_common:
 	stmdb	sp!, {r2-r11}			/* Save the remaining registers plus the SP value */
 #endif
 
-#ifndef CONFIG_ARCH_HIPRI_INTERRUPT
-	/* Disable interrupts, select the stack to use for interrupt handling
-	 * and call up_doirq to handle the interrupt
-	 */
-
-	cpsid	i						/* Disable further interrupts */
-
-#else
-	/* Set the BASEPRI register so that further normal interrupts will be
-	 * masked.  Nested, high priority may still occur, however.
-	 */
-
-	mov		r2, #NVIC_SYSH_DISABLE_PRIORITY
-	msr		basepri, r2				/* Set the BASEPRI */
-#endif
-
 	/* There are two arguments to up_doirq:
 	 *
 	 *   R0 = The IRQ number
@@ -201,7 +207,7 @@ exception_common:
 	 * here prohibits nested interrupts without some additional logic!
 	 */
 
-	ldr		sp, =g_intstackbase
+	setintstack	r2, r3
 
 #else
 	/* Otherwise, we will re-use the interrupted thread's stack.  That may
@@ -326,10 +332,6 @@ exception_common:
 
 #ifdef CONFIG_ARMV7M_USEBASEPRI
 	msr		basepri, r3				/* Restore interrupts priority masking */
-#ifndef CONFIG_ARCH_HIPRI_INTERRUPT
-	cpsie	i						/* Re-enable interrupts */
-#endif
-
 #else
 	msr		primask, r3				/* Restore interrupts */
 #endif
@@ -349,7 +351,7 @@ exception_common:
  *
  ************************************************************************************************/
 
-#if CONFIG_ARCH_INTERRUPTSTACK > 7
+#if !defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
 	.bss
 	.global	g_intstackalloc
 	.global	g_intstackbase

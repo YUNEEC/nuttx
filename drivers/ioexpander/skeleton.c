@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/ioexpander/skeleton.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org
  *
  * Redistribution and use in source and binary forms, with or without
@@ -168,15 +168,24 @@ static const struct ioexpander_ops_s g_skel_ops =
 
 static void skel_lock(FAR struct skel_dev_s *priv)
 {
-  while (sem_wait(&priv->exclsem) < 0)
-    {
-      /* EINTR is the only expected error from sem_wait() */
+  int ret;
 
-      DEBUGASSERT(errno == EINTR);
+  do
+    {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define skel_unlock(p) sem_post(&(p)->exclsem)
+#define skel_unlock(p) nxsem_post(&(p)->exclsem)
 
 /****************************************************************************
  * Name: skel_direction
@@ -760,7 +769,7 @@ FAR struct ioexpander_dev_s *skel_initialize(void)
 
 #endif
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   return &priv->dev;
 }
 

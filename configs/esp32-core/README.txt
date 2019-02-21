@@ -16,7 +16,6 @@ README for the Expressif ESP32 Core board (V2)
 Contents
 ========
 
-  o STATUS
   o ESP32 Features
   o ESP32 Toolchain
   o Memory Map
@@ -31,7 +30,19 @@ Contents
 STATUS
 ======
 
-  The basic port is underway.  No testing has yet been performed.
+  Currently, the NuttX port depends on the bootloader to initialize hardware,
+  including basic (slow) clocking.  That is because the clock configuration
+  logic is only available via an Espressif add-on library.
+
+  Because of this, all board configurations require these settings:
+
+    CONFIG_EXPERIMENTAL=y
+    CONFIG_DEBUG_FEATURES=y
+    CONFIG_SUPPRESS_CLOCK_CONFIG=y
+
+  Some configurations may also require:
+
+    CONFIG_SUPPRESS_UART_CONFIG=y
 
 ESP32 Features
 ==============
@@ -191,7 +202,7 @@ Buttons and LEDs
   LEDs
   ----
   There are several on-board LEDs for that indicate the presence of power
-  and USB activity.  None of these are available for use by sofware.
+  and USB activity.  None of these are available for use by software.
 
 SMP
 ===
@@ -259,11 +270,11 @@ OpenOCD for the ESP32
   to reflect the physical JTAG adapter connected.
 
   NOTE: A copy of this OpenOCD configuration file available in the NuttX
-  source tree at nuttx/config/esp32-core/scripts/esp32.cfg..  It has these
+  source tree at nuttx/configs/esp32-core/scripts/esp32.cfg .  It has these
   modifications:
 
     - The referenced "set ESP32_RTOS none" line has been uncommented
-    - The "ind interface/ftdi/tumpa.cfg".  This means that you will
+    - The "find interface/ftdi/tumpa.cfg".  This means that you will
       need to specify the interface configuration file on the OpenOCD
       command line.
 
@@ -280,7 +291,7 @@ OpenOCD for the ESP32
 
   Then look at the README and the docs/INSTALL.txt files in the
   openocd-esp32 directory for further instructions.  There area
-  separate README files for Linux/Cygwin, OSX, and Windows.  Here
+  separate README files for Linux/Cygwin, macOS, and Windows.  Here
   is what I ended up doing (under Linux):
 
     cd openocd-esp32
@@ -300,7 +311,7 @@ OpenOCD for the ESP32
   Then start OpenOCD by executing a command like the following.  Here
   I assume that:
 
-    - You did not install OpenOCD; binararies are avalable at
+    - You did not install OpenOCD; binaries are available at
       openocd-esp32/src and interface scripts are in
       openocd-eps32/tcl/interface
     - I select the configuration for the Olimex ARM-USB-OCD
@@ -440,19 +451,14 @@ OpenOCD for the ESP32
   The tool esp-idf uses for flashing is a command line Python tool called
   "esptool.py" which talks to a serial bootloader in ROM.  A version is
   supplied in the esp-idf codebase in components/esptool_py/esptool, the
-  "upstream" for that tool is here:
+  "upstream" for that tool is here and now supports ESP32.
 
-    https://github.com/espressif/esptool/pull/121
-
-  The master branch for esptool.py is currently ESP8266-only (as of 2016-11-14),
-  this PR has the ESP32 support which still needs some final tidying up before
-  it's
-  merged.
+    https://github.com/espressif/esptool/
 
   To FLASH an ELF via the command line is a two step process, something like
   this:
 
-    esptool.py --chip esp32 elf2image --flash_mode dio --flash_size 4MB -o ./nuttx.bin nuttx
+    esptool.py --chip esp32 elf2image --flash_mode dio --flash_size 4MB -o nuttx.bin nuttx
     esptool.py --chip esp32 --port COMx write_flash 0x1000 bootloader.bin 0x4000 partition_table.bin 0x10000 nuttx.bin
 
   The first step converts an ELF image into an ESP32-compatible binary
@@ -469,7 +475,7 @@ OpenOCD for the ESP32
   Secondary Boot Loader / Partition Table
   ---------------------------------------
   See https://github.com/espressif/esp-idf/tree/master/components/bootloader
-  and https://github.com/espressif/esp-idf/tree/master/components/partition_table.
+  and https://github.com/espressif/esp-idf/tree/master/components/partition_table .
 
   Running from IRAM with OpenOCD
   ------------------------------
@@ -527,22 +533,11 @@ OpenOCD for the ESP32
     CONFIG_DEBUG_SYMBOLS=y
     CONFIG_ESP32CORE_RUN_IRAM=y
 
-  I also made this change which will eliminate all attempts to re-configure
-  serial. It will just use the serial settings as they were left by the
-  bootloader:
+  I also made this change configuration which will eliminate all attempts to
+  re-configure serial. It will just use the serial settings as they were left
+  by the bootloader:
 
-    diff --git a/arch/xtensa/src/common/xtensa.h b/arch/xtensa/src/common/xtensa.h
-    index 422ec0b..8707d7c 100644
-    --- a/arch/xtensa/src/common/xtensa.h
-    +++ b/arch/xtensa/src/common/xtensa.h
-    @@ -60,7 +60,7 @@
-     #undef  CONFIG_SUPPRESS_INTERRUPTS     /* DEFINED: Do not enable interrupts */
-     #undef  CONFIG_SUPPRESS_TIMER_INTS     /* DEFINED: No timer */
-     #undef  CONFIG_SUPPRESS_SERIAL_INTS    /* DEFINED: Console will poll */
-    -#undef  CONFIG_SUPPRESS_UART_CONFIG    /* DEFINED: Do not reconfigure UART */
-    +#define CONFIG_SUPPRESS_UART_CONFIG  1 /* DEFINED: Do not reconfigure UART */
-     #define CONFIG_SUPPRESS_CLOCK_CONFIG 1 /* DEFINED: Do not reconfigure clocking */
-     #undef  CONFIG_DUMP_ON_EXIT            /* DEFINED: Dump task state on exit */
+    CONFIG_SUPPRESS_UART_CONFIG=y
 
   Start OpenOCD:
 
@@ -575,9 +570,7 @@ Configurations
   Each ESP32 core configuration is maintained in sub-directories and
   can be selected as follow:
 
-    cd tools
-    ./configure.sh esp32-core/<subdir>
-    cd -
+    tools/configure.sh esp32-core/<subdir>
     make oldconfig
 
   Before building, make sure the PATH environment variable includes the
@@ -737,18 +730,11 @@ Things to Do
      This will use the serial port settings as left by the preceding
      bootloader:
 
-     diff --git a/arch/xtensa/src/common/xtensa.h b/arch/xtensa/src/common/xtensa.h
-     index 422ec0b..8707d7c 100644
-     --- a/arch/xtensa/src/common/xtensa.h
-     +++ b/arch/xtensa/src/common/xtensa.h
-     @@ -60,7 +60,7 @@
-      #undef  CONFIG_SUPPRESS_INTERRUPTS     /* DEFINED: Do not enable interrupts */
-      #undef  CONFIG_SUPPRESS_TIMER_INTS     /* DEFINED: No timer */
-      #undef  CONFIG_SUPPRESS_SERIAL_INTS    /* DEFINED: Console will poll */
-     -#undef  CONFIG_SUPPRESS_UART_CONFIG    /* DEFINED: Do not reconfigure UART */
-     +#define CONFIG_SUPPRESS_UART_CONFIG  1 /* DEFINED: Do not reconfigure UART */
-      #define CONFIG_SUPPRESS_CLOCK_CONFIG 1 /* DEFINED: Do not reconfigure clocking */
-      #undef  CONFIG_DUMP_ON_EXIT            /* DEFINED: Dump task state on exit */
+     I also made this change configuration which will eliminate all attempts to
+     re-configure serial. It will just use the serial settings as they were left
+     by the bootloader:
+
+       CONFIG_SUPPRESS_UART_CONFIG=y
 
      I have not debugged this in detail, but this appears to be an issue with the
      impelentation of esp32_configgpio() and/or gpio_matrix_out() when called from

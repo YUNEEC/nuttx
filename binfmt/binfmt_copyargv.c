@@ -72,12 +72,12 @@
  *   address environment of the new process address environment.  So we
  *   do not have any real option other than to copy the callers argv[] list.
  *
- * Input Parameter:
+ * Input Parameters:
  *   bin      - Load structure
  *   argv     - Argument list
  *
  * Returned Value:
- *   Zero (OK) on sucess; a negater erro value on failure.
+ *   Zero (OK) on success; a negated erro value on failure.
  *
  ****************************************************************************/
 
@@ -167,7 +167,7 @@ int binfmt_copyargv(FAR struct binary_s *bin, FAR char * const *argv)
  * Description:
  *   Release the copied argv[] list.
  *
- * Input Parameter:
+ * Input Parameters:
  *   binp - Load structure
  *
  * Returned Value:

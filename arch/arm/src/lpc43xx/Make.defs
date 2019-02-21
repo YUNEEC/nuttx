@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/lpc43xx/Make.defs
 #
-#   Copyright (C) 2012-2015 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2012-2015, 2017 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -36,25 +36,23 @@
 HEAD_ASRC  =
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += up_testset.S vfork.S
+CMN_ASRCS += up_testset.S up_fetchadd.S vfork.S
 
-CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c
-CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
-CMN_CSRCS += up_initialize.c up_initialstate.c up_interruptcontext.c
+CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c up_createstack.c
+CMN_CSRCS += up_doirq.c up_exit.c up_hardfault.c up_initialize.c
+CMN_CSRCS += up_initialstate.c up_interruptcontext.c up_mdelay.c
 CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
 CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
-CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
-CMN_CSRCS += up_svcall.c up_vfork.c
+CMN_CSRCS += up_svcall.c up_trigger_irq.c up_unblocktask.c up_udelay.c
+CMN_CSRCS += up_usestack.c up_vfork.c
 
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
 CMN_ASRCS += up_lazyexception.S
 else
 CMN_ASRCS += up_exception.S
 endif
 CMN_CSRCS += up_vectors.c
-endif
 
 ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
 CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
@@ -74,11 +72,7 @@ endif
 
 ifeq ($(CONFIG_ARCH_FPU),y)
 CMN_ASRCS += up_fpu.S
-ifneq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_CSRCS += up_copyarmstate.c
-else ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
-CMN_CSRCS += up_copyarmstate.c
-endif
 endif
 
 CHIP_ASRCS  =
@@ -112,6 +106,14 @@ ifeq ($(CONFIG_LPC43_GPIO_IRQ),y)
 CHIP_CSRCS += lpc43_gpioint.c
 endif
 
+ifeq ($(CONFIG_LPC43_WWDT),y)
+CHIP_CSRCS += lpc43_wwdt.c
+endif
+
+ifeq ($(CONFIG_LPC43_SDMMC),y)
+CHIP_CSRCS += lpc43_sdmmc.c
+endif
+
 ifeq ($(CONFIG_LPC43_ETHERNET),y)
 CHIP_CSRCS += lpc43_ethernet.c
 endif
@@ -122,14 +124,10 @@ endif
 
 ifeq ($(CONFIG_LPC43_SPI),y)
 CHIP_CSRCS += lpc43_spi.c
-else
-ifeq ($(CONFIG_LPC43_SSP0),y)
+else ifeq ($(CONFIG_LPC43_SSP0),y)
 CHIP_CSRCS += lpc43_spi.c
-else
-ifeq ($(CONFIG_LPC43_SSP1),y)
+else ifeq ($(CONFIG_LPC43_SSP1),y)
 CHIP_CSRCS += lpc43_spi.c
-endif
-endif
 endif
 
 ifeq ($(CONFIG_LPC43_SPIFI),y)
@@ -138,10 +136,8 @@ endif
 
 ifeq ($(CONFIG_LPC43_SSP0),y)
 CHIP_CSRCS += lpc43_ssp.c
-else
-ifeq ($(CONFIG_LPC43_SSP1),y)
+else ifeq ($(CONFIG_LPC43_SSP1),y)
 CHIP_CSRCS += lpc43_ssp.c
-endif
 endif
 
 ifeq ($(CONFIG_LPC43_TIMER),y)
@@ -152,28 +148,30 @@ ifeq ($(CONFIG_LPC43_RIT),y)
 CHIP_CSRCS += lpc43_rit.c
 endif
 
+ifeq ($(CONFIG_LPC43_RTC),y)
+CHIP_CSRCS += lpc43_rtc.c
+endif
+
 ifeq ($(CONFIG_LPC43_I2C0),y)
 CHIP_CSRCS += lpc43_i2c.c
-else
-ifeq ($(CONFIG_LPC43_I2C1),y)
+else ifeq ($(CONFIG_LPC43_I2C1),y)
 CHIP_CSRCS += lpc43_i2c.c
 endif
+
+ifeq ($(CONFIG_LPC43_CAN0),y)
+CHIP_CSRCS += lpc43_can.c
+else ifeq ($(CONFIG_LPC43_CAN1),y)
+CHIP_CSRCS += lpc43_can.c
 endif
 
 ifeq ($(CONFIG_LPC43_ADC0),y)
 CHIP_CSRCS += lpc43_adc.c
-else
-ifeq ($(CONFIG_LPC43_ADC1),y)
+else ifeq ($(CONFIG_LPC43_ADC1),y)
 CHIP_CSRCS += lpc43_adc.c
-endif
 endif
 
 ifeq ($(CONFIG_LPC43_DAC),y)
-CHIP_CSRCS += lpc43_adc.c
-else
-ifeq ($(CONFIG_LPC43_DAC),y)
-CHIP_CSRCS += lpc43_adc.c
-endif
+CHIP_CSRCS += lpc43_dac.c
 endif
 
 ifeq ($(CONFIG_LPC43_USBOTG),y)

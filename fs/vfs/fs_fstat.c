@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/vfs/fs_fstat.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,7 @@
 
 #include <nuttx/config.h>
 
+#include <sys/stat.h>
 #include <unistd.h>
 #include <sched.h>
 #include <errno.h>
@@ -49,6 +50,71 @@
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: file_fstat
+ *
+ * Description:
+ *   file_fstat() is an internal OS interface.  It is functionally similar to
+ *   the standard fstat() interface except:
+ *
+ *    - It does not modify the errno variable,
+ *    - It is not a cancellation point,
+ *    - It does not handle socket descriptors, and
+ *    - It accepts a file structure instance instead of file descriptor.
+ *
+ * Input Parameters:
+ *   filep  - File structure instance
+ *   buf    - The caller provide location in which to return information about
+ *            the open file.
+ *
+ * Returned Value:
+ *   Upon successful completion, 0 shall be returned. Otherwise, -1 shall be
+ *   returned and errno set to indicate the error.
+ *
+ ****************************************************************************/
+
+int file_fstat(FAR struct file *filep, FAR struct stat *buf)
+{
+  FAR struct inode *inode;
+  int ret;
+
+  DEBUGASSERT(filep != NULL);
+
+  /* Get the inode from the file structure */
+
+  inode = filep->f_inode;
+  DEBUGASSERT(inode != NULL);
+
+  /* The way we handle the stat depends on the type of inode that we
+   * are dealing with.
+   */
+
+#ifndef CONFIG_DISABLE_MOUNTPOINT
+  if (INODE_IS_MOUNTPT(inode))
+    {
+      /* The inode is a file system mountpoint. Verify that the mountpoint
+       * supports the fstat() method
+       */
+
+      ret = -ENOSYS;
+      if (inode->u.i_mops && inode->u.i_mops->fstat)
+        {
+          /* Perform the fstat() operation */
+
+          ret = inode->u.i_mops->fstat(filep, buf);
+        }
+    }
+  else
+#endif
+    {
+      /* The inode is part of the root pseudo file system. */
+
+      ret = inode_stat(inode, buf);
+    }
+
+  return ret;
+}
 
 /****************************************************************************
  * Name: fstat
@@ -75,73 +141,55 @@
 int fstat(int fd, FAR struct stat *buf)
 {
   FAR struct file *filep;
-  FAR struct inode *inode;
   int ret;
 
   /* Did we get a valid file descriptor? */
 
   if ((unsigned int)fd >= CONFIG_NFILE_DESCRIPTORS)
     {
-      /* No networking... it is a bad descriptor in any event */
+#if CONFIG_NSOCKET_DESCRIPTORS > 0
+      /* Let the networking logic handle the fstat() */
 
-      set_errno(EBADF);
-      return ERROR;
+      ret = net_fstat(fd, buf);
+      if (ret < 0)
+        {
+          goto errout;
+        }
+
+      return OK;
+#else
+      /* No networking... it is just a bad descriptor */
+
+      ret = -EBADF;
+      goto errout;
+#endif
     }
 
-  /* The descriptor is in a valid range to file descriptor... do the
-   * read.  First, get the file structure.  Note that on failure,
+  /* The descriptor is in a valid range for a file descriptor... do the
+   * fstat.  First, get the file structure.  Note that on failure,
    * fs_getfilep() will set the errno variable.
    */
 
-  filep = fs_getfilep(fd);
-  if (filep == NULL)
+  ret = fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* The errno value has already been set */
-
-      return ERROR;
+      goto errout;
     }
 
-  /* Get the inode from the file structure */
+  /* Perform the fstat operation */
 
-  inode = filep->f_inode;
-  DEBUGASSERT(inode != NULL);
-
-  /* The way we handle the stat depends on the type of inode that we
-   * are dealing with.
-   */
-
-#ifndef CONFIG_DISABLE_MOUNTPOINT
-  if (INODE_IS_MOUNTPT(inode))
-    {
-      /* The inode is a file system mointpoint. Verify that the mountpoint
-       * supports the fstat() method
-       */
-
-      ret = -ENOSYS;
-      if (inode->u.i_mops && inode->u.i_mops->fstat)
-        {
-          /* Perform the fstat() operation */
-
-          ret = inode->u.i_mops->fstat(filep, buf);
-        }
-    }
-  else
-#endif
-    {
-      /* The inode is part of the root pseudo file system. */
-
-      ret = inode_stat(inode, buf);
-    }
+  ret = file_fstat(filep, buf);
 
   /* Check if the fstat operation was successful */
 
-  if (ret < 0)
+  if (ret >= 0)
     {
-      set_errno(-ret);
-      return ERROR;
+      /* Successfully fstat'ed the file */
+
+      return OK;
     }
 
-  /* Successfully fstat'ed the file */
-
-  return OK;
+errout:
+  set_errno(-ret);
+  return ERROR;
 }

@@ -55,10 +55,10 @@
  * Description:
  *   Return a pointer to the file list for this thread
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A pointer to the errno.
  *
  * Assumptions:

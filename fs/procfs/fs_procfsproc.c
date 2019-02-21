@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/procfs/fs_procfsproc.c
  *
- *   Copyright (C) 2013-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,15 +53,20 @@
 #include <errno.h>
 #include <debug.h>
 
+#ifdef CONFIG_SCHED_CRITMONITOR
+#  include <time.h>
+#endif
+
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/sched.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/environ.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/procfs.h>
 #include <nuttx/fs/dirent.h>
 
-#ifdef CONFIG_SCHED_CPULOAD
+#if defined(CONFIG_SCHED_CPULOAD) || defined(CONFIG_SCHED_CRITMONITOR)
 #  include <nuttx/clock.h>
 #endif
 
@@ -92,6 +97,7 @@
 /****************************************************************************
  * Private Type Definitions
  ****************************************************************************/
+
 /* This enumeration identifies all of the task/thread nodes that can be
  * accessed via the procfs file system.
  */
@@ -104,10 +110,16 @@ enum proc_node_e
 #ifdef CONFIG_SCHED_CPULOAD
   PROC_LOADAVG,                       /* Average CPU utilization */
 #endif
+#ifdef CONFIG_SCHED_CRITMONITOR
+  PROC_CRITMON,                       /* Critical section monitor */
+#endif
   PROC_STACK,                         /* Task stack info */
   PROC_GROUP,                         /* Group directory */
   PROC_GROUP_STATUS,                  /* Task group status */
   PROC_GROUP_FD                       /* Group file descriptors */
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+  , PROC_GROUP_ENV                    /* Group environment variables */
+#endif
 };
 
 /* This structure associates a relative path name with an node in the task
@@ -141,6 +153,18 @@ struct proc_dir_s
   pid_t pid;                          /* ID of task/thread for attributes */
 };
 
+/* This structure used with the env_foreach() callback */
+
+struct proc_envinfo_s
+{
+  FAR struct proc_file_s *procfile;
+  FAR char *buffer;
+  FAR off_t offset;
+  size_t buflen;
+  size_t remaining;
+  size_t totalsize;
+};
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
@@ -151,8 +175,23 @@ static FAR const char *g_policy[4] =
 };
 
 /****************************************************************************
+ * External Function Prototypes
+ ****************************************************************************/
+
+#ifdef CONFIG_SCHED_CRITMONITOR
+/* If CONFIG_SCHED_CRITMONITOR is selected, then platform-specific logic
+ * must provide the following interface.  This interface simply converts an
+ * elapsed time into well known units for presentation by the ProcFS file
+ * system..
+ */
+
+void up_critmon_convert(uint32_t starttime, FAR struct timespec *ts);
+#endif
+
+/****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
+
 /* Helpers */
 
 static FAR const struct proc_node_s *
@@ -168,6 +207,11 @@ static ssize_t proc_loadavg(FAR struct proc_file_s *procfile,
                  FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
                  off_t offset);
 #endif
+#ifdef CONFIG_SCHED_CRITMONITOR
+static ssize_t proc_critmon(FAR struct proc_file_s *procfile,
+                 FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
+                 off_t offset);
+#endif
 static ssize_t proc_stack(FAR struct proc_file_s *procfile,
                  FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
                  off_t offset);
@@ -177,6 +221,12 @@ static ssize_t proc_groupstatus(FAR struct proc_file_s *procfile,
 static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
                  FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
                  off_t offset);
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+static int     proc_groupenv_callback(FAR void *arg, FAR const char *pair);
+static ssize_t proc_groupenv(FAR struct proc_file_s *procfile,
+                 FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
+                 off_t offset);
+#endif
 
 /* File system methods */
 
@@ -250,6 +300,13 @@ static const struct proc_node_s g_loadavg =
 };
 #endif
 
+#ifdef CONFIG_SCHED_CRITMONITOR
+static const struct proc_node_s g_critmon =
+{
+  "critmon",       "critmon", (uint8_t)PROC_CRITMON,     DTYPE_FILE        /* Critical Section Monitor */
+};
+#endif
+
 static const struct proc_node_s g_stack =
 {
   "stack",        "stack",   (uint8_t)PROC_STACK,        DTYPE_FILE        /* Task stack info */
@@ -270,6 +327,14 @@ static const struct proc_node_s g_groupfd =
   "group/fd",     "fd",      (uint8_t)PROC_GROUP_FD,     DTYPE_FILE        /* Group file descriptors */
 };
 
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+static const struct proc_node_s g_groupenv =
+{
+  "group/env",    "env",     (uint8_t)PROC_GROUP_ENV,    DTYPE_FILE        /* Group environment variables */
+};
+
+#endif
+
 /* This is the list of all nodes */
 
 static FAR const struct proc_node_s * const g_nodeinfo[] =
@@ -279,11 +344,18 @@ static FAR const struct proc_node_s * const g_nodeinfo[] =
 #ifdef CONFIG_SCHED_CPULOAD
   &g_loadavg,      /* Average CPU utilization */
 #endif
+#ifdef CONFIG_SCHED_CRITMONITOR
+  &g_critmon,      /* Critical section Monitor */
+#endif
   &g_stack,        /* Task stack info */
   &g_group,        /* Group directory */
   &g_groupstatus,  /* Task group status */
   &g_groupfd       /* Group file descriptors */
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+  , &g_groupenv    /* Group environment variables */
+#endif
 };
+
 #define PROC_NNODES (sizeof(g_nodeinfo)/sizeof(FAR const struct proc_node_s * const))
 
 /* This is the list of all level0 nodes */
@@ -294,6 +366,9 @@ static const struct proc_node_s * const g_level0info[] =
   &g_cmdline,      /* Task command line */
 #ifdef CONFIG_SCHED_CPULOAD
   &g_loadavg,      /* Average CPU utilization */
+#endif
+#ifdef CONFIG_SCHED_CRITMONITOR
+  &g_critmon,      /* Critical section monitor */
 #endif
   &g_stack,        /* Task stack info */
   &g_group,        /* Group directory */
@@ -306,6 +381,9 @@ static FAR const struct proc_node_s * const g_groupinfo[] =
 {
   &g_groupstatus,  /* Task group status */
   &g_groupfd       /* Group file descriptors */
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+  , &g_groupenv    /* Group environment variables */
+#endif
 };
 #define PROC_NGROUPNODES (sizeof(g_groupinfo)/sizeof(FAR const struct proc_node_s * const))
 
@@ -321,13 +399,16 @@ static FAR const char *g_statenames[] =
 #endif
   "Running",
   "Inactive",
-  "Waiting,Semaphore",
+  "Waiting,Semaphore"
 #ifndef CONFIG_DISABLE_SIGNALS
-  "Waiting,Signal",
+  , "Waiting,Signal"
 #endif
 #ifndef CONFIG_DISABLE_MQUEUE
-  "Waiting,MQ empty",
-  "Waiting,MQ full"
+  , "Waiting,MQ empty"
+  , "Waiting,MQ full"
+#endif
+#ifdef CONFIG_SIG_SIGSTOP_ACTION
+  , "Stopped"
 #endif
 };
 
@@ -443,7 +524,7 @@ static ssize_t proc_status(FAR struct proc_file_s *procfile,
 
 #ifdef CONFIG_SCHED_HAVE_PARENT
   group = tcb->group;
-  DEBUGASSERT(group);
+  DEBUGASSERT(group != NULL);
 
 #ifdef HAVE_GROUPID
   linesize   = snprintf(procfile->line, STATUS_LINELEN, "%-12s%d\n", "Group:",
@@ -703,6 +784,84 @@ static ssize_t proc_loadavg(FAR struct proc_file_s *procfile,
 #endif
 
 /****************************************************************************
+ * Name: proc_critmon
+ ****************************************************************************/
+
+#ifdef CONFIG_SCHED_CRITMONITOR
+static ssize_t proc_critmon(FAR struct proc_file_s *procfile,
+                            FAR struct tcb_s *tcb, FAR char *buffer,
+                            size_t buflen, off_t offset)
+{
+  struct timespec maxtime;
+  size_t remaining;
+  size_t linesize;
+  size_t copysize;
+  size_t totalsize;
+
+  remaining = buflen;
+  totalsize = 0;
+
+  /* Convert the for maximum time pre-emption disabled */
+
+  if (tcb->premp_max > 0)
+    {
+      up_critmon_convert(tcb->premp_max, &maxtime);
+    }
+  else
+    {
+      maxtime.tv_sec = 0;
+      maxtime.tv_nsec = 0;
+    }
+
+  /* Reset the maximum */
+
+  tcb->premp_max = 0;
+
+  /* Generate output for maximum time pre-emption disabled */
+
+  linesize = snprintf(procfile->line, STATUS_LINELEN, "%lu.%09lu,",
+                     (unsigned long)maxtime.tv_sec,
+                     (unsigned long)maxtime.tv_nsec);
+  copysize = procfs_memcpy(procfile->line, linesize, buffer, buflen, &offset);
+
+  totalsize += copysize;
+  buffer    += copysize;
+  remaining -= copysize;
+
+  if (totalsize >= buflen)
+    {
+      return totalsize;
+    }
+
+  /* Convert and generate output for maximum time in a critical section */
+
+  if (tcb->crit_max > 0)
+    {
+      up_critmon_convert(tcb->crit_max, &maxtime);
+    }
+  else
+    {
+      maxtime.tv_sec = 0;
+      maxtime.tv_nsec = 0;
+    }
+
+  /* Reset the maximum */
+
+  tcb->crit_max = 0;
+
+  /* Generate output for maximum time in a critical section */
+
+  linesize = snprintf(procfile->line, STATUS_LINELEN, "%lu.%09lu\n",
+                     (unsigned long)maxtime.tv_sec,
+                     (unsigned long)maxtime.tv_nsec);
+  copysize = procfs_memcpy(procfile->line, linesize, buffer, buflen, &offset);
+
+  totalsize += copysize;
+  return totalsize;
+}
+#endif
+
+/****************************************************************************
  * Name: proc_stack
  ****************************************************************************/
 
@@ -780,7 +939,7 @@ static ssize_t proc_groupstatus(FAR struct proc_file_s *procfile,
   int i;
 #endif
 
-  DEBUGASSERT(group);
+  DEBUGASSERT(group != NULL);
 
   remaining = buflen;
   totalsize = 0;
@@ -916,7 +1075,7 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
   size_t totalsize;
   int i;
 
-  DEBUGASSERT(group);
+  DEBUGASSERT(group != NULL);
 
   remaining = buflen;
   totalsize = 0;
@@ -1002,6 +1161,103 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
 }
 
 /****************************************************************************
+ * Name: proc_groupenv_callback
+ ****************************************************************************/
+
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+static int proc_groupenv_callback(FAR void *arg, FAR const char *pair)
+{
+  FAR struct proc_envinfo_s *info = (FAR struct proc_envinfo_s *)arg;
+  FAR const char *src;
+  FAR const char *value;
+  FAR char *dest;
+  char name[16 + 1];
+  size_t linesize;
+  size_t copysize;
+  int namelen;
+
+  DEBUGASSERT(arg != NULL && pair != NULL);
+
+  /* Parse the name from the name/value pair */
+
+  value  = NULL;
+  namelen = 0;
+
+  for (src = pair, dest = name; *src != '=' && *src != '\0'; src++)
+    {
+      if (namelen < 16)
+        {
+          *dest++ = *src;
+          namelen++;
+        }
+    }
+
+  /* NUL terminate the name string */
+
+  *dest = '\0';
+
+  /* Skip over the '=' to get the value */
+
+  if (*src == '=')
+    {
+      value = src + 1;
+    }
+  else
+    {
+      value = "";
+    }
+
+  /* Output the header */
+
+  linesize        = snprintf(info->procfile->line, STATUS_LINELEN, "%s=%s\n",
+                             name, value);
+  copysize        = procfs_memcpy(info->procfile->line, linesize, info->buffer,
+                                  info->remaining, &info->offset);
+
+  info->totalsize += copysize;
+  info->buffer    += copysize;
+  info->remaining -= copysize;
+
+  if (info->totalsize >= info->buflen)
+    {
+      return 1;
+    }
+
+  return 0;
+}
+#endif
+
+/****************************************************************************
+ * Name: proc_groupenv
+ ****************************************************************************/
+
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+static ssize_t proc_groupenv(FAR struct proc_file_s *procfile,
+                 FAR struct tcb_s *tcb, FAR char *buffer, size_t buflen,
+                 off_t offset)
+{
+  FAR struct task_group_s *group = tcb->group;
+  struct proc_envinfo_s info;
+
+  DEBUGASSERT(group != NULL);
+
+  /* Initialize the info structure */
+
+  info.procfile   = procfile;
+  info.buffer     = buffer;
+  info.offset     = offset;
+  info.buflen     = buflen;
+  info.remaining  = buflen;
+  info.totalsize  = 0;
+
+  /* Generate output for each environment variable */
+
+  (void)env_foreach(group, proc_groupenv_callback, &info);
+  return info.totalsize;
+}
+#endif
+
+/****************************************************************************
  * Name: proc_open
  ****************************************************************************/
 
@@ -1012,7 +1268,6 @@ static int proc_open(FAR struct file *filep, FAR const char *relpath,
   FAR const struct proc_node_s *node;
   FAR struct tcb_s *tcb;
   FAR char *ptr;
-  irqstate_t flags;
   unsigned long tmp;
   pid_t pid;
 
@@ -1030,12 +1285,23 @@ static int proc_open(FAR struct file *filep, FAR const char *relpath,
       return -EACCES;
     }
 
-  /* The first segment of the relative path should be a task/thread ID */
+  /* The first segment of the relative path should be a task/thread ID or
+   * the string "self".
+   */
 
   ptr = NULL;
-  tmp = strtoul(relpath, &ptr, 10);
 
-  if (!ptr || *ptr != '/')
+  if (strncmp(relpath, "self", 4) == 0)
+    {
+      tmp = (unsigned long)getpid();    /* Get the PID of the calling task */
+      ptr = (FAR char *)relpath + 4;    /* Discard const */
+    }
+  else
+    {
+      tmp = strtoul(relpath, &ptr, 10); /* Extract the PID from path */
+    }
+
+  if (ptr == NULL || *ptr != '/')
     {
       ferr("ERROR: Invalid path \"%s\"\n", relpath);
       return -ENOENT;
@@ -1059,11 +1325,8 @@ static int proc_open(FAR struct file *filep, FAR const char *relpath,
 
   pid = (pid_t)tmp;
 
-  flags = enter_critical_section();
   tcb = sched_gettcb(pid);
-  leave_critical_section(flags);
-
-  if (!tcb)
+  if (tcb == NULL)
     {
       ferr("ERROR: PID %d is no longer valid\n", (int)pid);
       return -ENOENT;
@@ -1074,7 +1337,7 @@ static int proc_open(FAR struct file *filep, FAR const char *relpath,
    */
 
   node = proc_findnode(ptr);
-  if (!node)
+  if (node == NULL)
     {
       ferr("ERROR: Invalid path \"%s\"\n", relpath);
       return -ENOENT;
@@ -1091,7 +1354,7 @@ static int proc_open(FAR struct file *filep, FAR const char *relpath,
   /* Allocate a container to hold the task and node selection */
 
   procfile = (FAR struct proc_file_s *)kmm_zalloc(sizeof(struct proc_file_s));
-  if (!procfile)
+  if (procfile == NULL)
     {
       ferr("ERROR: Failed to allocate file container\n");
       return -ENOMEM;
@@ -1119,7 +1382,7 @@ static int proc_close(FAR struct file *filep)
   /* Recover our private data from the struct file instance */
 
   procfile = (FAR struct proc_file_s *)filep->f_priv;
-  DEBUGASSERT(procfile);
+  DEBUGASSERT(procfile != NULL);
 
   /* Release the file container structure */
 
@@ -1137,7 +1400,6 @@ static ssize_t proc_read(FAR struct file *filep, FAR char *buffer,
 {
   FAR struct proc_file_s *procfile;
   FAR struct tcb_s *tcb;
-  irqstate_t flags;
   ssize_t ret;
 
   finfo("buffer=%p buflen=%d\n", buffer, (int)buflen);
@@ -1145,17 +1407,14 @@ static ssize_t proc_read(FAR struct file *filep, FAR char *buffer,
   /* Recover our private data from the struct file instance */
 
   procfile = (FAR struct proc_file_s *)filep->f_priv;
-  DEBUGASSERT(procfile);
+  DEBUGASSERT(procfile != NULL);
 
   /* Verify that the thread is still valid */
 
-  flags = enter_critical_section();
   tcb = sched_gettcb(procfile->pid);
-
-  if (!tcb)
+  if (tcb == NULL)
     {
       ferr("ERROR: PID %d is not valid\n", (int)procfile->pid);
-      leave_critical_section(flags);
       return -ENODEV;
     }
 
@@ -1176,6 +1435,11 @@ static ssize_t proc_read(FAR struct file *filep, FAR char *buffer,
       ret = proc_loadavg(procfile, tcb, buffer, buflen, filep->f_pos);
       break;
 #endif
+#ifdef CONFIG_SCHED_CRITMONITOR
+    case PROC_CRITMON: /* Critical section monitor */
+      ret = proc_critmon(procfile, tcb, buffer, buflen, filep->f_pos);
+      break;
+#endif
     case PROC_STACK: /* Task stack info */
       ret = proc_stack(procfile, tcb, buffer, buflen, filep->f_pos);
       break;
@@ -1188,12 +1452,16 @@ static ssize_t proc_read(FAR struct file *filep, FAR char *buffer,
       ret = proc_groupfd(procfile, tcb, buffer, buflen, filep->f_pos);
       break;
 
+#if !defined(CONFIG_DISABLE_ENVIRON) && !defined(CONFIG_FS_PROCFS_EXCLUDE_ENVIRON)
+    case PROC_GROUP_ENV: /* Group environment variables */
+      ret = proc_groupenv(procfile, tcb, buffer, buflen, filep->f_pos);
+      break;
+#endif
+
      default:
       ret = -EINVAL;
       break;
     }
-
-  leave_critical_section(flags);
 
   /* Update the file offset */
 
@@ -1223,12 +1491,12 @@ static int proc_dup(FAR const struct file *oldp, FAR struct file *newp)
   /* Recover our private data from the old struct file instance */
 
   oldfile = (FAR struct proc_file_s *)oldp->f_priv;
-  DEBUGASSERT(oldfile);
+  DEBUGASSERT(oldfile != NULL);
 
   /* Allocate a new container to hold the task and node selection */
 
   newfile = (FAR struct proc_file_s *)kmm_malloc(sizeof(struct proc_file_s));
-  if (!newfile)
+  if (newfile == NULL)
     {
       ferr("ERROR: Failed to allocate file container\n");
       return -ENOMEM;
@@ -1257,26 +1525,35 @@ static int proc_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
   FAR struct proc_dir_s *procdir;
   FAR const struct proc_node_s *node;
   FAR struct tcb_s *tcb;
-  irqstate_t flags;
   unsigned long tmp;
   FAR char *ptr;
   pid_t pid;
 
   finfo("relpath: \"%s\"\n", relpath ? relpath : "NULL");
-  DEBUGASSERT(relpath && dir && !dir->u.procfs);
+  DEBUGASSERT(relpath != NULL && dir != NULL && dir->u.procfs == NULL);
 
   /* The relative must be either:
    *
-   *  (1) "<pid>" - The sub-directory of task/thread attributes, or
-   *  (2) The name of a directory node under <pid>
+   *  (1) "<pid>" - The sub-directory of task/thread attributes,
+   *  (2) "self"  - Which refers to the PID of the calling task, or
+   *  (3) The name of a directory node under either of those
    */
 
   /* Otherwise, the relative path should be a valid task/thread ID */
 
   ptr = NULL;
-  tmp = strtoul(relpath, &ptr, 10);
 
-  if (!ptr || (*ptr != '\0' && *ptr != '/'))
+  if (strncmp(relpath, "self", 4) == 0)
+    {
+      tmp = (unsigned long)getpid();    /* Get the PID of the calling task */
+      ptr = (FAR char *)relpath + 4;    /* Discard const */
+    }
+  else
+    {
+      tmp = strtoul(relpath, &ptr, 10); /* Extract the PID from path */
+    }
+
+  if (ptr == NULL || (*ptr != '\0' && *ptr != '/'))
     {
       /* strtoul failed or there is something in the path after the pid */
 
@@ -1298,11 +1575,8 @@ static int proc_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
 
   pid = (pid_t)tmp;
 
-  flags = enter_critical_section();
   tcb = sched_gettcb(pid);
-  leave_critical_section(flags);
-
-  if (!tcb)
+  if (tcb == NULL)
     {
       ferr("ERROR: PID %d is not valid\n", (int)pid);
       return -ENOENT;
@@ -1314,7 +1588,7 @@ static int proc_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
    */
 
   procdir = (FAR struct proc_dir_s *)kmm_zalloc(sizeof(struct proc_dir_s));
-  if (!procdir)
+  if (procdir == NULL)
     {
       ferr("ERROR: Failed to allocate the directory structure\n");
       return -ENOMEM;
@@ -1330,7 +1604,7 @@ static int proc_opendir(FAR const char *relpath, FAR struct fs_dirent_s *dir)
 
       ptr++;
       node = proc_findnode(ptr);
-      if (!node)
+      if (node == NULL)
         {
           ferr("ERROR: Invalid path \"%s\"\n", relpath);
           kmm_free(procdir);
@@ -1377,7 +1651,7 @@ static int proc_closedir(FAR struct fs_dirent_s *dir)
 {
   FAR struct proc_dir_s *priv;
 
-  DEBUGASSERT(dir && dir->u.procfs);
+  DEBUGASSERT(dir != NULL && dir->u.procfs != NULL);
   priv = dir->u.procfs;
 
   if (priv)
@@ -1402,11 +1676,10 @@ static int proc_readdir(struct fs_dirent_s *dir)
   FAR const struct proc_node_s *node = NULL;
   FAR struct tcb_s *tcb;
   unsigned int index;
-  irqstate_t flags;
   pid_t pid;
   int ret;
 
-  DEBUGASSERT(dir && dir->u.procfs);
+  DEBUGASSERT(dir != NULL && dir->u.procfs != NULL);
   procdir = dir->u.procfs;
 
   /* Have we reached the end of the directory */
@@ -1430,11 +1703,8 @@ static int proc_readdir(struct fs_dirent_s *dir)
 
       pid = procdir->pid;
 
-      flags = enter_critical_section();
       tcb = sched_gettcb(pid);
-      leave_critical_section(flags);
-
-      if (!tcb)
+      if (tcb == NULL)
         {
           ferr("ERROR: PID %d is no longer valid\n", (int)pid);
           return -ENOENT;
@@ -1486,7 +1756,7 @@ static int proc_rewinddir(struct fs_dirent_s *dir)
 {
   FAR struct proc_dir_s *priv;
 
-  DEBUGASSERT(dir && dir->u.procfs);
+  DEBUGASSERT(dir != NULL && dir->u.procfs != NULL);
   priv = dir->u.procfs;
 
   priv->base.index = 0;
@@ -1506,7 +1776,6 @@ static int proc_stat(const char *relpath, struct stat *buf)
   FAR struct tcb_s *tcb;
   unsigned long tmp;
   FAR char *ptr;
-  irqstate_t flags;
   pid_t pid;
 
   /* Two path forms are accepted:
@@ -1518,9 +1787,18 @@ static int proc_stat(const char *relpath, struct stat *buf)
    */
 
   ptr = NULL;
-  tmp = strtoul(relpath, &ptr, 10);
 
-  if (!ptr)
+  if (strncmp(relpath, "self", 4) == 0)
+    {
+      tmp = (unsigned long)getpid();    /* Get the PID of the calling task */
+      ptr = (FAR char *)relpath + 4;    /* Discard const */
+    }
+  else
+    {
+      tmp = strtoul(relpath, &ptr, 10); /* Extract the PID from path */
+    }
+
+  if (ptr == NULL)
     {
       ferr("ERROR: Invalid path \"%s\"\n", relpath);
       return -ENOENT;
@@ -1540,11 +1818,8 @@ static int proc_stat(const char *relpath, struct stat *buf)
 
   pid = (pid_t)tmp;
 
-  flags = enter_critical_section();
   tcb = sched_gettcb(pid);
-  leave_critical_section(flags);
-
-  if (!tcb)
+  if (tcb == NULL)
     {
       ferr("ERROR: PID %d is no longer valid\n", (int)pid);
       return -ENOENT;
@@ -1582,7 +1857,7 @@ static int proc_stat(const char *relpath, struct stat *buf)
       /* Lookup the well-known node associated with the relative path. */
 
       node = proc_findnode(ptr);
-      if (!node)
+      if (node == NULL)
         {
           ferr("ERROR: Invalid path \"%s\"\n", relpath);
           return -ENOENT;

@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/mikroe-stm32f4/src/stm32_touchscreen.c
  *
- *   Copyright (C) 2012-2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012-2013, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  *   Modified:  May, 2013 by Ken Pettit to adapt for Mikroe-STM32M4 board
@@ -607,7 +607,7 @@ static void tc_notify(FAR struct tc_dev_s *priv)
        * is no longer available.
        */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   /* If there are threads waiting on poll() for touchscreen data to become available,
@@ -624,7 +624,7 @@ static void tc_notify(FAR struct tc_dev_s *priv)
         {
           fds->revents |= POLLIN;
           iinfo("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 #endif
@@ -698,7 +698,7 @@ static int tc_waitsample(FAR struct tc_dev_s *priv,
    * run, but they cannot run yet because pre-emption is disabled.
    */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   /* Try to get the a sample... if we cannot, then wait on the semaphore
    * that is posted when new sample data is availble.
@@ -709,7 +709,7 @@ static int tc_waitsample(FAR struct tc_dev_s *priv,
       /* Wait for a change in the touchscreen state */
 
       priv->nwaiters++;
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
       priv->nwaiters--;
 
       if (ret < 0)
@@ -718,8 +718,7 @@ static int tc_waitsample(FAR struct tc_dev_s *priv,
            * the failure now.
            */
 
-          DEBUGASSERT(errno == EINTR);
-          ret = -EINTR;
+          DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
           goto errout;
         }
     }
@@ -729,7 +728,7 @@ static int tc_waitsample(FAR struct tc_dev_s *priv,
    * Interrupts and pre-emption will be re-enabled while we wait.
    */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
 
 errout:
   /* Restore pre-emption.  We might get suspended here but that is okay
@@ -756,7 +755,7 @@ static void tc_worker(FAR void *arg)
   int16_t ydiff;
   int ret;
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 
   /* Perform the next action based on the state of the conversions */
 
@@ -1104,7 +1103,7 @@ static void tc_worker(FAR void *arg)
   /* Set up the next sample event */
 
   ret = work_queue(HPWORK, &priv->work, tc_worker, priv, delay);
-  ASSERT(ret == 0);
+  DEBUGASSERT(ret == 0);
 }
 
 /****************************************************************************
@@ -1127,13 +1126,13 @@ static int tc_open(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
+      return ret;
     }
 
   /* Increment the reference count */
@@ -1156,7 +1155,7 @@ static int tc_open(FAR struct file *filep)
   priv->crefs = tmp;
 
 errout_with_sem:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 #else
   return OK;
@@ -1182,13 +1181,13 @@ static int tc_close(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret  == -ECANCELED);
+      return ret;
     }
 
   /* Decrement the reference count unless it would decrement a negative
@@ -1201,7 +1200,7 @@ static int tc_close(FAR struct file *filep)
       priv->crefs--;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 #endif
   return OK;
 }
@@ -1239,13 +1238,13 @@ static ssize_t tc_read(FAR struct file *filep, FAR char *buffer, size_t len)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Try to read sample data. */
@@ -1324,12 +1323,12 @@ static ssize_t tc_read(FAR struct file *filep, FAR char *buffer, size_t len)
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
 /****************************************************************************
- * Name:tc_ioctl
+ * Name: tc_ioctl
  ****************************************************************************/
 
 static int tc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
@@ -1351,13 +1350,13 @@ static int tc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Process the IOCTL by command */
@@ -1371,7 +1370,7 @@ static int tc_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 #endif
 }
@@ -1398,13 +1397,13 @@ static int tc_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Are we setting up the poll?  Or tearing it down? */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   if (setup)
@@ -1465,7 +1464,7 @@ static int tc_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif
@@ -1475,13 +1474,12 @@ errout:
  ************************************************************************************/
 
 /****************************************************************************
- * Name: board_tsc_setup
+ * Name: stm32_tsc_setup
  *
  * Description:
- *   Each board that supports a touchscreen device must provide this function.
- *   This function is called by application-specific, setup logic to
- *   configure the touchscreen device.  This function will register the driver
- *   as /dev/inputN where N is the minor device number.
+ *   This function is called by board-bringup logic to configure the
+ *   touchscreen device.  This function will register the driver as
+ *   /dev/inputN where N is the minor device number.
  *
  * Input Parameters:
  *   minor   - The input device minor number
@@ -1492,7 +1490,7 @@ errout:
  *
  ****************************************************************************/
 
-int board_tsc_setup(int minor)
+int stm32_tsc_setup(int minor)
 {
   FAR struct tc_dev_s *priv;
   char devname[DEV_NAMELEN];
@@ -1541,8 +1539,8 @@ int board_tsc_setup(int minor)
   /* Initialize the touchscreen device driver instance */
 
   memset(priv, 0, sizeof(struct tc_dev_s));
-  sem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
-  sem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
+  nxsem_init(&priv->devsem,  0, 1); /* Initialize device structure semaphore */
+  nxsem_init(&priv->waitsem, 0, 0); /* Initialize pen event wait semaphore */
 
   /* Register the device as an input device */
 
@@ -1577,32 +1575,11 @@ int board_tsc_setup(int minor)
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->devsem);
 #ifdef CONFIG_TOUCHSCREEN_MULTIPLE
   kmm_free(priv);
 #endif
   return ret;
-}
-
-/****************************************************************************
- * Name: board_tsc_teardown
- *
- * Description:
- *   Each board that supports a touchscreen device must provide this function.
- *   This function is called by application-specific, setup logic to
- *   uninitialize the touchscreen device.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-void board_tsc_teardown(void)
-{
-  /* Need to unregister the /dev/inputN device here. */
 }
 
 #endif /* CONFIG_INPUT */

@@ -95,13 +95,13 @@ int stm32l4_gpiosetevent(uint32_t pinset, bool risingedge, bool fallingedge,
  * Description:
  *   Sets/clears EXTI alarm interrupt.
  *
- * Parameters:
+ * Input Parameters:
  *  - rising/falling edge: enables interrupt on rising/falling edges
  *  - event:  generate event when set
  *  - func:   when non-NULL, generate interrupt
  *  - arg:    Argument passed to the interrupt callback
  *
- * Returns:
+ * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure indicating the
  *   nature of the failure.
  *
@@ -113,19 +113,42 @@ int stm32l4_exti_alarm(bool risingedge, bool fallingedge, bool event,
 #endif
 
 /****************************************************************************
+ * Name: stm32l4_exti_wakeup
+ *
+ * Description:
+ *   Sets/clears EXTI wakeup interrupt.
+ *
+ * Input Parameters:
+ *  - rising/falling edge: enables interrupt on rising/falling edges
+ *  - event:  generate event when set
+ *  - func:   when non-NULL, generate interrupt
+ *  - arg:    Argument passed to the interrupt callback
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure indicating the
+ *   nature of the failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_RTC_PERIODIC
+int stm32l4_exti_wakeup(bool risingedge, bool fallingedge, bool event,
+                        xcpt_t func, void *arg);
+#endif
+
+/****************************************************************************
  * Name: stm32l4_exti_comp
  *
  * Description:
  *   Sets/clears comparator based events and interrupt triggers.
  *
- * Parameters:
+ * Input Parameters:
  *  - cmp: comparator
- *  - rising/falling edge: enables interrupt on rising/falling edget
+ *  - rising/falling edge: enables interrupt on rising/falling edges
  *  - event:  generate event when set
  *  - func:   when non-NULL, generate interrupt
  *  - arg:    Argument passed to the interrupt callback
  *
- * Returns:
+ * Returned Value:
  *   Zero (OK) returned on success; a negated errno value is returned on
  *   failure.
  *

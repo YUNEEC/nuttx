@@ -1,8 +1,8 @@
 /****************************************************************************
  * net/socket/setsockopt.c
  *
- *   Copyright (C) 2007, 2008, 2011-2012, 2014-2015 Gregory Nutt. All rights
- *     reserved.
+ *   Copyright (C) 2007, 2008, 2011-2012, 2014-2015, 2017-2018 Gregory Nutt.
+ *     All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,9 @@
 #include <nuttx/net/net.h>
 
 #include "socket/socket.h"
+#include "inet/inet.h"
+#include "tcp/tcp.h"
+#include "udp/udp.h"
 #include "usrsock/usrsock.h"
 #include "utils/utils.h"
 
@@ -60,69 +63,50 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: psock_setsockopt
+ * Name: psock_socketlevel_option
  *
  * Description:
- *   psock_setsockopt() sets the option specified by the 'option' argument,
- *   at the protocol level specified by the 'level' argument, to the value
- *   pointed to by the 'value' argument for the socket on the 'psock' argument.
+ *   psock_socketlevel_option() sets the socket-level option specified by the
+ *   'option' argument to the value pointed to by the 'value' argument for
+ *   the socket specified by the 'psock' argument.
  *
- *   The 'level' argument specifies the protocol level of the option. To set
- *   options at the socket level, specify the level argument as SOL_SOCKET.
+ *   See <sys/socket.h> a complete list of values for the socket level
+ *   'option' argument.
  *
- *   See <sys/socket.h> a complete list of values for the 'option' argument.
- *
- * Parameters:
+ * Input Parameters:
  *   psock     Socket structure of socket to operate on
- *   level     Protocol level to set the option
  *   option    identifies the option to set
  *   value     Points to the argument value
  *   value_len The length of the argument value
  *
  * Returned Value:
- *  0 on success; -1 on failure
- *
- *  EDOM
- *    The send and receive timeout values are too big to fit into the
- *    timeout fields in the socket structure.
- *  EINVAL
- *    The specified option is invalid at the specified socket 'level' or the
- *    socket has been shut down.
- *  EISCONN
- *    The socket is already connected, and a specified option cannot be set
- *    while the socket is connected.
- *  ENOPROTOOPT
- *    The 'option' is not supported by the protocol.
- *  ENOTSOCK
- *    The 'sockfd' argument does not refer to a socket.
- *  ENOMEM
- *    There was insufficient memory available for the operation to complete.
- *  ENOBUFS
- *    Insufficient resources are available in the system to complete the
- *    call.
- *
- * Assumptions:
+ *   Returns zero (OK) on success.  On failure, it returns a negated errno
+ *   value to indicate the nature of the error.  See psock_setcockopt() for
+ *   the list of possible error values.
  *
  ****************************************************************************/
 
-int psock_setsockopt(FAR struct socket *psock, int level, int option,
-                     FAR const void *value, socklen_t value_len)
+static int psock_socketlevel_option(FAR struct socket *psock, int option,
+                                    FAR const void *value, socklen_t value_len)
 {
-  int errcode;
-
   /* Verify that the socket option if valid (but might not be supported ) */
 
   if (!_SO_SETVALID(option) || !value)
     {
-      errcode = EINVAL;
-      goto errout;
+      return -EINVAL;
+    }
+
+  /* Verify that the sockfd corresponds to valid, allocated socket */
+
+  if (psock == NULL || psock->s_crefs <= 0)
+    {
+      return -EBADF;
     }
 
 #ifdef CONFIG_NET_USRSOCK
   if (psock->s_type == SOCK_USRSOCK_TYPE)
     {
       FAR struct usrsock_conn_s *conn = psock->s_conn;
-      int ret;
 
       DEBUGASSERT(conn);
 
@@ -138,14 +122,8 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
 
           default:          /* Other options are passed to usrsock daemon. */
             {
-              ret = usrsock_setsockopt(conn, level, option, value, value_len);
-              if (ret < 0)
-                {
-                  errcode = -ret;
-                  goto errout;
-              }
-
-              return OK;
+              return usrsock_setsockopt(conn, SOL_SOCKET, option, value,
+                                        value_len);
             }
         }
     }
@@ -160,13 +138,15 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
        * is outside of the scope of setsockopt.
        */
 
-      case SO_DEBUG:      /* Enables recording of debugging information */
       case SO_BROADCAST:  /* Permits sending of broadcast messages */
-      case SO_REUSEADDR:  /* Allow reuse of local addresses */
-      case SO_KEEPALIVE:  /* Keeps connections active by enabling the
-                           * periodic transmission */
-      case SO_OOBINLINE:  /* Leaves received out-of-band data inline */
+      case SO_DEBUG:      /* Enables recording of debugging information */
       case SO_DONTROUTE:  /* Requests outgoing messages bypass standard routing */
+#ifndef CONFIG_NET_TCPPROTO_OPTIONS
+      case SO_KEEPALIVE:  /* Verifies TCP connections active by enabling the
+                           * periodic transmission of probes */
+#endif
+      case SO_OOBINLINE:  /* Leaves received out-of-band data inline */
+      case SO_REUSEADDR:  /* Allow reuse of local addresses */
         {
           int setting;
 
@@ -176,16 +156,15 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
 
           if (value_len != sizeof(int))
             {
-              errcode = EINVAL;
-              goto errout;
+              return -EINVAL;
             }
 
           /* Get the value.  Is the option being set or cleared? */
 
           setting = *(FAR int *)value;
 
-          /* Disable interrupts so that there is no conflict with interrupt
-           * level access to options.
+          /* Lock the network so that we have exclusive access to the socket
+           * options.
            */
 
            net_lock();
@@ -205,6 +184,23 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
         }
         break;
 
+#ifdef CONFIG_NET_TCPPROTO_OPTIONS
+      /* Any connection-oriented protocol could potentially support
+       * SO_KEEPALIVE.  However, this option is currently only available for
+       * TCP/IP.
+       *
+       * NOTE: SO_KEEPALIVE is not really a socket-level option; it is a
+       * protocol-level option.  A given TCP connection may service multiple
+       * sockets (via dup'ing of the socket).  There is, however, still only
+       * one connection to be monitored and that is a global attribute across
+       * all of the clones that may use the underlying connection.
+       */
+
+      case SO_KEEPALIVE:  /* Verifies TCP connections active by enabling the
+                           * periodic transmission of probes */
+        return tcp_setsockopt(psock, option, value, value_len);
+#endif
+
       case SO_RCVTIMEO:
       case SO_SNDTIMEO:
         {
@@ -215,12 +211,11 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
 
           if (tv == NULL || value_len != sizeof(struct timeval))
             {
-              errcode = EINVAL;
-              goto errout;
+              return -EINVAL;
             }
 
           /* Get the timeout value.  Any microsecond remainder will be
-           * force to the next larger, whole decisecond value.
+           * forced to the next larger, whole decisecond value.
            */
 
           timeo = (socktimeo_t)net_timeval2dsec(tv, TV2DS_CEIL);
@@ -250,7 +245,7 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
         break;
 
 #ifdef CONFIG_NET_SOLINGER
-      case SO_LINGER:
+      case SO_LINGER:  /* Lingers on a close() if data is present */
         {
           FAR struct linger *setting;
 
@@ -258,19 +253,18 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
 
           if (value_len < sizeof(FAR struct linger))
             {
-              errcode = EINVAL;
-              goto errout;
+              return -EINVAL;
             }
 
           /* Get the value.  Is the option being set or cleared? */
 
           setting = (FAR struct linger *)value;
 
-          /* Disable interrupts so that there is no conflict with interrupt
-           * level access to options.
+          /* Lock the network so that we have exclusive access to the socket
+           * options.
            */
 
-           net_lock();
+          net_lock();
 
           /* Set or clear the linger option bit and linger time (in deciseconds) */
 
@@ -291,9 +285,9 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
 #endif
       /* The following are not yet implemented */
 
-      case SO_SNDBUF:     /* Sets send buffer size */
       case SO_RCVBUF:     /* Sets receive buffer size */
       case SO_RCVLOWAT:   /* Sets the minimum number of bytes to input */
+      case SO_SNDBUF:     /* Sets send buffer size */
       case SO_SNDLOWAT:   /* Sets the minimum number of bytes to output */
 
       /* There options are only valid when used with getopt */
@@ -303,15 +297,115 @@ int psock_setsockopt(FAR struct socket *psock, int level, int option,
       case SO_TYPE:       /* Reports the socket type */
 
       default:
-        errcode = ENOPROTOOPT;
-        goto errout;
+        return -ENOPROTOOPT;
     }
 
   return OK;
+}
 
-errout:
-  set_errno(errcode);
-  return ERROR;
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: psock_setsockopt
+ *
+ * Description:
+ *   psock_setsockopt() sets the option specified by the 'option' argument,
+ *   at the protocol level specified by the 'level' argument, to the value
+ *   pointed to by the 'value' argument for the socket specified by the
+ *   'psock' argument.
+ *
+ *   The 'level' argument specifies the protocol level of the option.  To set
+ *   options at the socket level, specify the level argument as SOL_SOCKET.
+ *
+ *   See <sys/socket.h> a complete list of values for the socket level
+ *   'option' argument.
+ *
+ *   Protocol level options, such as SOL_TCP, are defined in protocol-specific
+ *   header files, for example include/netinet/tcp.h
+ *
+ * Input Parameters:
+ *   psock     Socket structure of socket to operate on
+ *   level     Protocol level to set the option
+ *   option    identifies the option to set
+ *   value     Points to the argument value
+ *   value_len The length of the argument value
+ *
+ * Returned Value:
+ *   Returns zero (OK) on success.  On failure, it returns a negated errno
+ *   value to indicate the nature of the error:
+ *
+ *   EDOM
+ *     The send and receive timeout values are too big to fit into the
+ *     timeout fields in the socket structure.
+ *   EINVAL
+ *     The specified option is invalid at the specified socket 'level' or the
+ *     socket has been shut down.
+ *   EISCONN
+ *     The socket is already connected, and a specified option cannot be set
+ *     while the socket is connected.
+ *   ENOPROTOOPT
+ *     The 'option' is not supported by the protocol.
+ *   ENOTSOCK
+ *     The 'sockfd' argument does not refer to a socket.
+ *   ENOMEM
+ *     There was insufficient memory available for the operation to complete.
+ *   ENOBUFS
+ *    Insufficient resources are available in the system to complete the
+ *    call.
+ *
+ ****************************************************************************/
+
+int psock_setsockopt(FAR struct socket *psock, int level, int option,
+                     FAR const void *value, socklen_t value_len)
+{
+  int ret;
+
+  /* Handle setting of the socket option according to the level at which
+   * option should be applied.
+   */
+
+  switch (level)
+    {
+      case SOL_SOCKET: /* Socket-level options (see include/sys/socket.h) */
+        ret = psock_socketlevel_option(psock, option, value, value_len);
+        break;
+
+      case SOL_TCP:    /* TCP protocol socket options (see include/netinet/tcp.h) */
+#ifdef CONFIG_NET_TCPPROTO_OPTIONS
+        ret = tcp_setsockopt(psock, option, value, value_len);
+        break;
+#endif
+
+      case SOL_UDP:    /* UDP protocol socket options (see include/netinet/udp.h) */
+#ifdef CONFIG_NET_UDPPROTO_OPTIONS
+        ret = udp_setsockopt(psock, option, value, value_len);
+        break;
+#endif
+
+      /* These levels are defined in sys/socket.h, but are not yet
+       * implemented.
+       */
+
+#ifdef CONFIG_NET_IPv4
+      case SOL_IP:     /* TCP protocol socket options (see include/netinet/in.h) */
+        ret = ipv4_setsockopt(psock, option, value, value_len);
+        break;
+#endif
+
+#ifdef CONFIG_NET_IPv6
+      case SOL_IPV6:   /* TCP protocol socket options (see include/netinet/in.h) */
+        ret = ipv6_setsockopt(psock, option, value, value_len);
+        break;
+#endif
+
+      default:         /* The provided level is invalid */
+        ret = -EINVAL;
+        break;
+    }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -323,12 +417,16 @@ errout:
  *   pointed to by the 'value' argument for the socket associated with the
  *   file descriptor specified by the 'sockfd' argument.
  *
- *   The 'level' argument specifies the protocol level of the option. To set
+ *   The 'level' argument specifies the protocol level of the option.  To set
  *   options at the socket level, specify the level argument as SOL_SOCKET.
  *
- *   See <sys/socket.h> a complete list of values for the 'option' argument.
+ *   See <sys/socket.h> a complete list of values for the socket level
+ *   'option' argument.
  *
- * Parameters:
+ *   Protocol level options, such as SOL_TCP, are defined in protocol-specific
+ *   header files, for example include/netinet/tcp.h
+ *
+ * Input Parameters:
  *   sockfd    Socket descriptor of socket
  *   level     Protocol level to set the option
  *   option    identifies the option to set
@@ -336,50 +434,50 @@ errout:
  *   value_len The length of the argument value
  *
  * Returned Value:
- *  0 on success; -1 on failure
+ *   0 on success; -1 on failure
  *
- *  EBADF
- *    The 'sockfd' argument is not a valid socket descriptor.
- *  EDOM
- *    The send and receive timeout values are too big to fit into the
- *    timeout fields in the socket structure.
- *  EINVAL
- *    The specified option is invalid at the specified socket 'level' or the
- *    socket has been shut down.
- *  EISCONN
- *    The socket is already connected, and a specified option cannot be set
- *    while the socket is connected.
- *  ENOPROTOOPT
- *    The 'option' is not supported by the protocol.
- *  ENOTSOCK
- *    The 'sockfd' argument does not refer to a socket.
- *  ENOMEM
- *    There was insufficient memory available for the operation to complete.
- *  ENOBUFS
- *    Insufficient resources are available in the system to complete the
- *    call.
- *
- * Assumptions:
+ *   EBADF
+ *     The 'sockfd' argument is not a valid socket descriptor.
+ *   EDOM
+ *     The send and receive timeout values are too big to fit into the
+ *     timeout fields in the socket structure.
+ *   EINVAL
+ *     The specified option is invalid at the specified socket 'level' or the
+ *     socket has been shut down.
+ *   EISCONN
+ *     The socket is already connected, and a specified option cannot be set
+ *     while the socket is connected.
+ *   ENOPROTOOPT
+ *     The 'option' is not supported by the protocol.
+ *   ENOTSOCK
+ *     The 'sockfd' argument does not refer to a socket.
+ *   ENOMEM
+ *     There was insufficient memory available for the operation to complete.
+ *   ENOBUFS
+ *     Insufficient resources are available in the system to complete the
+ *     call.
  *
  ****************************************************************************/
 
 int setsockopt(int sockfd, int level, int option, const void *value, socklen_t value_len)
 {
   FAR struct socket *psock;
+  int ret;
 
   /* Get the underlying socket structure */
-  /* Verify that the sockfd corresponds to valid, allocated socket */
 
   psock = sockfd_socket(sockfd);
-  if (!psock || psock->s_crefs <= 0)
-    {
-      set_errno(EBADF);
-      return ERROR;
-    }
 
   /* Then let psock_setockopt() do all of the work */
 
-  return psock_setsockopt(psock, level, option, value, value_len);
+  ret = psock_setsockopt(psock, level, option, value, value_len);
+  if (ret < 0)
+    {
+      set_errno(-ret);
+      return ERROR;
+    }
+
+  return OK;
 }
 
 #endif /* CONFIG_NET && CONFIG_NET_SOCKOPTS */

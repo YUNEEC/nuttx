@@ -42,12 +42,15 @@
 
 #include <nuttx/config.h>
 
+#include <arch/board/board.h>
+
 #include "chip.h"
 
 #ifdef CONFIG_STM32_HRTIM1
 
 #if defined(CONFIG_STM32_STM32F33XX)
 #  include "chip/stm32f33xxx_hrtim.h"
+#  include "chip/stm32f33xxx_rcc.h"
 #else
 #  error
 #endif
@@ -127,8 +130,8 @@
 #endif
 
 #if defined(CONFIG_STM32_HRTIM_MASTER_IRQ) || defined(CONFIG_STM32_HRTIM_TIMA_IRQ) || \
-    defined(CONFIG_STM32_HRTIM_TIMB_IRQ) || defined(CONFIG_STM32_HRTIM_TIMC_IRQ) || \
-    defined(CONFIG_STM32_HRTIM_TIMD_IRQ) || defined(CONFIG_STM32_HRTIM_TIME_IRQ) || \
+    defined(CONFIG_STM32_HRTIM_TIMB_IRQ)   || defined(CONFIG_STM32_HRTIM_TIMC_IRQ) || \
+    defined(CONFIG_STM32_HRTIM_TIMD_IRQ)   || defined(CONFIG_STM32_HRTIM_TIME_IRQ) || \
     defined(CONFIG_STM32_HRTIM_CMN_IRQ)
 #   ifndef CONFIG_STM32_HRTIM_INTERRUPTS
 #     error "CONFIG_STM32_HRTIM_INTERRUPTS must be set"
@@ -170,11 +173,88 @@
 #endif
 #ifdef CONFIG_STM32_HRTIM_TIME_PWM
 #  if !defined(CONFIG_STM32_HRTIM_TIME_PWM_CH1) &&  \
-     !defined(CONFIG_STM32_HRTIM_TIME_PWM_CH2)
+      !defined(CONFIG_STM32_HRTIM_TIME_PWM_CH2)
 #    error "HRTIM TIME PWM set but no channel selected"
 #  endif
 #endif
 
+/* HRTIM clock source configuration */
+
+#ifdef CONFIG_STM32_HRTIM_CLK_FROM_PLL
+#  if STM32_SYSCLK_SW == RCC_CFGR_SW_PLL
+#    if (STM32_RCC_CFGR_PPRE2 != RCC_CFGR_PPRE2_HCLK) &&  \
+        (STM32_RCC_CFGR_PPRE2 != RCC_CFGR_PPRE2_HCLKd2)
+#      error "APB2 prescaler factor can not be greater than 2"
+#    else
+#      define HRTIM_HAVE_CLK_FROM_PLL 1
+#      define HRTIM_MAIN_CLOCK 2*STM32_PLL_FREQUENCY
+#    endif
+#  else
+#    error "Clock system must be set to PLL"
+#  endif
+#else
+#  error "Not supported yet: system freezes when no PLL selected."
+#  define HRTIM_HAVE_CLK_FROM_APB2 1
+#  if STM32_RCC_CFGR_PPRE2 == RCC_CFGR_PPRE2_HCLK
+#      define HRTIM_MAIN_CLOCK STM32_PCLK2_FREQUENCY
+#  else
+#      define HRTIM_MAIN_CLOCK 2*STM32_PCLK2_FREQUENCY
+#  endif
+#endif
+
+/* High-resolution equivalent clock */
+
+#define HRTIM_CLOCK (HRTIM_MAIN_CLOCK*32ull)
+
+/* Helpers **************************************************************************/
+
+#define HRTIM_CMP_SET(hrtim, tim, index, cmp)               \
+        (hrtim)->hd_ops->cmp_update(hrtim, tim, index, cmp)
+#define HRTIM_PER_SET(hrtim, tim, per)                      \
+        (hrtim)->hd_ops->per_update(hrtim, tim, per)
+#define HRTIM_REP_SET(hrtim, tim, per)                      \
+        (hrtim)->hd_ops->rep_update(hrtim, tim, per)
+#define HRTIM_PER_GET(hrtim, tim)                           \
+        (hrtim)->hd_ops->per_get(hrtim, tim)
+#define HRTIM_FCLK_GET(hrtim, tim)                          \
+        (hrtim)->hd_ops->fclk_get(hrtim, tim)
+#define HRTIM_IRQ_GET(hrtim, irq)                           \
+        (hrtim)->hd_ops->irq_get(hrtim, irq)
+#define HRTIM_CAPTURE_GET(hrtim, timer, cap)                \
+        (hrtim)->hd_ops->capture_get(hrtim, timer, cap)
+#define HRTIM_IRQ_ACK(hrtim, irq, ack)                      \
+        (hrtim)->hd_ops->irq_ack(hrtim, irq, ack)
+#define HRTIM_SOFT_UPDATE(hrtim, timer)                     \
+        (hrtim)->hd_ops->soft_update(hrtim, timer)
+#define HRTIM_SOFT_CAPTURE(hrtim, timer, index)             \
+        (hrtim)->hd_ops->soft_capture(hrtim, timer, index)
+#define HRTIM_SOFT_RESET(hrtim, timer)                      \
+        (hrtim)->hd_ops->soft_reset(hrtim, timer)
+#define HRTIM_FREQ_SET(hrtim, timer,freq)                   \
+        (hrtim)->hd_ops->freq_set(hrtim, timer, freq)
+#define HRTIM_TIM_ENABLE(hrtim, timers, state)              \
+        (hrtim)->hd_ops->tim_enable(hrtim, timers, state)
+#define HRTIM_OUTPUTS_ENABLE(hrtim, outputs, state)         \
+        (hrtim)->hd_ops->outputs_enable(hrtim, outputs, state)
+#define HRTIM_OUTPUT_SET_SET(hrtim, output, set)            \
+        (hrtim)->hd_ops->output_set_set(hrtim, output, set)
+#define HRTIM_OUTPUT_RST_SET(hrtim, output, rst)            \
+        (hrtim)->hd_ops->output_rst_set(hrtim, output, rst)
+#define HRTIM_BURST_CMP_SET(hrtim, cmp)                     \
+        (hrtim)->hd_ops->burst_cmp_set(hrtim, cmp)
+#define HRTIM_BURST_PER_SET(hrtim, per)                     \
+        (hrtim)->hd_ops->burst_per_set(hrtim, per)
+#define HRTIM_BURST_PRE_SET(hrtim, pre)                     \
+        (hrtim)->hd_ops->burst_pre_set(hrtim, pre)
+#define HRTIM_BURST_ENABLE(hrtim, state)                    \
+        (hrtim)->hd_ops->burst_enable(hrtim, state)
+#define HRTIM_DEADTIME_UPDATE(hrtim, tim, dt, val)          \
+        (hrtim)->hd_ops->deadtime_update(hrtim, tim, dt, val)
+
+#define HRTIM_PER_MAX 0xFFFF
+#define HRTIM_CMP_MAX 0xFFFF
+#define HRTIM_CPT_MAX 0xFFFF
+#define HRTIM_REP_MAX 0xFF
 
 /************************************************************************************
  * Public Types
@@ -184,23 +264,25 @@
 
 enum stm32_hrtim_tim_e
 {
-  HRTIM_TIMER_MASTER = 0,
+  HRTIM_TIMER_MASTER = (1<<0),
 #ifdef CONFIG_STM32_HRTIM_TIMA
-  HRTIM_TIMER_TIMA   = 1,
+  HRTIM_TIMER_TIMA   = (1<<1),
 #endif
 #ifdef CONFIG_STM32_HRTIM_TIMB
-  HRTIM_TIMER_TIMB   = 2,
+  HRTIM_TIMER_TIMB   = (1<<2),
 #endif
 #ifdef CONFIG_STM32_HRTIM_TIMC
-  HRTIM_TIMER_TIMC   = 3,
+  HRTIM_TIMER_TIMC   = (1<<3),
 #endif
 #ifdef CONFIG_STM32_HRTIM_TIMD
-  HRTIM_TIMER_TIMD   = 4,
+  HRTIM_TIMER_TIMD   = (1<<4),
 #endif
 #ifdef CONFIG_STM32_HRTIM_TIME
-  HRTIM_TIMER_TIME   = 5,
+  HRTIM_TIMER_TIME   = (1<<5),
 #endif
-  HRTIM_TIMER_COMMON = 6
+  HRTIM_TIMER_COMMON = (1<<6),
+
+  HRTIM_TIMERS_MASK = 0x3f
 };
 
 /* Source which can force the Tx1/Tx2 output to its inactive state */
@@ -287,62 +369,65 @@ enum stm32_hrtim_tim_rst_e
 {
   /* Timer owns events */
 
-  HRTIM_RST_UPDT,
-  HRTIM_RST_CMP4,
-  HRTIM_RST_CMP2,
+  HRTIM_RST_UPDT      = (1<<1),
+  HRTIM_RST_CMP4      = (1<<2),
+  HRTIM_RST_CMP2      = (1<<3),
 
   /* Master Timer Events */
 
-  HRTIM_RST_MSTCMP4,
-  HRTIM_RST_MSTCMP3,
-  HRTIM_RST_MSTCMP2,
-  HRTIM_RST_MSTCMP1,
-  HRTIM_RST_MSTPER,
-
-  /* TimerX events */
-
-  HRTIM_RST_TECMP4,
-  HRTIM_RST_TECMP2,
-  HRTIM_RST_TECMP1,
-  HRTIM_RST_TDCMP4,
-  HRTIM_RST_TDCMP2,
-  HRTIM_RST_TDCMP1,
-  HRTIM_RST_TCCMP4,
-  HRTIM_RST_TCCMP2,
-  HRTIM_RST_TCCMP1,
-  HRTIM_RST_TBCMP4,
-  HRTIM_RST_TBCMP2,
-  HRTIM_RST_TBCMP1,
-  HRTIM_RST_TACMP4,
-  HRTIM_RST_TACMP2,
-  HRTIM_RST_TACMP1,
+  HRTIM_RST_MSTPER    = (1<<4),
+  HRTIM_RST_MSTCMP1   = (1<<5),
+  HRTIM_RST_MSTCMP2   = (1<<6),
+  HRTIM_RST_MSTCMP3   = (1<<7),
+  HRTIM_RST_MSTCMP4   = (1<<8),
 
   /* External Events */
 
-  HRTIM_RST_EXTEVNT10,
-  HRTIM_RST_EXTEVNT9,
-  HRTIM_RST_EXTEVNT8,
-  HRTIM_RST_EXTEVNT7,
-  HRTIM_RST_EXTEVNT6,
-  HRTIM_RST_EXTEVNT5,
-  HRTIM_RST_EXTEVNT4,
-  HRTIM_RST_EXTEVNT3,
-  HRTIM_RST_EXTEVNT2,
-  HRTIM_RST_EXTEVNT1
+  HRTIM_RST_EXTEVNT1  = (1<<9),
+  HRTIM_RST_EXTEVNT2  = (1<<10),
+  HRTIM_RST_EXTEVNT3  = (1<<11),
+  HRTIM_RST_EXTEVNT4  = (1<<12),
+  HRTIM_RST_EXTEVNT5  = (1<<13),
+  HRTIM_RST_EXTEVNT6  = (1<<14),
+  HRTIM_RST_EXTEVNT7  = (1<<15),
+  HRTIM_RST_EXTEVNT8  = (1<<16),
+  HRTIM_RST_EXTEVNT9  = (1<<17),
+  HRTIM_RST_EXTEVNT10 = (1<<18),
+
+  /* TimerX events */
+
+  HRTIM_RST_TACMP1    = (1<<19),
+  HRTIM_RST_TACMP2    = (1<<20),
+  HRTIM_RST_TACMP4    = (1<<21),
+  HRTIM_RST_TBCMP1    = (1<<22),
+  HRTIM_RST_TBCMP2    = (1<<23),
+  HRTIM_RST_TBCMP4    = (1<<24),
+  HRTIM_RST_TCCMP1    = (1<<25),
+  HRTIM_RST_TCCMP2    = (1<<26),
+  HRTIM_RST_TCCMP4    = (1<<27),
+  HRTIM_RST_TDCMP1    = (1<<28),
+  HRTIM_RST_TDCMP2    = (1<<29),
+  HRTIM_RST_TDCMP4    = (1<<30),
+  HRTIM_RST_TECMP1    = (1<<31),
 };
+
+/* This definitions does not fit to the above 32 bit enum */
+
+#define HRTIM_RST_TECMP2 (1ull<<32)
+#define HRTIM_RST_TECMP4 (1ull<<33)
 
 /* HRTIM Timer X prescaler */
 
 enum stm32_hrtim_tim_prescaler_e
 {
-  HRTIM_PRESCALER_1,
-  HRTIM_PRESCALER_2,
-  HRTIM_PRESCALER_4,
-  HRTIM_PRESCALER_8,
-  HRTIM_PRESCALER_16,
-  HRTIM_PRESCALER_32,
-  HRTIM_PRESCALER_64,
-  HRTIM_PRESCALER_128
+  HRTIM_PRESCALER_1,            /* CKPSC = 0 */
+  HRTIM_PRESCALER_2,            /* CKPSC = 1 */
+  HRTIM_PRESCALER_4,            /* CKPSC = 2 */
+  HRTIM_PRESCALER_8,            /* CKPSC = 3 */
+  HRTIM_PRESCALER_16,           /* CKPSC = 4 */
+  HRTIM_PRESCALER_32,           /* CKPSC = 5 */
+  HRTIM_PRESCALER_64,           /* CKPSC = 6 */
+  HRTIM_PRESCALER_128           /* CKPSC = 7 */
 };
 
 /* HRTIM Timer Master/Slave mode */
@@ -353,10 +438,6 @@ enum stm32_hrtim_mode_e
   HRTIM_MODE_HALF    = (1 << 1),  /* Half mode */
   HRTIM_MODE_RETRIG  = (1 << 2),  /* Re-triggerable mode */
   HRTIM_MODE_CONT    = (1 << 3),  /* Continuous mode */
-
-  /* Only slave Timers */
-
-  HRTIM_MODE_PSHPLL  = (1 << 7),  /* Push-Pull mode */
 };
 
 /* HRTIM Slave Timer auto-delayed mode
@@ -463,7 +544,6 @@ enum stm32_hrtim_eev_mode_e
   HRTIM_EEV_MODE_FAST   = 1     /* low latency mode */
 };
 
-
 /* External Event filter.
  * NOTE: supported only for EEV6-10.
  */
@@ -498,7 +578,15 @@ enum stm32_hrtim_cmp_index_e
   HRTIM_CMP4
 };
 
-/* HRTIM Slave Timer Outputs */
+/* HRTIM Slave Timer Outputs index */
+
+enum stm32_output_s
+{
+  HRTIM_OUT_CH1 = (1 << 0),
+  HRTIM_OUT_CH2 = (1 << 1)
+};
+
+/* HRTIM Slave Timers Outputs */
 
 enum stm32_outputs_e
 {
@@ -514,20 +602,50 @@ enum stm32_outputs_e
   HRTIM_OUT_TIME_CH2 = (1 << 9)
 };
 
-/* HRTIM Deadtime Locks */
+/* HRTIM Output polarisation */
 
-enum stm32_hrtim_deadtime_lock_e
+enum stm32_output_polarisation_e
 {
-  HRTIM_DT_VALUE_LOCK = (1 << 0), /* Lock Deadtime value */
-  HRTIM_DT_SIGN_LOCK  = (1 << 1)  /* Lock Deadtime sign */
+  HRTIM_OUT_POL_POS = 0,
+  HRTIM_OUT_POL_NEG = 1
+};
+
+/* HRTIM Deadtime sign */
+
+enum stm32_hrtim_deadtime_sign_e
+{
+  HRTIM_DT_SIGN_POSITIVE = 0,
+  HRTIM_DT_SIGN_NEGATIVE = 1
 };
 
 /* HRTIM Deadtime types  */
 
 enum stm32_hrtim_deadtime_edge_e
 {
-  HRTIM_DT_RISING = 0,
-  HRTIM_DT_FALLING = 1
+  HRTIM_DT_EDGE_RISING = 0,
+  HRTIM_DT_EDGE_FALLING = 1
+};
+
+/* HRTIM Deadtime lock */
+
+enum stm32_hrtim_deadtime_lock_e
+{
+  HRTIM_DT_RW   = 0,
+  HRTIM_DT_LOCK = 1
+};
+
+/* HRTIM Deadtime prescaler */
+
+enum stm32_hrtim_deadtime_prescaler_e
+{
+  HRTIM_DEADTIME_PRESCALER_1   = 0,
+  HRTIM_DEADTIME_PRESCALER_2   = 1,
+  HRTIM_DEADTIME_PRESCALER_4   = 2,
+  HRTIM_DEADTIME_PRESCALER_8   = 3,
+  HRTIM_DEADTIME_PRESCALER_16  = 4,
+  HRTIM_DEADTIME_PRESCALER_32  = 5,
+  HRTIM_DEADTIME_PRESCALER_64  = 6,
+  HRTIM_DEADTIME_PRESCALER_128 = 7
 };
 
 /* Chopper start pulsewidth */
@@ -591,88 +709,90 @@ enum stm32_hrtim_chopper_freq_e
 
 enum stm32_hrtim_adc_trq13_e
 {
-  HRTIM_ADCTRG13_MC1   = (1 << 0),
-  HRTIM_ADCTRG13_MC2   = (1 << 1),
-  HRTIM_ADCTRG13_MC3   = (1 << 2),
-  HRTIM_ADCTRG13_MC4   = (1 << 3),
-  HRTIM_ADCTRG13_MPER  = (1 << 4),
+  HRTIM_ADCTRG13_NONE  = 0,        /* No trigger */
+  HRTIM_ADCTRG13_MC1   = (1 << 0), /* Trigger on Master Compare 1 */
+  HRTIM_ADCTRG13_MC2   = (1 << 1), /* Trigger on Master Compare 2 */
+  HRTIM_ADCTRG13_MC3   = (1 << 2), /* Trigger on Master Compare 3 */
+  HRTIM_ADCTRG13_MC4   = (1 << 3), /* Trigger on Master Compare 4 */
+  HRTIM_ADCTRG13_MPER  = (1 << 4), /* Trigger on Master Period */
 
-  HRTIM_ADCTRG13_EEV1  = (1 << 5),
-  HRTIM_ADCTRG13_EEV2  = (1 << 6),
-  HRTIM_ADCTRG13_EEV3  = (1 << 7),
-  HRTIM_ADCTRG13_EEV4  = (1 << 8),
-  HRTIM_ADCTRG13_EEV5  = (1 << 9),
+  HRTIM_ADCTRG13_EEV1  = (1 << 5), /* Trigger on External Event 1 */
+  HRTIM_ADCTRG13_EEV2  = (1 << 6), /* Trigger on External Event 2 */
+  HRTIM_ADCTRG13_EEV3  = (1 << 7), /* Trigger on External Event 3 */
+  HRTIM_ADCTRG13_EEV4  = (1 << 8), /* Trigger on External Event 4 */
+  HRTIM_ADCTRG13_EEV5  = (1 << 9), /* Trigger on External Event 5 */
 
-  HRTIM_ADCTRG13_AC2   = (1 << 10),
-  HRTIM_ADCTRG13_AC3   = (1 << 11),
-  HRTIM_ADCTRG13_AC4   = (1 << 12),
-  HRTIM_ADCTRG13_APER  = (1 << 13),
-  HRTIM_ADCTRG13_ARST  = (1 << 14),
+  HRTIM_ADCTRG13_AC2   = (1 << 10), /* Trigger on Timer A Compare 2 */
+  HRTIM_ADCTRG13_AC3   = (1 << 11), /* Trigger on Timer A Compare 3 */
+  HRTIM_ADCTRG13_AC4   = (1 << 12), /* Trigger on Timer A Compare 4 */
+  HRTIM_ADCTRG13_APER  = (1 << 13), /* Trigger on Timer A Period */
+  HRTIM_ADCTRG13_ARST  = (1 << 14), /* Trigger on Timer A Reset */
 
-  HRTIM_ADCTRG13_BC2   = (1 << 15),
-  HRTIM_ADCTRG13_BC3   = (1 << 16),
-  HRTIM_ADCTRG13_BC4   = (1 << 17),
-  HRTIM_ADCTRG13_BPER  = (1 << 18),
-  HRTIM_ADCTRG13_BRST  = (1 << 19),
+  HRTIM_ADCTRG13_BC2   = (1 << 15), /* Trigger on Timer B Compare 2 */
+  HRTIM_ADCTRG13_BC3   = (1 << 16), /* Trigger on Timer B Compare 3 */
+  HRTIM_ADCTRG13_BC4   = (1 << 17), /* Trigger on Timer B Compare 4 */
+  HRTIM_ADCTRG13_BPER  = (1 << 18), /* Trigger on Timer B Period */
+  HRTIM_ADCTRG13_BRST  = (1 << 19), /* Trigger on Timer B Reset */
 
-  HRTIM_ADCTRG13_CC2   = (1 << 20),
-  HRTIM_ADCTRG13_CC3   = (1 << 21),
-  HRTIM_ADCTRG13_CC4   = (1 << 22),
-  HRTIM_ADCTRG13_CPER  = (1 << 23),
+  HRTIM_ADCTRG13_CC2   = (1 << 20), /* Trigger on Timer C Compare 2 */
+  HRTIM_ADCTRG13_CC3   = (1 << 21), /* Trigger on Timer C Compare 3 */
+  HRTIM_ADCTRG13_CC4   = (1 << 22), /* Trigger on Timer C Compare 4 */
+  HRTIM_ADCTRG13_CPER  = (1 << 23), /* Trigger on Timer C Period */
 
-  HRTIM_ADCTRG13_DC2   = (1 << 24),
-  HRTIM_ADCTRG13_DC3   = (1 << 25),
-  HRTIM_ADCTRG13_DC4   = (1 << 26),
-  HRTIM_ADCTRG13_DPER  = (1 << 27),
+  HRTIM_ADCTRG13_DC2   = (1 << 24), /* Trigger on Timer D Compare 2 */
+  HRTIM_ADCTRG13_DC3   = (1 << 25), /* Trigger on Timer D Compare 3 */
+  HRTIM_ADCTRG13_DC4   = (1 << 26), /* Trigger on Timer D Compare 4 */
+  HRTIM_ADCTRG13_DPER  = (1 << 27), /* Trigger on Timer D Period */
 
-  HRTIM_ADCTRG13_EC2   = (1 << 28),
-  HRTIM_ADCTRG13_EC3   = (1 << 29),
-  HRTIM_ADCTRG13_EC4   = (1 << 30),
-  HRTIM_ADCTRG13_ERST  = (1 << 31),
+  HRTIM_ADCTRG13_EC2   = (1 << 28), /* Trigger on Timer E Compare 2 */
+  HRTIM_ADCTRG13_EC3   = (1 << 29), /* Trigger on Timer E Compare 3 */
+  HRTIM_ADCTRG13_EC4   = (1 << 30), /* Trigger on Timer E Compare 4 */
+  HRTIM_ADCTRG13_EPER  = (1 << 31), /* Trigger on Timer E Period */
 };
 
 /* HRTIM ADC Trigger 2/4 */
 
 enum stm32_hrtim_adc_trq24_e
 {
-  HRTIM_ADCTRG24_MC1   = (1 << 0),
-  HRTIM_ADCTRG24_MC2   = (1 << 1),
-  HRTIM_ADCTRG24_MC3   = (1 << 2),
-  HRTIM_ADCTRG24_MC4   = (1 << 3),
-  HRTIM_ADCTRG24_MPER  = (1 << 4),
+  HRTIM_ADCTRG24_NONE  = 0,        /* No trigger */
+  HRTIM_ADCTRG24_MC1   = (1 << 0), /* Trigger on Master Compare 1 */
+  HRTIM_ADCTRG24_MC2   = (1 << 1), /* Trigger on Master Compare 2 */
+  HRTIM_ADCTRG24_MC3   = (1 << 2), /* Trigger on Master Compare 3 */
+  HRTIM_ADCTRG24_MC4   = (1 << 3), /* Trigger on Master Compare 4 */
+  HRTIM_ADCTRG24_MPER  = (1 << 4), /* Trigger on Master Period */
 
-  HRTIM_ADCTRG24_EEV6  = (1 << 5),
-  HRTIM_ADCTRG24_EEV7  = (1 << 6),
-  HRTIM_ADCTRG24_EEV8  = (1 << 7),
-  HRTIM_ADCTRG24_EEV9  = (1 << 8),
-  HRTIM_ADCTRG24_EEV10 = (1 << 9),
+  HRTIM_ADCTRG24_EEV6  = (1 << 5), /* Trigger on External Event 6 */
+  HRTIM_ADCTRG24_EEV7  = (1 << 6), /* Trigger on External Event 7 */
+  HRTIM_ADCTRG24_EEV8  = (1 << 7), /* Trigger on External Event 8 */
+  HRTIM_ADCTRG24_EEV9  = (1 << 8), /* Trigger on External Event 9 */
+  HRTIM_ADCTRG24_EEV10 = (1 << 9), /* Trigger on External Event 10 */
 
-  HRTIM_ADCTRG24_AC2   = (1 << 10),
-  HRTIM_ADCTRG24_AC3   = (1 << 11),
-  HRTIM_ADCTRG24_AC4   = (1 << 12),
-  HRTIM_ADCTRG24_APER  = (1 << 13),
+  HRTIM_ADCTRG24_AC2   = (1 << 10), /* Trigger on Timer A Compare 2 */
+  HRTIM_ADCTRG24_AC3   = (1 << 11), /* Trigger on Timer A Compare 3 */
+  HRTIM_ADCTRG24_AC4   = (1 << 12), /* Trigger on Timer A Compare 4 */
+  HRTIM_ADCTRG24_APER  = (1 << 13), /* Trigger on Timer A Period */
 
-  HRTIM_ADCTRG24_BC2   = (1 << 14),
-  HRTIM_ADCTRG24_BC3   = (1 << 15),
-  HRTIM_ADCTRG24_BC4   = (1 << 16),
-  HRTIM_ADCTRG24_BPER  = (1 << 17),
+  HRTIM_ADCTRG24_BC2   = (1 << 14), /* Trigger on Timer B Compare 2 */
+  HRTIM_ADCTRG24_BC3   = (1 << 15), /* Trigger on Timer B Compare 3 */
+  HRTIM_ADCTRG24_BC4   = (1 << 16), /* Trigger on Timer B Compare 4 */
+  HRTIM_ADCTRG24_BPER  = (1 << 17), /* Trigger on Timer B Period */
 
-  HRTIM_ADCTRG24_CC2   = (1 << 18),
-  HRTIM_ADCTRG24_CC3   = (1 << 19),
-  HRTIM_ADCTRG24_CC4   = (1 << 20),
-  HRTIM_ADCTRG24_CPER  = (1 << 21),
-  HRTIM_ADCTRG24_CRST  = (1 << 22),
+  HRTIM_ADCTRG24_CC2   = (1 << 18),  /* Trigger on Timer C Compare 2 */
+  HRTIM_ADCTRG24_CC3   = (1 << 19),  /* Trigger on Timer C Compare 3 */
+  HRTIM_ADCTRG24_CC4   = (1 << 20),  /* Trigger on Timer C Compare 4 */
+  HRTIM_ADCTRG24_CPER  = (1 << 21),  /* Trigger on Timer C Period */
+  HRTIM_ADCTRG24_CRST  = (1 << 22),  /* Trigger on Timer C Reset */
 
-  HRTIM_ADCTRG24_DC2   = (1 << 23),
-  HRTIM_ADCTRG24_DC3   = (1 << 24),
-  HRTIM_ADCTRG24_DC4   = (1 << 25),
-  HRTIM_ADCTRG24_DPER  = (1 << 26),
-  HRTIM_ADCTRG24_DRST  = (1 << 27),
+  HRTIM_ADCTRG24_DC2   = (1 << 23),  /* Trigger on Timer D Compare 2 */
+  HRTIM_ADCTRG24_DC3   = (1 << 24),  /* Trigger on Timer D Compare 3 */
+  HRTIM_ADCTRG24_DC4   = (1 << 25),  /* Trigger on Timer D Compare 4 */
+  HRTIM_ADCTRG24_DPER  = (1 << 26),  /* Trigger on Timer D Period */
+  HRTIM_ADCTRG24_DRST  = (1 << 27),  /* Trigger on Timer D Reset */
 
-  HRTIM_ADCTRG24_EC2   = (1 << 28),
-  HRTIM_ADCTRG24_EC3   = (1 << 29),
-  HRTIM_ADCTRG24_EC4   = (1 << 30),
-  HRTIM_ADCTRG24_ERST  = (1 << 31),
+  HRTIM_ADCTRG24_EC2   = (1 << 28),  /* Trigger on Timer E Compare 2 */
+  HRTIM_ADCTRG24_EC3   = (1 << 29),  /* Trigger on Timer E Compare 3 */
+  HRTIM_ADCTRG24_EC4   = (1 << 30),  /* Trigger on Timer E Compare 4 */
+  HRTIM_ADCTRG24_ERST  = (1 << 31),  /* Trigger on Timer E Reset */
 };
 
 /* HRTIM DAC synchronization events */
@@ -683,6 +803,21 @@ enum stm32_hrtim_dac_e
   HRTIM_DAC_TRIG1    = 1,
   HRTIM_DAC_TRIG2    = 2,
   HRTIM_DAC_TRIG3    = 3
+};
+
+/* HRTIM Timer update events */
+
+enum stm32_tim_update_e
+{
+  HRTIM_UPDATE_NONE  = 0,
+  HRTIM_UPDATE_MSTU  = (1 << 0),
+  HRTIM_UPDATE_TAU   = (1 << 2),
+  HRTIM_UPDATE_TBU   = (1 << 3),
+  HRTIM_UPDATE_TCU   = (1 << 4),
+  HRTIM_UPDATE_TDU   = (1 << 5),
+  HRTIM_UPDATE_TEU   = (1 << 6),
+  HRTIM_UPDATE_RSTU  = (1 << 7),
+  HRTIM_UPDATE_REPU  = (1 << 8),
 };
 
 /* HRTIM Master Timer interrupts  */
@@ -837,30 +972,108 @@ enum stm32_hrtim_burst_triggers_e
   HRTIM_BURST_TRG_OCHPEV  = (1 << 31),
 };
 
+/* HRTIM Capture triggers */
+enum stm32_hrtim_capture_index_e
+{
+  HRTIM_CAPTURE1 = 0,
+  HRTIM_CAPTURE2 = 1
+};
+
+/* HRTIM Capture triggers */
+
+enum stm32_hrtim_capture_triggers_e
+{
+  HRTIM_CAPTURE_TRG_SW     = (1 << 0),
+  HRTIM_CAPTURE_TRG_UPD    = (1 << 1),
+  HRTIM_CAPTURE_TRG_EXEV1  = (1 << 2),
+  HRTIM_CAPTURE_TRG_EXEV2  = (1 << 3),
+  HRTIM_CAPTURE_TRG_EXEV3  = (1 << 4),
+  HRTIM_CAPTURE_TRG_EXEV4  = (1 << 5),
+  HRTIM_CAPTURE_TRG_EXEV5  = (1 << 6),
+  HRTIM_CAPTURE_TRG_EXEV6  = (1 << 7),
+  HRTIM_CAPTURE_TRG_EXEV7  = (1 << 8),
+  HRTIM_CAPTURE_TRG_EXEV8  = (1 << 9),
+  HRTIM_CAPTURE_TRG_EXEV9  = (1 << 10),
+  HRTIM_CAPTURE_TRG_EXEV10 = (1 << 11),
+  HRTIM_CAPTURE_TRG_TA1SET = (1 << 12),
+  HRTIM_CAPTURE_TRG_TA1RST = (1 << 13),
+  HRTIM_CAPTURE_TRG_TACMP1 = (1 << 14),
+  HRTIM_CAPTURE_TRG_TACMP2 = (1 << 15),
+  HRTIM_CAPTURE_TRG_TB1SET = (1 << 16),
+  HRTIM_CAPTURE_TRG_TB1RST = (1 << 17),
+  HRTIM_CAPTURE_TRG_TBCMP1 = (1 << 18),
+  HRTIM_CAPTURE_TRG_TBCMP2 = (1 << 19),
+  HRTIM_CAPTURE_TRG_TC1SET = (1 << 20),
+  HRTIM_CAPTURE_TRG_TC1RST = (1 << 21),
+  HRTIM_CAPTURE_TRG_TCCMP1 = (1 << 22),
+  HRTIM_CAPTURE_TRG_TCCMP2 = (1 << 23),
+  HRTIM_CAPTURE_TRG_TD1SET = (1 << 24),
+  HRTIM_CAPTURE_TRG_TD1RST = (1 << 25),
+  HRTIM_CAPTURE_TRG_TDCMP1 = (1 << 26),
+  HRTIM_CAPTURE_TRG_TDCMP2 = (1 << 27),
+  HRTIM_CAPTURE_TRG_TE1SET = (1 << 28),
+  HRTIM_CAPTURE_TRG_TE1RST = (1 << 29),
+  HRTIM_CAPTURE_TRG_TECMP1 = (1 << 30),
+  HRTIM_CAPTURE_TRG_TECMP2 = (1 << 31),
+};
+
 /* HRTIM vtable */
 
 struct hrtim_dev_s;
 struct stm32_hrtim_ops_s
 {
-  int (*cmp_update)(FAR struct hrtim_dev_s *dev, uint8_t timer,
-                    uint8_t index, uint16_t cmp);
-  int (*per_update)(FAR struct hrtim_dev_s *dev, uint8_t timer, uint16_t per);
+  int      (*cmp_update)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                         uint8_t index, uint16_t cmp);
+  int      (*per_update)(FAR struct hrtim_dev_s *dev, uint8_t timer, uint16_t per);
+  int      (*rep_update)(FAR struct hrtim_dev_s *dev, uint8_t timer, uint8_t rep);
   uint16_t (*per_get)(FAR struct hrtim_dev_s *dev, uint8_t timer);
   uint16_t (*cmp_get)(FAR struct hrtim_dev_s *dev, uint8_t timer,
                       uint8_t index);
+  uint64_t (*fclk_get)(FAR struct hrtim_dev_s *dev, uint8_t timer);
+  int      (*soft_update)(FAR struct hrtim_dev_s *dev, uint8_t timer);
+  int      (*soft_reset)(FAR struct hrtim_dev_s *dev, uint8_t timer);
+  int      (*freq_set)(FAR struct hrtim_dev_s  *dev, uint8_t timer,
+                                 uint64_t freq);
+  int      (*tim_enable)(FAR struct hrtim_dev_s  *dev, uint8_t timers,
+                         bool state);
+
 #ifdef CONFIG_STM32_HRTIM_INTERRUPTS
-  void (*irq_ack)(FAR struct hrtim_dev_s *dev, uint8_t timer, int source);
+  int      (*irq_ack)(FAR struct hrtim_dev_s *dev, uint8_t timer, int source);
+  uint16_t (*irq_get)(FAR struct hrtim_dev_s *dev, uint8_t timer);
 #endif
 #ifdef CONFIG_STM32_HRTIM_PWM
-  int (*outputs_enable)(FAR struct hrtim_dev_s *dev, uint16_t outputs,
-                        bool state);
+  int      (*outputs_enable)(FAR struct hrtim_dev_s *dev, uint16_t outputs,
+                             bool state);
+  int      (*output_set_set)(FAR struct hrtim_dev_s *dev, uint16_t output,
+                              uint32_t set);
+  int      (*output_rst_set)(FAR struct hrtim_dev_s *dev, uint16_t output,
+                              uint32_t rst);
 #endif
 #ifdef CONFIG_STM32_HRTIM_BURST
-  int (*burst_enable)(FAR struct hrtim_dev_s *dev, bool state);
-  int (*burst_cmp_set)(FAR struct hrtim_dev_s *dev, uint16_t cmp);
-  int (*burst_per_set)(FAR struct hrtim_dev_s *dev, uint16_t per);
+  int      (*burst_enable)(FAR struct hrtim_dev_s *dev, bool state);
+  int      (*burst_cmp_set)(FAR struct hrtim_dev_s *dev, uint16_t cmp);
+  int      (*burst_per_set)(FAR struct hrtim_dev_s *dev, uint16_t per);
+  int      (*burst_pre_set)(FAR struct hrtim_dev_s *dev, uint8_t pre);
   uint16_t (*burst_cmp_get)(FAR struct hrtim_dev_s *dev);
   uint16_t (*burst_per_get)(FAR struct hrtim_dev_s *dev);
+  int      (*burst_pre_get)(FAR struct hrtim_dev_s *dev);
+#endif
+#ifdef CONFIG_STM32_HRTIM_CHOPPER
+  int      (*chopper_enable)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                             uint8_t chan, bool state);
+#endif
+#ifdef CONFIG_STM32_HRTIM_DEADTIME
+  int      (*deadtime_update)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                              uint8_t dt, uint16_t value);
+  uint16_t (*deadtime_get)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                           uint8_t dt);
+#endif
+#ifdef CONFIG_STM32_HRTIM_CAPTURE
+  uint16_t (*capture_get)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                          uint8_t index);
+  int      (*soft_capture)(FAR struct hrtim_dev_s *dev, uint8_t timer,
+                           uint8_t index);
+
 #endif
 };
 
@@ -868,7 +1081,7 @@ struct stm32_hrtim_ops_s
 
 struct hrtim_dev_s
 {
-#ifdef CONFIG_HRTIM
+#ifdef CONFIG_STM32_HRTIM
   /* Fields managed by common upper half HRTIM logic */
 
   uint8_t hd_ocount; /* The number of times the device has been opened */

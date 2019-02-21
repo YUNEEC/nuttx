@@ -1,7 +1,7 @@
 ############################################################################
 # drivers/lcd/Make.defs
 #
-#   Copyright (C) 2010-2012, 2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2010-2012, 2017-2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -43,12 +43,17 @@ endif
 
 # Include support for Graphics LCD drivers
 
-ifeq ($(CONFIG_LCD_P14201),y)
-  CSRCS += p14201.c
+ifeq ($(CONFIG_LCD_FT80X),y)
+  CSRCS += ft80x.c
+ifeq ($(CONFIG_LCD_FT80X_SPI),y)
+  CSRCS += ft80x_spi.c
+else ifeq ($(CONFIG_LCD_FT80X_I2C),y)
+  CSRCS += ft80x_i2c.c
+endif
 endif
 
-ifeq ($(CONFIG_LCD_NOKIA6100),y)
-  CSRCS += nokia6100.c
+ifeq ($(CONFIG_LCD_P14201),y)
+  CSRCS += p14201.c
 endif
 
 ifeq ($(CONFIG_LCD_UG2864AMBAG01),y)
@@ -83,6 +88,10 @@ ifeq ($(CONFIG_LCD_MIO283QT2),y)
   CSRCS += mio283qt2.c
 endif
 
+ifeq ($(CONFIG_LCD_MAX7219),y)
+  CSRCS += max7219.c
+endif
+
 ifeq ($(CONFIG_LCD_MIO283QT9A),y)
   CSRCS += mio283qt9a.c
 endif
@@ -110,7 +119,7 @@ endif
 ifeq ($(CONFIG_LCD_RA8875),y)
   CSRCS += ra8875.c
 endif
-endif # CONFIG_NX_LCDDRIVER
+endif # CONFIG_LCD
 
 ifeq ($(CONFIG_SLCD),y)
 
@@ -119,7 +128,17 @@ ifeq ($(CONFIG_SLCD),y)
 ifeq ($(CONFIG_LCD_BACKPACK),y)
   CSRCS += pcf8574_lcd_backpack.c
 endif
+
+ifeq ($(CONFIG_LCD_ST7032),y)
+  CSRCS += st7032.c
+endif
 endif # CONFIG_SLCD
+
+# Other LCD-related devices
+
+ifeq ($(CONFIG_LCD_TDA19988),y)
+  CSRCS += tda19988.c
+endif
 
 # Include LCD driver build support (the nested if-then-else implements an OR)
 
@@ -128,6 +147,10 @@ ifeq ($(CONFIG_LCD),y)
   VPATH += :lcd
   CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}
 else ifeq ($(CONFIG_SLCD),y)
+  DEPPATH += --dep-path lcd
+  VPATH += :lcd
+  CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}
+else ifeq ($(CONFIG_LCD_OTHER),y)
   DEPPATH += --dep-path lcd
   VPATH += :lcd
   CFLAGS += ${shell $(INCDIR) $(INCDIROPT) "$(CC)" $(TOPDIR)$(DELIM)drivers$(DELIM)lcd}

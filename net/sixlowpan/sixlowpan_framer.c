@@ -64,7 +64,7 @@
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   addr    - The address to check
  *   addrlen - The length of the address in bytes
  *
@@ -93,7 +93,7 @@ static bool sixlowpan_anyaddrnull(FAR const uint8_t *addr, uint8_t addrlen)
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   eaddr - The short address to check
  *
  * Returned Value:
@@ -113,7 +113,7 @@ static inline bool sixlowpan_saddrnull(FAR const uint8_t *saddr)
  *   If the destination address is all zero in the MAC header buf, then it is
  *   broadcast on the 802.15.4 network.
  *
- * Input parameters:
+ * Input Parameters:
  *   eaddr - The extended address to check
  *
  * Returned Value:
@@ -182,7 +182,7 @@ int sixlowpan_meta_data(FAR struct radio_driver_s *radio,
       rcvrnull = sixlowpan_saddrnull(pktmeta->dest.nm_addr);
     }
 
-  if (rcvrnull)
+  if (!rcvrnull)
     {
       meta->flags.ackreq = TRUE;
     }
@@ -206,17 +206,34 @@ int sixlowpan_meta_data(FAR struct radio_driver_s *radio,
       /* Extended destination address mode */
 
       meta->destaddr.mode = IEEE802154_ADDRMODE_EXTENDED;
-      sixlowpan_eaddrcopy(&meta->destaddr.eaddr, pktmeta->dest.nm_addr);
+
+      /* 802.15.4 layer expects address in Little-Endian byte order */
+
+      meta->destaddr.eaddr[0] = pktmeta->dest.nm_addr[7];
+      meta->destaddr.eaddr[1] = pktmeta->dest.nm_addr[6];
+      meta->destaddr.eaddr[2] = pktmeta->dest.nm_addr[5];
+      meta->destaddr.eaddr[3] = pktmeta->dest.nm_addr[4];
+      meta->destaddr.eaddr[4] = pktmeta->dest.nm_addr[3];
+      meta->destaddr.eaddr[5] = pktmeta->dest.nm_addr[2];
+      meta->destaddr.eaddr[6] = pktmeta->dest.nm_addr[1];
+      meta->destaddr.eaddr[7] = pktmeta->dest.nm_addr[0];
     }
   else
     {
       /* Short destination address mode */
 
       meta->destaddr.mode = IEEE802154_ADDRMODE_SHORT;
-      sixlowpan_saddrcopy(&meta->destaddr.saddr, pktmeta->dest.nm_addr);
+
+      /* 802.15.4 layer expects address in Little-Endian byte order */
+
+      meta->destaddr.saddr[0] = pktmeta->dest.nm_addr[1];
+      meta->destaddr.saddr[1] = pktmeta->dest.nm_addr[0];
     }
 
-  IEEE802154_SADDRCOPY(meta->destaddr.panid, pktmeta->dpanid);
+  /* 802.15.4 layer expects address in Little-Endian byte order */
+
+  meta->destaddr.panid[0] = pktmeta->dpanid[1];
+  meta->destaddr.panid[1] = pktmeta->dpanid[0];
 
   /* Handle associated with MSDU.  Will increment once per packet, not
    * necesarily per frame:  The same MSDU handle will be used for each
@@ -247,7 +264,7 @@ int sixlowpan_meta_data(FAR struct radio_driver_s *radio,
  *   determine what the size of the IEEE802.15.4 header will be.  No frame
  *   buffer is required to make this determination.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - A reference IEEE802.15.4 MAC network device structure.
  *   meta - Meta data that describes the MAC header
  *
@@ -272,7 +289,7 @@ int sixlowpan_frame_hdrlen(FAR struct radio_driver_s *radio,
  *   new incoming frame and the network responds with an outgoing packet.  It
  *   submits any new outgoing frame to the MAC.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - A reference to a radio network device instance.
  *   meta  - Meta data that describes the MAC header
  *   frame - The IOB containing the frame to be submitted.

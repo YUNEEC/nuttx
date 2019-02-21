@@ -58,7 +58,7 @@
  *   A task has been stopped. Free all stack related resources retained in
  *   the defunct TCB.
  *
- * Input Parmeters
+ * Input Parameters:
  *   - dtcb:  The TCB containing information about the stack to be released
  *   - ttype:  The thread type.  This may be one of following (defined in
  *     include/nuttx/sched.h):
@@ -93,14 +93,20 @@ void up_release_stack(FAR struct tcb_s *dtcb, uint8_t ttype)
 
       if (ttype == TCB_FLAG_TTYPE_KERNEL)
         {
-          sched_kfree(dtcb->stack_alloc_ptr);
+          if (kmm_heapmember(dtcb->stack_alloc_ptr))
+            {
+              sched_kfree(dtcb->stack_alloc_ptr);
+            }
         }
       else
 #endif
         {
           /* Use the user-space allocator if this is a task or pthread */
 
-          sched_ufree(dtcb->stack_alloc_ptr);
+          if (umm_heapmember(dtcb->stack_alloc_ptr))
+            {
+              sched_ufree(dtcb->stack_alloc_ptr);
+            }
         }
 
       /* Mark the stack freed */

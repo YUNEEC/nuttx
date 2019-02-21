@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/stm32l4/stm32l4_qspi.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: dev@ziggurat29.com
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1172,7 +1172,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
 
     /* Signal complete */
 
-    sem_post(&g_qspi0dev.op_sem);
+    nxsem_post(&g_qspi0dev.op_sem);
   }
 
   /* Is it 'Status Match'? */
@@ -1199,7 +1199,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
 
           /* Signal complete */
 
-          sem_post(&g_qspi0dev.op_sem);
+          nxsem_post(&g_qspi0dev.op_sem);
         }
       else
         {
@@ -1231,7 +1231,7 @@ static int qspi0_interrupt(int irq, void *context, FAR void *arg)
 
       /* Signal complete */
 
-      sem_post(&g_qspi0dev.op_sem);
+      nxsem_post(&g_qspi0dev.op_sem);
     }
 
   /* Is it 'Timeout'? */
@@ -1295,7 +1295,7 @@ static void qspi_dma_timeout(int argc, uint32_t arg)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&priv->dmawait);
+  nxsem_post(&priv->dmawait);
 }
 
 /****************************************************************************
@@ -1351,7 +1351,7 @@ static void qspi_dma_callback(DMA_HANDLE handle, uint8_t isr, void *arg)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&priv->dmawait);
+  nxsem_post(&priv->dmawait);
 }
 
 /****************************************************************************
@@ -1435,7 +1435,7 @@ static int qspi_memory_dma(struct stm32l4_qspidev_s *priv,
   qspi_dma_sample(priv, DMA_AFTER_START);
 
   /* Wait for DMA completion.  This is done in a loop because there may be
-   * false alarm semaphore counts that cause sem_wait() not fail to wait
+   * false alarm semaphore counts that cause nxsem_wait() not fail to wait
    * or to wake-up prematurely (for example due to the receipt of a signal).
    * We know that the DMA has completed when the result is anything other
    * that -EBUSY.
@@ -1447,14 +1447,14 @@ static int qspi_memory_dma(struct stm32l4_qspidev_s *priv,
 
       ret = wd_start(priv->dmadog, DMA_TIMEOUT_TICKS,
                      (wdentry_t)qspi_dma_timeout, 1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
            spierr("ERROR: wd_start failed: %d\n", ret);
         }
 
       /* Wait for the DMA complete */
 
-      ret = sem_wait(&priv->dmawait);
+      ret = nxsem_wait(&priv->dmawait);
 
       /* Cancel the watchdog timeout */
 
@@ -1468,14 +1468,13 @@ static int qspi_memory_dma(struct stm32l4_qspidev_s *priv,
            * was awakened by a signal.
            */
 
-          int errorcode = errno;
-          if (errorcode != EINTR)
+          if (ret != -EINTR)
             {
               DEBUGPANIC();
               regval = qspi_getreg(priv, STM32L4_QUADSPI_CR_OFFSET);
               regval &= ~QSPI_CR_DMAEN;
               qspi_putreg(priv, regval, STM32L4_QUADSPI_CR_OFFSET);
-              return -errorcode;
+              return ret;
             }
         }
 
@@ -1681,27 +1680,32 @@ static int qspi_transmit_blocking(struct stm32l4_qspidev_s *priv,
 static int qspi_lock(struct qspi_dev_s *dev, bool lock)
 {
   struct stm32l4_qspidev_s *priv = (struct stm32l4_qspidev_s *)dev;
+  int ret;
 
   spiinfo("lock=%d\n", lock);
   if (lock)
     {
-      /* Take the semaphore (perhaps waiting) */
+          /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
+          ret = nxsem_wait(&priv->exclsem);
+
           /* The only case that an error should occur here is if the wait
            * was awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -2029,7 +2033,7 @@ static int qspi_command(struct qspi_dev_s *dev,
 
   /* Wait for the interrupt routine to finish it's magic */
 
-  sem_wait(&priv->op_sem);
+  (void)nxsem_wait(&priv->op_sem);
   MEMORY_SYNC();
 
   /* Convey the result */
@@ -2187,7 +2191,7 @@ static int qspi_memory(struct qspi_dev_s *dev,
 
   /* Wait for the interrupt routine to finish it's magic */
 
-  sem_wait(&priv->op_sem);
+  (void)nxsem_wait(&priv->op_sem);
   MEMORY_SYNC();
 
   /* convey the result */
@@ -2417,7 +2421,7 @@ static int qspi_hw_initialize(struct stm32l4_qspidev_s *priv)
  * Description:
  *   Initialize the selected QSPI port in master mode
  *
- * Input Parameter:
+ * Input Parameters:
  *   intf - Interface number(must be zero)
  *
  * Returned Value:
@@ -2487,7 +2491,7 @@ struct qspi_dev_s *stm32l4_qspi_initialize(int intf)
        * access to the QSPI registers.
        */
 
-      sem_init(&priv->exclsem, 0, 1);
+      nxsem_init(&priv->exclsem, 0, 1);
 
 #ifdef CONFIG_STM32L4_QSPI_DMA
       /* Pre-allocate DMA channels. */
@@ -2507,8 +2511,8 @@ struct qspi_dev_s *stm32l4_qspi_initialize(int intf)
        * signaling and, hence, should not have priority inheritance enabled.
        */
 
-      sem_init(&priv->dmawait, 0, 0);
-      sem_setprotocol(&priv->dmawait, SEM_PRIO_NONE);
+      nxsem_init(&priv->dmawait, 0, 0);
+      nxsem_setprotocol(&priv->dmawait, SEM_PRIO_NONE);
 
       /* Create a watchdog time to catch DMA timeouts */
 
@@ -2535,8 +2539,8 @@ struct qspi_dev_s *stm32l4_qspi_initialize(int intf)
        * priority inheritance enabled.
        */
 
-      sem_init(&priv->op_sem, 0, 0);
-      sem_setprotocol(&priv->op_sem, SEM_PRIO_NONE);
+      nxsem_init(&priv->op_sem, 0, 0);
+      nxsem_setprotocol(&priv->op_sem, SEM_PRIO_NONE);
 #endif
 
       /* Perform hardware initialization.  Puts the QSPI into an active
@@ -2571,7 +2575,7 @@ errout_with_dmadog:
   wd_delete(priv->dmadog);
 
 errout_with_dmahandles:
-  sem_destroy(&priv->dmawait);
+  nxsem_destroy(&priv->dmawait);
 
   if (priv->dmach)
     {
@@ -2580,7 +2584,7 @@ errout_with_dmahandles:
     }
 #endif
 
-  sem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->exclsem);
   return NULL;
 }
 
@@ -2590,7 +2594,7 @@ errout_with_dmahandles:
  * Description:
  *   Put the QSPI device into memory mapped mode
  *
- * Input Parameter:
+ * Input Parameters:
  *   dev - QSPI device
  *   meminfo - parameters like for a memory transfer used for reading
  *
@@ -2682,7 +2686,7 @@ void stm32l4_qspi_enter_memorymapped(struct qspi_dev_s* dev,
  * Description:
  *   Take the QSPI device out of memory mapped mode
  *
- * Input Parameter:
+ * Input Parameters:
  *   dev - QSPI device
  *
  * Returned Value:

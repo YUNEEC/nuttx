@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/mtd/skeleton.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -327,15 +327,8 @@ FAR struct mtd_dev_s *skel_initialize(void)
    * device structure.
    */
 
-  /* Perform initialization as necessary */
-
-#ifdef CONFIG_MTD_REGISTRATION
-  /* Register the MTD with the procfs system if enabled */
-
-  mtd_register(&priv->mtd, "skeleton");
-#endif
-
   /* Return the implementation-specific state structure as the MTD device */
 
   return (FAR struct mtd_dev_s *)&g_skeldev;
 }
+

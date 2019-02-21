@@ -105,12 +105,22 @@ int stm32_bringup(void);
 #endif
 
 /****************************************************************************
+ * Name: stm32_spidev_initialize
+ *
+ * Description:
+ *   Called to configure SPI chip select GPIO pins for the Photon board.
+ *
+ ****************************************************************************/
+
+void weak_function stm32_spidev_initialize(void);
+
+/****************************************************************************
  * Name: photon_watchdog_initialize()
  *
  * Description:
  *   Perform architecture-specific initialization of the Watchdog hardware.
  *
- * Input parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -123,12 +133,32 @@ int photon_watchdog_initialize(void);
 #endif
 
 /****************************************************************************
+ * Name: stm32_rgbled_setup
+ *
+ * Description:
+ *   This function is called by board initialization logic to configure the
+ *   RGB LED driver.  This function will register the driver as /dev/rgbled0.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero is returned on success.  Otherwise, a negated errno value is
+ *   returned to indicate the nature of the failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_RGBLED
+int stm32_rgbled_setup(void);
+#endif
+
+/****************************************************************************
  * Name: photon_wlan_initialize
  *
  * Description:
  *   Initialize wlan hardware and driver for Photon board.
  *
- * Input parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:

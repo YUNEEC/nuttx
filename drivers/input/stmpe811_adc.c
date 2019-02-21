@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/input/stmpe811_adc.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * References:
@@ -49,6 +49,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/input/stmpe811.h>
 
 #include "stmpe811.h"
@@ -97,12 +98,11 @@ int stmpe811_adcinitialize(STMPE811_HANDLE handle)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Enable Clocking for ADC */
@@ -126,7 +126,7 @@ int stmpe811_adcinitialize(STMPE811_HANDLE handle)
   /* Mark ADC initialized */
 
   priv->flags |= STMPE811_FLAGS_ADC_INITIALIZED;
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 
@@ -157,12 +157,11 @@ int stmpe811_adcconfig(STMPE811_HANDLE handle, int pin)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Make sure that the pin is not already in use */
@@ -170,7 +169,7 @@ int stmpe811_adcconfig(STMPE811_HANDLE handle, int pin)
   if ((priv->inuse & pinmask) != 0)
     {
       ierr("ERROR: PIN%d is already in-use\n", pin);
-      sem_post(&priv->exclsem);
+      nxsem_post(&priv->exclsem);
       return -EBUSY;
     }
 
@@ -186,7 +185,7 @@ int stmpe811_adcconfig(STMPE811_HANDLE handle, int pin)
   /* Mark the pin as 'in use' */
 
   priv->inuse |= pinmask;
-  sem_post(&priv->exclsem);
+  nxsem_post(&priv->exclsem);
   return OK;
 }
 
@@ -217,12 +216,11 @@ uint16_t stmpe811_adcread(STMPE811_HANDLE handle, int pin)
 
   /* Get exclusive access to the device structure */
 
-  ret = sem_wait(&priv->exclsem);
+  ret = nxsem_wait(&priv->exclsem);
   if (ret < 0)
     {
-      int errval = errno;
-      ierr("ERROR: sem_wait failed: %d\n", errval);
-      return -errval;
+      ierr("ERROR: nxsem_wait failed: %d\n", ret);
+      return ret;
     }
 
   /* Request AD conversion by setting the bit corresponding the pin in the
@@ -239,12 +237,12 @@ uint16_t stmpe811_adcread(STMPE811_HANDLE handle, int pin)
   for (i = 0; i < 3; i++)
     {
       /* The worst case ADC conversion time is (nominally) 56.4 uS. The
-       * following usleep() looks nice but in reality, the usleep()
-       * does not have that kind of precision (it will probably end up
-       * waiting 10 MS).
+       * following nxsig_usleep() looks nice but in reality, nxsig_usleep()
+       * normal does not have that kind of precision (it will probably end
+       * up waiting 10 MS).
        */
 
-      usleep(57);
+      nxsig_usleep(57);
 
       /* Check if the conversion is complete */
 

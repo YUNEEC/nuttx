@@ -202,8 +202,9 @@ static int lpc43_i2c_start(struct lpc43_i2cdev_s *priv)
            priv->base + LPC43_I2C_CONCLR_OFFSET);
   putreg32(I2C_CONSET_STA, priv->base + LPC43_I2C_CONSET_OFFSET);
 
-  wd_start(priv->timeout, I2C_TIMEOUT, lpc43_i2c_timeout, 1, (uint32_t)priv);
-  sem_wait(&priv->wait);
+  (void)wd_start(priv->timeout, I2C_TIMEOUT, lpc43_i2c_timeout, 1,
+                 (uint32_t)priv);
+  nxsem_wait(&priv->wait);
 
   wd_cancel(priv->timeout);
   return priv->nmsg;
@@ -225,7 +226,7 @@ static void lpc43_i2c_stop(struct lpc43_i2cdev_s *priv)
                priv->base + LPC43_I2C_CONSET_OFFSET);
     }
 
-  sem_post(&priv->wait);
+  nxsem_post(&priv->wait);
 }
 
 /****************************************************************************
@@ -242,7 +243,7 @@ static void lpc43_i2c_timeout(int argc, uint32_t arg, ...)
 
   irqstate_t flags = enter_critical_section();
   priv->state = 0xff;
-  sem_post(&priv->wait);
+  nxsem_post(&priv->wait);
   leave_critical_section(flags);
 }
 
@@ -385,7 +386,7 @@ static int lpc43_i2c_transfer(FAR struct i2c_master_s *dev,
 
   /* Get exclusive access to the I2C bus */
 
-  sem_wait(&priv->mutex);
+  nxsem_wait(&priv->mutex);
 
   /* Set up for the transfer */
 
@@ -406,7 +407,7 @@ static int lpc43_i2c_transfer(FAR struct i2c_master_s *dev,
 
   ret = lpc43_i2c_start(priv);
 
-  sem_post(&priv->mutex);
+  nxsem_post(&priv->mutex);
   return ret;
 }
 
@@ -526,14 +527,14 @@ struct i2c_master_s *lpc43_i2cbus_initialize(int port)
 
   /* Initialize semaphores */
 
-  sem_init(&priv->mutex, 0, 1);
-  sem_init(&priv->wait, 0, 0);
+  nxsem_init(&priv->mutex, 0, 1);
+  nxsem_init(&priv->wait, 0, 0);
 
   /* The wait semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->wait, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->wait, SEM_PRIO_NONE);
 
   /* Allocate a watchdog timer */
 

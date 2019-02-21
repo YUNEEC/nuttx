@@ -70,7 +70,13 @@
  * Pre-processor Definitions
  ****************************************************************************/
 /* Configuration ************************************************************/
-/* Up to 2 DAC interfaces for up to 3 channels are supported */
+/* Up to 2 DAC interfaces for up to 3 channels are supported
+ *
+ * NOTE: STM32_NDAC tells how many channels chip supports.
+ *       ST is not consistent in the naming of DAC interfaces, so we introduce
+ *       our own naming convention. We distinguish DAC1 and DAC2 only if the chip
+ *       has two separate areas in memory map to support DAC channels.
+ */
 
 #if STM32_NDAC < 3
 #  warning
@@ -629,15 +635,9 @@ uint16_t   dac1ch1_buffer[CONFIG_STM32_DAC1CH1_DMA_BUFFER_SIZE];
 static struct stm32_chan_s g_dac1ch1priv =
 {
   .intf       = 0,
-#if STM32_NDAC < 2
-  .pin        = GPIO_DAC1_OUT,
-  .dro        = STM32_DAC_DHR12R1,
-  .cr         = STM32_DAC_CR,
-#else
   .pin        = GPIO_DAC1_OUT1,
   .dro        = STM32_DAC1_DHR12R1,
   .cr         = STM32_DAC1_CR,
-#endif
 #ifdef CONFIG_STM32_DAC1CH1_DMA
   .hasdma     = 1,
   .dmachan    = DAC1CH1_DMA_CHAN,
@@ -1007,7 +1007,20 @@ static int dac_send(FAR struct dac_dev_s *dev, FAR struct dac_msg_s *msg)
 
   /* Enable DAC Channel */
 
-  stm32_dac_modify_cr(chan, 0, DAC_CR_EN);
+#if defined(CONFIG_STM32_STM32F33XX)
+  /* For STM32F33XX we have to set BOFF/OUTEN bit for DAC1CH2 and DAC2CH1
+   * REVISIT: what if we connect DAC internally with comparator ?
+   */
+
+  if (chan->intf > 0)
+    {
+      stm32_dac_modify_cr(chan, 0, DAC_CR_EN|DAC_CR_BOFF);
+    }
+  else
+#endif
+    {
+      stm32_dac_modify_cr(chan, 0, DAC_CR_EN);
+    }
 
 #ifdef HAVE_DMA
   if (chan->hasdma)
@@ -1500,29 +1513,21 @@ static int dac_blockinit(void)
 
   flags   = enter_critical_section();
   regval  = getreg32(STM32_RCC_APB1RSTR);
-#if STM32_NDAC < 2
-  regval |= RCC_APB1RSTR_DACRST;
-#else
 #ifdef CONFIG_STM32_DAC1
   regval |= RCC_APB1RSTR_DAC1RST;
 #endif
 #ifdef CONFIG_STM32_DAC2
   regval |= RCC_APB1RSTR_DAC2RST;
 #endif
-#endif
   putreg32(regval, STM32_RCC_APB1RSTR);
 
   /* Take the DAC out of reset state */
 
-#if STM32_NDAC < 2
-  regval &= ~RCC_APB1RSTR_DACRST;
-#else
 #ifdef CONFIG_STM32_DAC1
   regval &= ~RCC_APB1RSTR_DAC1RST;
 #endif
 #ifdef CONFIG_STM32_DAC2
   regval &= ~RCC_APB1RSTR_DAC2RST;
-#endif
 #endif
   putreg32(regval, STM32_RCC_APB1RSTR);
   leave_critical_section(flags);
@@ -1587,7 +1592,6 @@ FAR struct dac_dev_s *stm32_dacinitialize(int intf)
 #endif  /* CONFIG_STM32_DAC2CH1 */
     {
       aerr("ERROR: No such DAC interface: %d\n", intf);
-      errno = ENODEV;
       return NULL;
     }
 
@@ -1597,7 +1601,6 @@ FAR struct dac_dev_s *stm32_dacinitialize(int intf)
   if (ret < 0)
     {
       aerr("ERROR: Failed to initialize the DAC block: %d\n", ret);
-      errno = -ret;
       return NULL;
     }
 
@@ -1608,7 +1611,6 @@ FAR struct dac_dev_s *stm32_dacinitialize(int intf)
   if (ret < 0)
     {
       aerr("ERROR: Failed to initialize DAC channel %d: %d\n", intf, ret);
-      errno = -ret;
       return NULL;
     }
 

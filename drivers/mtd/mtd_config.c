@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/mtd/mtd_config.c
  *
- *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017-2018 Gregory Nutt. All rights reserved.
  *   Copyright (C) 2013 Ken Pettit. All rights reserved.
  *   Author: Ken Pettit <pettitkd@gmail.com>
  *           With Updates from Gregory Nutt <gnutt@nuttx.org>
@@ -65,9 +65,9 @@
 
 #ifdef CONFIG_MTD_CONFIG
 
-/************************************************************************************
+/****************************************************************************
  * Pre-processor Definitions
- ************************************************************************************/
+ ****************************************************************************/
 
 /* Define the current format version */
 
@@ -104,8 +104,12 @@ struct mtdconfig_struct_s
 begin_packed_struct struct mtdconfig_header_s
 {
   uint8_t      flags;         /* Entry control flags */
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  char         name[CONFIG_MTD_CONFIG_NAME_LEN];
+#else
   uint8_t      instance;      /* Instance of the item */
   uint16_t     id;            /* ID of the config data item */
+#endif
   uint16_t     len;           /* Length of the data block */
 } end_packed_struct;
 
@@ -153,12 +157,14 @@ static const struct file_operations mtdconfig_fops =
  *
  ****************************************************************************/
 
-static int  mtdconfig_readbytes(FAR struct mtdconfig_struct_s *dev, int offset,
-                                FAR uint8_t *pdata, int readlen)
+static int mtdconfig_readbytes(FAR struct mtdconfig_struct_s *dev, int offset,
+                               FAR uint8_t *pdata, int readlen)
 {
   off_t  bytestoread = readlen;
-  off_t  bytesthisblock, firstbyte;
-  off_t  block, index;
+  off_t  bytesthisblock;
+  off_t  firstbyte;
+  off_t  block;
+  off_t  index;
   int    ret = OK;
   size_t bytes;
 
@@ -250,8 +256,9 @@ errout:
  *
  ****************************************************************************/
 
-static int  mtdconfig_writebytes(FAR struct mtdconfig_struct_s *dev, int offset,
-                                 FAR const uint8_t *pdata, int writelen)
+static int mtdconfig_writebytes(FAR struct mtdconfig_struct_s *dev,
+                                int offset, FAR const uint8_t *pdata,
+                                int writelen)
 {
   int ret = OK;
 
@@ -286,17 +293,6 @@ static int  mtdconfig_writebytes(FAR struct mtdconfig_struct_s *dev, int offset,
               goto errout;
             }
 
-          /* Now erase the block */
-
-          ret = MTD_ERASE(dev->mtd, block, 1);
-          if (ret < 0)
-            {
-              /* Error erasing the block */
-
-              ret = -EIO;
-              goto errout;
-          }
-
           index = offset - block * dev->blocksize;
           bytes_this_block = dev->blocksize - index;
           if (bytes_this_block > writelen)
@@ -316,9 +312,9 @@ static int  mtdconfig_writebytes(FAR struct mtdconfig_struct_s *dev, int offset,
 
           /* Update writelen, etc. */
 
-          writelen -= bytes_this_block;
-          pdata += bytes_this_block;
-          offset += bytes_this_block;
+          writelen      -= bytes_this_block;
+          pdata         += bytes_this_block;
+          offset        += bytes_this_block;
           bytes_written += bytes_this_block;
         }
 
@@ -336,7 +332,7 @@ errout:
  *
  *    Locates the first config entry, even if it is empty.
  *
- * Returns:
+ * Returned Value:
  *     offset to the start of the entry.
  *
  ****************************************************************************/
@@ -387,7 +383,7 @@ static int  mtdconfig_findfirstentry(FAR struct mtdconfig_struct_s *dev,
       /* Read headers until we find one that hasn't been released.
        */
 
-      ret = mtdconfig_readbytes(dev, offset, (uint8_t *) phdr,
+      ret = mtdconfig_readbytes(dev, offset, (FAR uint8_t *)phdr,
               sizeof(struct mtdconfig_header_s));
       if (ret != OK)
         {
@@ -405,14 +401,17 @@ static int  mtdconfig_findfirstentry(FAR struct mtdconfig_struct_s *dev,
           bytes_left_in_block = (block + 1) * dev->erasesize - offset;
           if (bytes_left_in_block <= sizeof(*phdr))
             {
-              offset = (block + 1) * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+              offset = (block + 1) * dev->erasesize +
+                       CONFIGDATA_BLOCK_HDR_SIZE;
               if (block + 1 >= endblock)
-                return 0;
+                {
+                  return 0;
+                }
             }
 
           if (bytes_left_in_block == dev->erasesize)
             {
-              /* Skip block hearder */
+              /* Skip block header */
 
               offset += CONFIGDATA_BLOCK_HDR_SIZE;
             }
@@ -435,7 +434,7 @@ static int  mtdconfig_findfirstentry(FAR struct mtdconfig_struct_s *dev,
  *
  *    Locates the next config entry starting at offset, even if it is empty.
  *
- * Returns:
+ * Returned Value:
  *     offset to the start of the next entry.
  *
  ****************************************************************************/
@@ -447,7 +446,8 @@ static int  mtdconfig_findnextentry(FAR struct mtdconfig_struct_s *dev,
 {
   bool      found = false;
   int       ret;
-  uint16_t  block, bytes_left_in_block;
+  uint16_t  block;
+  uint16_t  bytes_left_in_block;
   uint16_t  endblock;
 
 #ifdef CONFIG_MTD_CONFIG_RAM_CONSOLIDATE
@@ -496,7 +496,8 @@ static int  mtdconfig_findnextentry(FAR struct mtdconfig_struct_s *dev,
       /* Read next header */
 
 read_next:
-      ret = mtdconfig_readbytes(dev, offset, (uint8_t *) phdr, sizeof(*phdr));
+      ret = mtdconfig_readbytes(dev, offset, (FAR uint8_t *)phdr,
+                                sizeof(*phdr));
       if (ret != OK)
         {
           return 0;
@@ -506,7 +507,11 @@ read_next:
 
       if (phdr->flags == MTD_ERASED_FLAGS)
         {
+#ifdef CONFIG_MTD_CONFIG_NAMED
+          if (phdr->name[0] == CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
           if (phdr->id == MTD_ERASED_ID)
+#endif
             {
               /* If we are searching for free space, then check
                * if this space is large enough.  If it is, then
@@ -525,7 +530,9 @@ read_next:
 
               /* Advance to next erase block and continue search */
 
-              offset = (block + 1) * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+              offset = (block + 1) * dev->erasesize +
+                       CONFIGDATA_BLOCK_HDR_SIZE;
+
               if (block + 1 >= endblock)
                 {
                   return 0;
@@ -562,17 +569,19 @@ read_next:
  *    method of consolidation is used when only a single erase
  *    block is available in the partition.
  *
- * Returns:
- *     offset to the next available entry (after consolidation)..
+ * Returned Value:
+ *     Offset to the next available entry (after consolidation).
  *
  ****************************************************************************/
 
-static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
+static off_t mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
 {
-  FAR uint8_t *pBuf;
+  FAR uint8_t *pbuf;
   FAR struct  mtdconfig_header_s *phdr;
   struct      mtdconfig_header_s  hdr;
-  uint16_t    src_block = 0, dst_block = 0, blkper;
+  uint16_t    src_block = 0;
+  uint16_t    dst_block = 0;
+  uint16_t    blkper;
   off_t       dst_offset = CONFIGDATA_BLOCK_HDR_SIZE;
   off_t       src_offset = CONFIGDATA_BLOCK_HDR_SIZE;
   off_t       bytes_left_in_block;
@@ -581,8 +590,8 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
 
   /* Allocate a consolidation buffer */
 
-  pBuf = (uint8_t *)kmm_malloc(dev->erasesize);
-  if (pBuf == NULL)
+  pbuf = (FAR uint8_t *)kmm_malloc(dev->erasesize);
+  if (pbuf == NULL)
     {
       /* Unable to allocate buffer, can't consolidate! */
 
@@ -594,14 +603,13 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
   blkper = dev->erasesize / dev->blocksize;
   while (src_block < dev->neraseblocks)
     {
-      /* Point to beginning of pBuf and read the next erase block */
+      /* Point to beginning of pbuf and read the next erase block */
 
-      ret = MTD_BREAD(dev->mtd, src_block * blkper, blkper, pBuf);
+      ret = MTD_BREAD(dev->mtd, src_block * blkper, blkper, pbuf);
       if (ret < 0)
         {
           /* Error doing block read */
 
-          dst_offset = 0;
           goto errout;
         }
 
@@ -612,7 +620,6 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
         {
           /* Error erasing the block */
 
-          dst_offset = 0;
           goto errout;
         }
 
@@ -623,17 +630,29 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
           sig[0] = 'C';
           sig[1] = 'D';
           sig[2] = CONFIGDATA_FORMAT_VERSION;
-          mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
+
+          ret = mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
+          if (ret != sizeof(sig))
+            {
+              /* Cannot write even the signature. */
+
+              ret = -EIO;
+              goto errout;
+            }
         }
 
-      /* Copy active items back to the MTD device */
+      /* Copy active items back to the MTD device. */
 
       while (src_offset < dev->erasesize)
         {
-          phdr = (FAR struct mtdconfig_header_s *) &pBuf[src_offset];
+          phdr = (FAR struct mtdconfig_header_s *) &pbuf[src_offset];
+#ifdef CONFIG_MTD_CONFIG_NAMED
+          if (phdr->name[0] == CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
           if (phdr->id == MTD_ERASED_ID)
+#endif
             {
-              /* No more data in this erase block */
+              /* No more data in this erase block. */
 
               src_offset = dev->erasesize;
               continue;
@@ -650,11 +669,12 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
               if (bytes_left_in_block < sizeof(*phdr) + phdr->len)
                 {
                   /* Item won't fit in the destination block.  Move to
-                   * the next block
+                   * the next block.
                    */
 
                   dst_block++;
-                  dst_offset = dst_block * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+                  dst_offset = dst_block * dev->erasesize +
+                               CONFIGDATA_BLOCK_HDR_SIZE;
 
                   /* Test for program bug.  We shouldn't ever overflow
                    * even if no entries were inactive.
@@ -663,19 +683,30 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
                   DEBUGASSERT(dst_block != dev->neraseblocks);
                 }
 
-              /* Now Write the item to the current dst_offset location */
+              /* Now write the item to the current dst_offset location. */
 
-              ret = mtdconfig_writebytes(dev, dst_offset, (uint8_t *) phdr,
+              ret = mtdconfig_writebytes(dev, dst_offset, (FAR uint8_t *)phdr,
                                          sizeof(hdr));
-              if (ret < 0)
+              if (ret != sizeof(hdr))
                 {
-                  dst_offset = 0;
+                  /* I/O Error! */
+
+                  ret = -EIO;
                   goto errout;
                 }
 
               dst_offset += sizeof(hdr);
-              ret = mtdconfig_writebytes(dev, dst_offset, &pBuf[src_offset
-                  + sizeof(hdr)], phdr->len);
+              ret = mtdconfig_writebytes(dev, dst_offset,
+                                         &pbuf[src_offset + sizeof(hdr)],
+                                         phdr->len);
+              if (ret != phdr->len)
+                {
+                  /* I/O Error! */
+
+                  ret = -EIO;
+                  goto errout;
+                }
+
               dst_offset += phdr->len;
 
               /* Test if enough space in dst block for another header */
@@ -684,7 +715,8 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
                   dst_offset == (dst_block + 1) * dev->erasesize)
                 {
                   dst_block++;
-                  dst_offset = dst_block * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+                  dst_offset = dst_block * dev->erasesize +
+                               CONFIGDATA_BLOCK_HDR_SIZE;
                 }
             }
 
@@ -705,9 +737,13 @@ static off_t  mtdconfig_ramconsolidate(FAR struct mtdconfig_struct_s *dev)
       src_offset = CONFIGDATA_BLOCK_HDR_SIZE;
     }
 
-errout:
-  kmm_free(pBuf);
+  kmm_free(pbuf);
   return dst_offset;
+
+errout:
+  kmm_free(pbuf);
+  ferr("ERROR: fail ram consolidate: %d\n", ret);
+  return 0;
 }
 
 /****************************************************************************
@@ -719,21 +755,26 @@ errout:
  *    erased block.  It erases all blocks to the end of the
  *    partition as it goes.
  *
- * Returns:
- *     offset to the next available entry (after consolidation)..
+ * Returned Value:
+ *     Offset to the next available entry (after consolidation).
  *
  ****************************************************************************/
 
 #ifndef CONFIG_MTD_CONFIG_RAM_CONSOLIDATE
 static off_t  mtdconfig_consolidate(FAR struct mtdconfig_struct_s *dev)
 {
-  off_t       src_block, dst_block;
-  off_t       src_offset, dst_offset;
-  uint16_t    blkper, x, bytes, bytes_left_in_block;
+  off_t       src_block;
+  off_t       dst_block;
+  off_t       src_offset;
+  off_t       dst_offset;
+  uint16_t    blkper;
+  uint16_t    x;
+  uint16_t    bytes;
+  uint16_t    bytes_left_in_block;
   struct mtdconfig_header_s hdr;
   int         ret;
   uint8_t     sig[CONFIGDATA_BLOCK_HDR_SIZE];
-  uint8_t     *pBuf;
+  FAR uint8_t *pbuf;
 
   /* Prepare to copy block 0 to the last block (erase blocks) */
 
@@ -748,8 +789,8 @@ static off_t  mtdconfig_consolidate(FAR struct mtdconfig_struct_s *dev)
 
   /* Allocate a small buffer for moving data */
 
-  pBuf = (uint8_t *)kmm_malloc(dev->blocksize);
-  if (pBuf == NULL)
+  pbuf = (FAR uint8_t *)kmm_malloc(dev->blocksize);
+  if (pbuf == NULL)
     {
       return 0;
     }
@@ -781,9 +822,17 @@ static off_t  mtdconfig_consolidate(FAR struct mtdconfig_struct_s *dev)
   sig[0] = 'C';
   sig[1] = 'D';
   sig[2] = CONFIGDATA_FORMAT_VERSION;
-  mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
 
-  /* Now consolidate entries */
+  ret = mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
+  if (ret != sizeof(sig))
+    {
+      /* Cannot write even the signature. */
+
+      ret = -EIO;
+      goto errout;
+    }
+
+  /* Now consolidate entries. */
 
   src_block = 1;
   dst_block = 0;
@@ -795,11 +844,12 @@ static off_t  mtdconfig_consolidate(FAR struct mtdconfig_struct_s *dev)
       /* Scan all headers and move them to the src_offset */
 
 retry_relocate:
-      bytes = MTD_READ(dev->mtd, src_offset, sizeof(hdr), (uint8_t *) &hdr);
+      bytes = MTD_READ(dev->mtd, src_offset, sizeof(hdr), (FAR uint8_t *)&hdr);
       if (bytes != sizeof(hdr))
         {
           /* I/O Error! */
 
+          ret = -EIO;
           goto errout;
         }
 
@@ -809,19 +859,25 @@ retry_relocate:
            * of data for this erase block.
            */
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+          if (hdr.name[0] == CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
           if (hdr.id == MTD_ERASED_ID)
+#endif
             {
               /* No more data in this erase block.  Advance to the
                * next one.
                */
 
-              src_offset = (src_block + 1) * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+              src_offset = (src_block + 1) * dev->erasesize +
+                           CONFIGDATA_BLOCK_HDR_SIZE;
             }
           else
             {
               /* Test if this entry will fit in the current destination block */
 
-              bytes_left_in_block = (dst_block + 1) * dev->erasesize - dst_offset;
+              bytes_left_in_block = (dst_block + 1) * dev->erasesize -
+                                    dst_offset;
               if (hdr.len + sizeof(hdr) > bytes_left_in_block)
                 {
                   /* Item doesn't fit in the block.  Advance to the next one */
@@ -829,7 +885,8 @@ retry_relocate:
                   /* Update control variables */
 
                   dst_block++;
-                  dst_offset = dst_block * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+                  dst_offset = dst_block * dev->erasesize +
+                               CONFIGDATA_BLOCK_HDR_SIZE;
 
                   DEBUGASSERT(dst_block != src_block);
 
@@ -840,7 +897,16 @@ retry_relocate:
 
               /* Copy this entry to the destination */
 
-              mtdconfig_writebytes(dev, dst_offset, (uint8_t *) &hdr, sizeof(hdr));
+              ret = mtdconfig_writebytes(dev, dst_offset, (FAR uint8_t *)&hdr,
+                                         sizeof(hdr));
+              if (ret != sizeof(hdr))
+                {
+                  /* I/O Error! */
+
+                  ret = -EIO;
+                  goto errout;
+                }
+
               src_offset += sizeof(hdr);
               dst_offset += sizeof(hdr);
 
@@ -856,8 +922,23 @@ retry_relocate:
 
                   /* Move the data. */
 
-                  mtdconfig_readbytes(dev, src_offset, pBuf, bytes);
-                  mtdconfig_writebytes(dev, dst_offset, pBuf, bytes);
+                  ret = mtdconfig_readbytes(dev, src_offset, pbuf, bytes);
+                  if (ret != OK)
+                    {
+                      /* I/O Error! */
+
+                      ret = -EIO;
+                      goto errout;
+                    }
+
+                  ret = mtdconfig_writebytes(dev, dst_offset, pbuf, bytes);
+                  if (ret != bytes)
+                    {
+                      /* I/O Error! */
+
+                      ret = -EIO;
+                      goto errout;
+                    }
 
                   /* Update control variables */
 
@@ -877,7 +958,8 @@ retry_relocate:
             {
               /* No room left at end of source block */
 
-              src_offset = (src_block + 1) * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+              src_offset = (src_block + 1) * dev->erasesize +
+                           CONFIGDATA_BLOCK_HDR_SIZE;
             }
         }
 
@@ -889,7 +971,8 @@ retry_relocate:
            * source block.
            */
 
-          src_offset = (src_block + 1) * dev->erasesize + CONFIGDATA_BLOCK_HDR_SIZE;
+          src_offset = (src_block + 1) * dev->erasesize +
+                       CONFIGDATA_BLOCK_HDR_SIZE;
         }
 
       /* Test if we advanced to the next block.  If we did, then erase the
@@ -916,10 +999,15 @@ retry_relocate:
         }
     }
 
+  kmm_free(pbuf);
+  return dst_offset;
+
 errout:
-  kmm_free(pBuf);
+  kmm_free(pbuf);
+  ferr("ERROR: fail consolidate: %d\n", ret);
   return 0;
 }
+
 #endif /* CONFIG_MTD_CONFIG_RAM_CONSOLIDATE */
 
 /****************************************************************************
@@ -934,10 +1022,11 @@ static int  mtdconfig_open(FAR struct file *filep)
 
   /* Get exclusive access to the device */
 
-  ret = sem_wait(&dev->exclsem);
+  ret = nxsem_wait(&dev->exclsem);
   if (ret < 0)
     {
-      ret = -errno;
+      ferr("ERROR: nxsem_wait failed: %d\n", ret);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
       goto errout;
     }
 
@@ -958,7 +1047,7 @@ static int  mtdconfig_close(FAR struct file *filep)
 
   /* Release exclusive access to the device */
 
-  sem_post(&dev->exclsem);
+  nxsem_post(&dev->exclsem);
   return OK;
 }
 
@@ -971,7 +1060,7 @@ static ssize_t mtdconfig_read(FAR struct file *filep, FAR char *buffer,
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct mtdconfig_struct_s *dev = inode->i_private;
-  size_t    bytes;
+  size_t bytes;
 
   if (dev->readoff >= dev->neraseblocks * dev->erasesize)
     {
@@ -980,7 +1069,7 @@ static ssize_t mtdconfig_read(FAR struct file *filep, FAR char *buffer,
 
   /* Read data from the file */
 
-  bytes = MTD_READ(dev->mtd, dev->readoff, len, (uint8_t *) buffer);
+  bytes = MTD_READ(dev->mtd, dev->readoff, len, (FAR uint8_t *)buffer);
   if (bytes != len)
     {
       return -EIO;
@@ -1015,9 +1104,18 @@ static int mtdconfig_findentry(FAR struct mtdconfig_struct_s *dev,
     }
 #endif
 
-  while (offset > 0 && (pdata->id != phdr->id || pdata->instance != phdr->instance))
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  while (offset > 0 && strcmp(pdata->name, phdr->name) != 0)
+#else
+  while (offset > 0 && (pdata->id != phdr->id ||
+         pdata->instance != phdr->instance))
+#endif
     {
+#ifdef CONFIG_MTD_CONFIG_NAMED
+      if (phdr->name[0] == CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
       if (phdr->id == MTD_ERASED_ID)
+#endif
         {
           /* Advance to the next block and continue the search */
 
@@ -1033,7 +1131,8 @@ static int mtdconfig_findentry(FAR struct mtdconfig_struct_s *dev,
 
           /* Read the 1st header from the next block */
 
-          ret = mtdconfig_readbytes(dev, offset, (uint8_t *) phdr, sizeof(*phdr));
+          ret = mtdconfig_readbytes(dev, offset, (FAR uint8_t *)phdr,
+                                    sizeof(*phdr));
           if (ret != OK)
             {
               /* Error reading the data */
@@ -1066,7 +1165,9 @@ static int mtdconfig_setconfig(FAR struct mtdconfig_struct_s *dev,
   uint8_t   sig[CONFIGDATA_BLOCK_HDR_SIZE];       /* Format signature bytes ("CD") */
   char      retrycount = 0;
   int       ret = -ENOSYS;
-  off_t     offset, bytes_left_in_block, bytes;
+  off_t     offset;
+  off_t     bytes_left_in_block;
+  off_t     bytes;
   uint16_t  block;
   struct mtdconfig_header_s hdr;
   uint8_t   ram_consolidate;
@@ -1106,7 +1207,15 @@ retry:
       sig[0] = 'C';
       sig[1] = 'D';
       sig[2] = CONFIGDATA_FORMAT_VERSION;
-      mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
+
+      ret = mtdconfig_writebytes(dev, 0, sig, sizeof(sig));
+      if (ret != sizeof(sig))
+        {
+          /* Cannot write even the signature. */
+
+          ret = -EIO;
+          goto errout;
+        }
 
       /* Now go try to read the signature again (as verification) */
 
@@ -1123,8 +1232,12 @@ retry:
 
   /* Test if the header was found. */
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  if (offset > 0 && strcmp(pdata->name, hdr.name) == 0)
+#else
   if (offset > 0 && pdata->id == hdr.id && pdata->instance ==
       hdr.instance)
+#endif
     {
       /* Mark this entry as released */
 
@@ -1145,9 +1258,15 @@ retry:
   /* Now find a new entry for this config data */
 
   retrycount = 0;
+
 retry_find:
   offset = mtdconfig_findfirstentry(dev, &hdr);
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  if (offset > 0 && hdr.name[0] == CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
   if (offset > 0 && hdr.id == MTD_ERASED_ID)
+#endif
     {
       block = offset / dev->erasesize;
       bytes_left_in_block = (block + 1) * dev->erasesize - offset;
@@ -1157,11 +1276,19 @@ retry_find:
            * in the code below.
            */
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+          hdr.name[0] = 1;
+#else
           hdr.id = 1;
+#endif
         }
     }
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  if (hdr.name[0] != CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
   if (hdr.id != MTD_ERASED_ID)
+#endif
     {
       /* Read the next entry */
 
@@ -1218,13 +1345,17 @@ retry_find:
     {
       /* Save the data at this entry */
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+      strcpy(hdr.name, pdata->name);
+#else
       hdr.id = pdata->id;
       hdr.instance = pdata->instance;
+#endif
       hdr.len = pdata->len;
       hdr.flags = MTD_ERASED_FLAGS;
 
-      ret = mtdconfig_writebytes(dev, offset, (uint8_t *)&hdr, sizeof(hdr));
-      if (ret < 0)
+      ret = mtdconfig_writebytes(dev, offset, (FAR uint8_t *)&hdr, sizeof(hdr));
+      if (ret != sizeof(hdr))
         {
           /* Cannot write even header! */
 
@@ -1232,14 +1363,15 @@ retry_find:
           goto errout;
         }
 
-      bytes = mtdconfig_writebytes(dev, offset + sizeof(hdr), pdata->configdata,
-                                   pdata->len);
+      bytes = mtdconfig_writebytes(dev, offset + sizeof(hdr),
+                                   pdata->configdata, pdata->len);
       if (bytes != pdata->len)
         {
           /* Error writing data! */
 
           hdr.flags = MTD_ERASED_FLAGS;
-          mtdconfig_writebytes(dev, offset, (uint8_t *)&hdr, sizeof(hdr.flags));
+          mtdconfig_writebytes(dev, offset, (FAR uint8_t *)&hdr,
+                               sizeof(hdr.flags));
           ret = -EIO;
           goto errout;
         }
@@ -1260,10 +1392,11 @@ errout:
  ****************************************************************************/
 
 static int mtdconfig_getconfig(FAR struct mtdconfig_struct_s *dev,
-              FAR struct config_data_s *pdata)
+                               FAR struct config_data_s *pdata)
 {
   int    ret = -ENOSYS;
-  off_t  offset, bytes_to_read;
+  off_t  offset;
+  off_t  bytes_to_read;
   struct mtdconfig_header_s hdr;
 
   /* Allocate a temp block buffer */
@@ -1283,7 +1416,11 @@ static int mtdconfig_getconfig(FAR struct mtdconfig_struct_s *dev,
 
   /* Test if the header was found. */
 
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  if (offset > 0 && strcmp(pdata->name, hdr.name) == 0)
+#else
   if (offset > 0 && (pdata->id == hdr.id && pdata->instance == hdr.instance))
+#endif
     {
       /* Entry found.  Read the data */
 
@@ -1305,10 +1442,61 @@ static int mtdconfig_getconfig(FAR struct mtdconfig_struct_s *dev,
           goto errout;
         }
 
+      /* Set return data length to match the config item length */
+
+      pdata->len = hdr.len;
       ret = OK;
     }
 
 errout:
+  /* Free the buffer */
+
+  kmm_free(dev->buffer);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: mtdconfig_deleteconfig
+ ****************************************************************************/
+
+static int mtdconfig_deleteconfig(FAR struct mtdconfig_struct_s *dev,
+                                  FAR struct config_data_s *pdata)
+{
+  int    ret = -ENOENT;
+  off_t  offset;
+  struct mtdconfig_header_s hdr;
+
+  /* Allocate a temp block buffer */
+
+  dev->buffer = (FAR uint8_t *)kmm_malloc(dev->blocksize);
+  if (dev->buffer == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  /* Get the offset of the first entry.  This will also check
+   * the format signature bytes.
+   */
+
+  offset = mtdconfig_findfirstentry(dev, &hdr);
+  offset = mtdconfig_findentry(dev, offset, pdata, &hdr);
+
+  /* Test if the header was found. */
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+  if (offset > 0 && strcmp(pdata->name, hdr.name) == 0)
+#else
+  if (offset > 0 && (pdata->id == hdr.id && pdata->instance == hdr.instance))
+#endif
+    {
+      /* Entry found.  Mark this entry as released */
+
+      hdr.flags = (uint8_t)~MTD_ERASED_FLAGS;
+      mtdconfig_writebytes(dev, offset, &hdr.flags, sizeof(hdr.flags));
+
+      ret = OK;
+    }
+
   /* Free the buffer */
 
   kmm_free(dev->buffer);
@@ -1325,7 +1513,9 @@ static int mtdconfig_ioctl(FAR struct file *filep, int cmd,
   FAR struct inode *inode = filep->f_inode;
   FAR struct mtdconfig_struct_s *dev = inode->i_private;
   FAR struct config_data_s *pdata;
-  int   ret = -ENOSYS;
+  struct mtdconfig_header_s hdr;
+  off_t bytes_to_read;
+  int ret = -ENOSYS;
 
   switch (cmd)
     {
@@ -1343,6 +1533,124 @@ static int mtdconfig_ioctl(FAR struct file *filep, int cmd,
 
         pdata = (FAR struct config_data_s *)arg;
         ret = mtdconfig_getconfig(dev, pdata);
+        break;
+
+      case CFGDIOC_DELCONFIG:
+        /* Set the config item */
+
+        pdata = (FAR struct config_data_s *)arg;
+        ret = mtdconfig_deleteconfig(dev, pdata);
+        break;
+
+      case CFGDIOC_FIRSTCONFIG:
+        /* Get the the first config item */
+
+        pdata = (FAR struct config_data_s *)arg;
+        dev->readoff = mtdconfig_findfirstentry(dev, &hdr);
+
+        /* Test if the config item is valid */
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+        if (dev->readoff != 0 &&
+            hdr.name[0] != CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
+        if (dev->readoff != 0 && hdr.id != MTD_ERASED_ID)
+#endif
+          {
+            /* Perform the read */
+
+            bytes_to_read = hdr.len;
+            if (bytes_to_read > pdata->len)
+              {
+                bytes_to_read = pdata->len;
+              }
+
+            ret = mtdconfig_readbytes(dev, dev->readoff + sizeof(hdr),
+                                      pdata->configdata, bytes_to_read);
+            if (ret < 0)
+              {
+                break;
+              }
+
+            /* Set other return data items */
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+            strcpy(pdata->name, hdr.name);
+#else
+            pdata->id = hdr.id;
+            pdata->instance = hdr.instance;
+#endif
+            pdata->len = bytes_to_read;
+          }
+        else
+          {
+            ret = -ENOENT;
+          }
+
+        break;
+
+      case CFGDIOC_NEXTCONFIG:
+        /* Get the next config item */
+
+        pdata = (FAR struct config_data_s *)arg;
+
+        ret = mtdconfig_readbytes(dev, dev->readoff, (FAR uint8_t *)&hdr,
+                                  sizeof(hdr));
+        if (ret < 0)
+          {
+            break;
+          }
+
+        dev->readoff = mtdconfig_findnextentry(dev, dev->readoff, &hdr, 0);
+
+        /* Test if the config item is valid */
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+        if (dev->readoff != 0 && hdr.name[0] != CONFIG_MTD_CONFIG_ERASEDVALUE)
+#else
+        if (dev->readoff != 0 && hdr.id != MTD_ERASED_ID)
+#endif
+          {
+            /* Test if this is an empty slot */
+
+            bytes_to_read = hdr.len;
+            if (bytes_to_read > pdata->len)
+              {
+                bytes_to_read = pdata->len;
+              }
+
+            /* Read the config item data */
+
+            ret = mtdconfig_readbytes(dev, dev->readoff + sizeof(hdr),
+                                      pdata->configdata, bytes_to_read);
+            if (ret < 0)
+              {
+                break;
+              }
+
+#ifdef CONFIG_MTD_CONFIG_NAMED
+            strcpy(pdata->name, hdr.name);
+#else
+            pdata->id = hdr.id;
+            pdata->instance = hdr.instance;
+#endif
+            pdata->len = bytes_to_read;
+          }
+        else
+          {
+            ret = -ENOENT;
+          }
+
+        break;
+
+      case MTDIOC_BULKERASE:
+        /* Call the MTD's ioctl for this */
+
+        if (dev->mtd->ioctl)
+          {
+             dev->mtd->ioctl(dev->mtd, cmd, arg);
+          }
+
         break;
     }
 
@@ -1362,7 +1670,7 @@ static int mtdconfig_poll(FAR struct file *filep, FAR struct pollfd *fds,
       fds->revents |= (fds->events & (POLLIN | POLLOUT));
       if (fds->revents != 0)
         {
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 
@@ -1384,17 +1692,18 @@ static int mtdconfig_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
 int mtdconfig_register(FAR struct mtd_dev_s *mtd)
 {
-  int ret = OK;
+  int ret = -ENOMEM;
   struct mtdconfig_struct_s *dev;
   struct mtd_geometry_s geo;      /* Device geometry */
 
-  dev = (struct mtdconfig_struct_s *)kmm_malloc(sizeof(struct mtdconfig_struct_s));
-  if (dev)
+  dev = (struct mtdconfig_struct_s *)
+    kmm_malloc(sizeof(struct mtdconfig_struct_s));
+  if (dev != NULL)
     {
       /* Initialize the mtdconfig device structure */
 
       dev->mtd = mtd;
-      sem_init(&dev->exclsem, 0, 1);
+      nxsem_init(&dev->exclsem, 0, 1);
 
       /* Get the device geometry. (casting to uintptr_t first eliminates
        * complaints on some architectures where the sizeof long is different

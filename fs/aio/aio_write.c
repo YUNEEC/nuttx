@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/aio/aio_write.c
  *
- *   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -124,9 +124,8 @@ static void aio_write_worker(FAR void *arg)
       oflags = file_fcntl(aioc->u.aioc_filep, F_GETFL);
       if (oflags < 0)
         {
-          int errcode = get_errno();
-          ferr("ERROR: fcntl failed: %d\n", errcode);
-          aiocbp->aio_result = -errcode;
+          ferr("ERROR: file_fcntl failed: %d\n", oflags);
+          aiocbp->aio_result = oflags;
           goto errout;
         }
 
@@ -175,19 +174,14 @@ static void aio_write_worker(FAR void *arg)
     }
 #endif
 
-  /* Check the result of the write */
-
   if (nwritten < 0)
     {
-      int errcode = get_errno();
-      ferr("ERROR: write/pwrite failed: %d\n", errcode);
-      DEBUGASSERT(errcode > 0);
-      aiocbp->aio_result = -errcode;
+      ferr("ERROR: write/pwrite/send failed: %d\n", nwritten);
     }
-  else
-    {
-      aiocbp->aio_result = nwritten;
-    }
+
+  /* Save the result of the write */
+
+  aiocbp->aio_result = nwritten;
 
 #ifdef AIO_HAVE_FILEP
 errout:

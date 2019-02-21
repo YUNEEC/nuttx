@@ -60,6 +60,8 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define XBEE_ATQUERY_TIMEOUT MSEC2TICK(100)
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -79,6 +81,10 @@ static void xbee_process_txstatus(FAR struct xbee_priv_s *priv, uint8_t frameid,
 static void xbee_process_rxframe(FAR struct xbee_priv_s *priv,
               FAR struct iob_s *frame,
               enum ieee802154_addrmode_e addrmode);
+static void xbee_notify(FAR struct xbee_priv_s *priv,
+                FAR struct ieee802154_primitive_s *primitive);
+static void xbee_notify_worker(FAR void *arg);
+static void xbee_atquery_timeout(int argc, uint32_t arg, ...);
 
 /****************************************************************************
  * Private Data
@@ -98,7 +104,7 @@ static void xbee_process_rxframe(FAR struct xbee_priv_s *priv,
  * Description:
  *   Hardware interrupt handler
  *
- * Parameters:
+ * Input Parameters:
  *   irq     - Number of the IRQ that generated the interrupt
  *   context - Interrupt register state save info (architecture-specific)
  *
@@ -139,7 +145,7 @@ static int xbee_interrupt(int irq, FAR void *context, FAR void *arg)
  *   Perform interrupt handling (Attention) logic outside of the interrupt handler
  *   (on the work queue thread).
  *
- * Parameters:
+ * Input Parameters:
  *   arg     - The reference to the driver structure (cast to void*)
  *
  * Returned Value:
@@ -355,6 +361,17 @@ static void xbee_attnworker(FAR void *arg)
     {
       xbee_process_apiframes(priv, iobhead);
     }
+
+  /* If an interrupt occured while the worker was running, it was not
+   * scheduled since there is a good chance this function has already handled
+   * it as part of the previous ATTN assertion. Therefore, if the ATTN
+   * line is asserted again reschedule the work.
+   */
+
+  if (priv->attn_latched)
+    {
+      work_queue(HPWORK, &priv->attnwork, xbee_attnworker, (FAR void *)priv, 0);
+    }
 }
 
 /****************************************************************************
@@ -364,12 +381,12 @@ static void xbee_attnworker(FAR void *arg)
  *   Verifies that the API frame type is known and that the length makes
  *   sense for that frame type.
  *
- * Parameters:
+ * Input Parameters:
  *    frame - pointer to the frame data
  *    datalen - The size of the data section of the frame.  This is the value
  *              included as the second and third byte of the frame.
  *
- * Returns:
+ * Returned Value:
  *   true  - Frame type is known and length is logical
  *   false - Frame type is unknown or length is invalid for frame type
  *
@@ -432,11 +449,11 @@ static bool xbee_validate_apiframe(uint8_t frametype, uint16_t datalen)
  * Description:
  *   Verifies API frame checksum.
  *
- * Parameters:
+ * Input Parameters:
  *    frame - pointer to the frame data
  *    framelen - size of the overall frame. NOT the data length field
  *
- * Returns:
+ * Returned Value:
  *   true  - Checksum is valid
  *   false - Checksum is invalid
  *
@@ -480,7 +497,7 @@ static bool xbee_verify_checksum(FAR const struct iob_s *iob)
 static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                                    FAR struct iob_s *framelist)
 {
-  FAR struct ieee802154_notif_s *notif;
+  FAR struct ieee802154_primitive_s *primitive;
   FAR struct iob_s *frame;
   FAR struct iob_s *nextframe;
   FAR char *command;
@@ -515,7 +532,7 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
               command = (FAR char *)&frame->io_data[frame->io_offset];
               frame->io_offset += 2;
 
-              wlinfo("AT Repsonse Recevied: %.*s\n", 2, command);
+              wlinfo("AT Response Received: %.*s\n", 2, command);
 
               /* Make sure the command status is OK=0 */
 
@@ -532,8 +549,6 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                     {
                       priv->addr.panid[1] = frame->io_data[frame->io_offset++];
                       priv->addr.panid[0] = frame->io_data[frame->io_offset++];
-
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_NETWORKID);
                     }
                   else if (memcmp(command, "SH", 2) == 0)
                     {
@@ -541,8 +556,6 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                       priv->addr.eaddr[6] = frame->io_data[frame->io_offset++];
                       priv->addr.eaddr[5] = frame->io_data[frame->io_offset++];
                       priv->addr.eaddr[4] = frame->io_data[frame->io_offset++];
-
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_SERIALHIGH);
                     }
                   else if (memcmp(command, "SL", 2) == 0)
                     {
@@ -550,27 +563,20 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                       priv->addr.eaddr[2] = frame->io_data[frame->io_offset++];
                       priv->addr.eaddr[1] = frame->io_data[frame->io_offset++];
                       priv->addr.eaddr[0] = frame->io_data[frame->io_offset++];
-
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_SERIALLOW);
                     }
                   else if (memcmp(command, "MY", 2) == 0)
                     {
                       priv->addr.saddr[1] = frame->io_data[frame->io_offset++];
                       priv->addr.saddr[0] = frame->io_data[frame->io_offset++];
-
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_SOURCEADDR);
                     }
                   else if (memcmp(command, "CH", 2) == 0)
                     {
                       priv->chan = frame->io_data[frame->io_offset++];
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_CHAN);
                     }
                   else if (memcmp(command, "VR", 2) == 0)
                     {
                       priv->firmwareversion = frame->io_data[frame->io_offset++] << 8;
                       priv->firmwareversion |= frame->io_data[frame->io_offset++];
-
-                      xbee_notify_respwaiter(priv, XBEE_RESP_AT_FIRMWAREVERSION);
                     }
                   else if (memcmp(command, "AI", 2) == 0)
                     {
@@ -584,22 +590,19 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                         {
                           wd_cancel(priv->assocwd);
 
-                          xbee_lock(priv,  false);
-                          xbee_notif_alloc(priv, &notif, false);
-                          xbee_unlock(priv);
-
-                          notif->notiftype = IEEE802154_NOTIFY_CONF_ASSOC;
+                          primitive = ieee802154_primitive_allocate();
+                          primitive->type = IEEE802154_PRIMITIVE_CONF_ASSOC;
 
                           if (frame->io_data[frame->io_offset] == 0)
                             {
-                              notif->u.assocconf.status = IEEE802154_STATUS_SUCCESS;
+                              primitive->u.assocconf.status = IEEE802154_STATUS_SUCCESS;
                             }
                           else
                             {
-                              notif->u.assocconf.status = IEEE802154_STATUS_FAILURE;
+                              primitive->u.assocconf.status = IEEE802154_STATUS_FAILURE;
                             }
 
-                          xbee_notify(priv, notif);
+                          xbee_notify(priv, primitive);
                         }
                     }
                   else if (memcmp(command, "A1", 2) == 0)
@@ -622,22 +625,57 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
                       wlinfo("Sleep Period: %dsec\n",
                              frame->io_data[frame->io_offset]/100);
                     }
+                  else if (memcmp(command, "RR", 2) == 0)
+                    {
+                      wlinfo("XBee Retries: %d\n",
+                             frame->io_data[frame->io_offset]);
+                    }
+                  else if (memcmp(command, "MM", 2) == 0)
+                    {
+                      wlinfo("Mac Mode: %d\n",
+                             frame->io_data[frame->io_offset]);
+                    }
+                  else if (memcmp(command, "PL", 2) == 0)
+                    {
+                      wlinfo("Power Level: %d\n",
+                             frame->io_data[frame->io_offset]);
+                      priv->pwrlvl = frame->io_data[frame->io_offset++];
+                    }
+                  else if (memcmp(command, "PM", 2) == 0)
+                    {
+                      wlinfo("Boost Mode (Power Mode): %d\n",
+                             frame->io_data[frame->io_offset]);
+                      priv->boostmode = frame->io_data[frame->io_offset++];
+                    }
                   else
                     {
                       wlwarn("Unhandled AT Response: %.*s\n", 2, command);
+                    }
+
+                  /* If this is the command we are querying for */
+
+                  if ((priv->querycmd[0] == *command) &&
+                      (priv->querycmd[1] == *(command + 1)))
+                    {
+                      priv->querydone = true;
+                      nxsem_post(&priv->atresp_sem);
                     }
                 }
             }
             break;
           case XBEE_APIFRAME_TXSTATUS:
             {
+              wd_cancel(priv->reqdata_wd);
               xbee_process_txstatus(priv, frame->io_data[frame->io_offset],
                                     frame->io_data[frame->io_offset + 1]);
+              priv->txdone = true;
+              nxsem_post(&priv->txdone_sem);
             }
             break;
           case XBEE_APIFRAME_RX_EADDR:
             {
               nextframe = frame->io_flink;
+              frame->io_flink = NULL;
               xbee_process_rxframe(priv, frame, IEEE802154_ADDRMODE_EXTENDED);
               frame = nextframe;
 
@@ -650,6 +688,7 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
           case XBEE_APIFRAME_RX_SADDR:
             {
               nextframe = frame->io_flink;
+              frame->io_flink = NULL;
               xbee_process_rxframe(priv, frame, IEEE802154_ADDRMODE_SHORT);
               frame = nextframe;
 
@@ -670,7 +709,15 @@ static void xbee_process_apiframes(FAR struct xbee_priv_s *priv,
             break;
         }
 
+      /* IOB free logic assumes that a valid io_flink entry in the IOB that
+       * is being freed indicates that the IOB is a part of an IOB chain. Since
+       * that is not the case here and we are just using the io_flink field
+       * as a way of managing a list of independent frames, we set the io_flink
+       * to NULL prior to freeing it.
+       */
+
       nextframe = frame->io_flink;
+      frame->io_flink = NULL;
       iob_free(frame);
       frame = nextframe;
     }
@@ -688,13 +735,15 @@ static void xbee_process_rxframe(FAR struct xbee_priv_s *priv,
                                  FAR struct iob_s *frame,
                                  enum ieee802154_addrmode_e addrmode)
 {
+  FAR struct ieee802154_primitive_s *primitive;
   FAR struct ieee802154_data_ind_s *dataind;
-  FAR struct xbee_maccb_s *cb;
-  int ret;
 
-  xbee_lock(priv, false);
-  xbee_dataind_alloc(priv, &dataind, false);
-  xbee_unlock(priv);
+  DEBUGASSERT(frame != NULL);
+
+  primitive = ieee802154_primitive_allocate();
+  dataind = &primitive->u.dataind;
+
+  primitive->type = IEEE802154_PRIMITIVE_IND_DATA;
 
   dataind->frame = frame;
 
@@ -742,34 +791,9 @@ static void xbee_process_rxframe(FAR struct xbee_priv_s *priv,
 
   frame->io_len--; /* Remove the checksum */
 
-  /* If there are registered MCPS callback receivers registered,
-   * then forward the frame in priority order.  If there are no
-   * registered receivers or if none of the receivers accept the
-   * data frame then drop the frame.
-   */
+  xbee_notify(priv, primitive);
 
-  for (cb = priv->cb; cb != NULL; cb = cb->flink)
-    {
-      /* Does this MAC client want frames? */
-
-      if (cb->rxframe != NULL)
-        {
-          /* Yes.. Offer this frame to the receiver */
-
-          ret = cb->rxframe(cb, dataind);
-          if (ret >= 0)
-            {
-              /* The receiver accepted and disposed of the frame and
-               * its metadata.  We are done.
-               */
-
-              return;
-            }
-        }
-    }
-
-  xbee_dataind_free((XBEEHANDLE)priv, dataind);
-  iob_free(frame);
+  wlinfo("Received frame. RSSI: -%d dbm\n", dataind->rssi);
 }
 
 /****************************************************************************
@@ -784,34 +808,195 @@ static void xbee_process_rxframe(FAR struct xbee_priv_s *priv,
 static void xbee_process_txstatus(FAR struct xbee_priv_s *priv, uint8_t frameid,
                                   uint8_t status)
 {
-  FAR struct ieee802154_notif_s *notif;
+  FAR struct ieee802154_primitive_s *primitive;
 
-  xbee_lock(priv, false);
-  xbee_notif_alloc(priv, &notif, false);
-  xbee_unlock(priv);
+  primitive = ieee802154_primitive_allocate();
 
-  notif->notiftype = IEEE802154_NOTIFY_CONF_DATA;
+  primitive->type = IEEE802154_PRIMITIVE_CONF_DATA;
 
   switch (status)
     {
       case 0x00:
-        notif->u.dataconf.status = IEEE802154_STATUS_SUCCESS;
+        primitive->u.dataconf.status = IEEE802154_STATUS_SUCCESS;
         break;
       case 0x01:
       case 0x21:
-        notif->u.dataconf.status = IEEE802154_STATUS_NO_ACK;
+        primitive->u.dataconf.status = IEEE802154_STATUS_NO_ACK;
         break;
       case 0x02:
-        notif->u.dataconf.status = IEEE802154_STATUS_CHANNEL_ACCESS_FAILURE;
+        primitive->u.dataconf.status = IEEE802154_STATUS_CHANNEL_ACCESS_FAILURE;
         break;
       default:
-        notif->u.dataconf.status = IEEE802154_STATUS_FAILURE;
+        primitive->u.dataconf.status = IEEE802154_STATUS_FAILURE;
         break;
     }
 
-  wlinfo("TX done. Frame ID: %d Status: 0x%02X\n", frameid, status);
+  if (status != IEEE802154_STATUS_SUCCESS)
+    {
+      wlwarn("TX done. Frame ID: %d Status: 0x%02x\n", frameid, status);
+    }
+  else
+    {
+      wlinfo("TX done. Frame ID: %d Status: 0x%02x\n", frameid, status);
+    }
 
-  xbee_notify(priv, notif);
+  xbee_notify(priv, primitive);
+}
+
+/****************************************************************************
+ * Name: xbee_notify
+ *
+ * Description:
+ *   Queue the primitive in the queue and queue work on the LPWORK
+ *   queue if is not already scheduled.
+ *
+ * Assumptions:
+ *    Called with the MAC locked
+ *
+ ****************************************************************************/
+
+static void xbee_notify(FAR struct xbee_priv_s *priv,
+                        FAR struct ieee802154_primitive_s *primitive)
+{
+  while (nxsem_wait(&priv->primitive_sem) < 0);
+
+  sq_addlast((FAR sq_entry_t *)primitive, &priv->primitive_queue);
+  nxsem_post(&priv->primitive_sem);
+
+  if (work_available(&priv->notifwork))
+    {
+      work_queue(LPWORK, &priv->notifwork, xbee_notify_worker,
+                 (FAR void *)priv, 0);
+    }
+}
+
+/****************************************************************************
+ * Name: xbee_notify_worker
+ *
+ * Description:
+ *    Pop each primitive off the queue and call the registered
+ *    callbacks.  There is special logic for handling ieee802154_data_ind_s.
+ *
+ ****************************************************************************/
+
+static void xbee_notify_worker(FAR void *arg)
+{
+  FAR struct xbee_priv_s *priv = (FAR struct xbee_priv_s *)arg;
+  FAR struct xbee_maccb_s *cb;
+  FAR struct ieee802154_primitive_s *primitive;
+  int ret;
+
+  DEBUGASSERT(priv != NULL);
+
+  while (nxsem_wait(&priv->primitive_sem) < 0);
+  primitive =
+    (FAR struct ieee802154_primitive_s *)sq_remfirst(&priv->primitive_queue);
+  nxsem_post(&priv->primitive_sem);
+
+  while (primitive != NULL)
+    {
+      /* Data indications are a special case since the frame can only be passed to
+       * one place. The return value of the notify call is used to accept or reject
+       * the primitive. In the case of the data indication, there can only be one
+       * accept. Callbacks are stored in order of there receiver priority ordered
+       * when the callbacks are bound in mac802154_bind().
+       */
+
+      if (primitive->type == IEEE802154_PRIMITIVE_IND_DATA)
+        {
+          bool dispose = true;
+
+          primitive->nclients = 1;
+
+          for (cb = priv->cb; cb != NULL; cb = cb->flink)
+            {
+              if (cb->notify != NULL)
+                {
+                  ret = cb->notify(cb, primitive);
+                  if (ret >= 0)
+                    {
+                      /* The receiver accepted and disposed of the frame and it's
+                       * meta-data. We are done.
+                       */
+
+                      dispose = false;
+                      break;
+                    }
+                }
+            }
+
+          if (dispose)
+            {
+              iob_free(primitive->u.dataind.frame);
+              ieee802154_primitive_free(primitive);
+            }
+        }
+      else
+        {
+          /* Set the number of clients count so that the primitive resources will be
+           * preserved until all clients are finished with it.
+           */
+
+          primitive->nclients = priv->nclients;
+
+          /* Try to notify every registered MAC client */
+
+          for (cb = priv->cb; cb != NULL; cb = cb->flink)
+            {
+              if (cb->notify != NULL)
+                {
+                  ret = cb->notify(cb, primitive);
+                  if (ret < 0)
+                    {
+                      ieee802154_primitive_free(primitive);
+                    }
+                }
+              else
+                {
+                  ieee802154_primitive_free(primitive);
+                }
+            }
+        }
+
+      /* Get the next primitive then loop */
+
+      while (nxsem_wait(&priv->primitive_sem) < 0);
+      primitive =
+        (FAR struct ieee802154_primitive_s *)sq_remfirst(&priv->primitive_queue);
+      nxsem_post(&priv->primitive_sem);
+    }
+}
+
+/****************************************************************************
+ * Name: xbee_atquery_timeout
+ *
+ * Description:
+ *   This function runs when an AT Query has timed out waiting for a response
+ *   from the XBee module. This really should never happen, but if it does,
+ *   handle it gracefully by retrying the query.
+ *
+ * Input Parameters:
+ *   argc - The number of available arguments
+ *   arg  - The first argument
+ *
+ * Returned Value:
+ *   None
+ *
+ * Assumptions:
+ *
+ ****************************************************************************/
+
+static void xbee_atquery_timeout(int argc, uint32_t arg, ...)
+{
+  FAR struct xbee_priv_s *priv = (FAR struct xbee_priv_s *)arg;
+
+  DEBUGASSERT(priv != NULL);
+
+  wlwarn("AT Query timeout\n");
+
+  /* Wake the pending query thread so it can retry */
+
+  nxsem_post(&priv->atresp_sem);
 }
 
 /****************************************************************************
@@ -825,7 +1010,7 @@ static void xbee_process_txstatus(FAR struct xbee_priv_s *priv, uint8_t frameid,
  *   Initialize an XBee driver.  The XBee device is assumed to be
  *   in the post-reset state upon entry to this function.
  *
- * Parameters:
+ * Input Parameters:
  *   spi   - A reference to the platform's SPI driver for the XBee
  *   lower - The MCU-specific interrupt used to control low-level MCU
  *           functions (i.e., XBee GPIO interrupts).
@@ -860,26 +1045,29 @@ XBEEHANDLE xbee_init(FAR struct spi_dev_s *spi,
       return NULL;
     }
 
-  /* Allow exclusive access to the struct */
-
-  sem_init(&priv->exclsem, 0, 1);
-
-  /* Initialize the data indication and notifcation allocation pools */
-
-  xbee_notifpool_init(priv);
-  xbee_dataindpool_init(priv);
-
-  sq_init(&priv->waiter_queue);
-
-  priv->assocwd = wd_create();
-
   priv->lower = lower;
   priv->spi   = spi;
 
+  nxsem_init(&priv->primitive_sem, 0, 1);
+  nxsem_init(&priv->atquery_sem, 0, 1);
+  nxsem_init(&priv->tx_sem, 0, 1);
+  nxsem_init(&priv->txdone_sem, 0, 0);
+  nxsem_setprotocol(&priv->txdone_sem, SEM_PRIO_NONE);
+
+  ieee802154_primitivepool_initialize();
+
+  sq_init(&priv->primitive_queue);
+
+  priv->assocwd    = wd_create();
+  priv->atquery_wd = wd_create();
+  priv->reqdata_wd = wd_create();
+
   priv->frameid = 0; /* Frame ID should never be 0, but it is incremented
                       * in xbee_next_frameid before being used so it will be 1 */
+  priv->querycmd[0] = 0;
+  priv->querycmd[1] = 0;
 
-  /* Reset the XBee */
+  /* Reset the XBee radio */
 
   priv->lower->reset(priv->lower);
 
@@ -892,7 +1080,7 @@ XBEEHANDLE xbee_init(FAR struct spi_dev_s *spi,
    * when a valid SPI frame is received.
    */
 
-  xbee_at_query(priv, "VR");
+  xbee_send_atquery(priv, "VR");
 
   return (XBEEHANDLE)priv;
 }
@@ -1097,16 +1285,81 @@ void xbee_send_apiframe(FAR struct xbee_priv_s *priv,
 }
 
 /****************************************************************************
- * Name: xbee_at_query
+ * Name: xbee_atquery
  *
  * Description:
- *   Helper function to query a AT Command value.
+ *   Sends AT Query and waits for response from device
  *
  ****************************************************************************/
 
-void xbee_at_query(FAR struct xbee_priv_s *priv, FAR const char *atcommand)
+int xbee_atquery(FAR struct xbee_priv_s *priv, FAR const char *atcommand)
+{
+  int ret;
+
+  /* Only allow one query at a time */
+
+  ret = nxsem_wait(&priv->atquery_sem);
+  if (ret < 0)
+    {
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
+    }
+
+  priv->querydone = false;
+
+  /* We reinitialize this every time, in case something gets out of phase with
+   * the timeout and the received response.
+   */
+
+  nxsem_init(&priv->atresp_sem, 0, 0);
+  nxsem_setprotocol(&priv->atresp_sem, SEM_PRIO_NONE);
+
+  do
+    {
+      /* Setup a timeout */
+
+      (void)wd_start(priv->atquery_wd, XBEE_ATQUERY_TIMEOUT, xbee_atquery_timeout,
+                     1, (wdparm_t)priv);
+
+      /* Send the query */
+
+      priv->querycmd[0] = *atcommand;
+      priv->querycmd[1] = *(atcommand + 1);
+      xbee_send_atquery(priv, atcommand);
+
+      /* Wait for the response to be received */
+
+      ret = nxsem_wait(&priv->atresp_sem);
+      if (ret < 0)
+        {
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+          wd_cancel(priv->atquery_wd);
+          priv->querycmd[0] = 0;
+          priv->querycmd[1] = 0;
+          nxsem_post(&priv->atquery_sem);
+          return ret;
+        }
+    }
+  while (!priv->querydone);
+
+  nxsem_post(&priv->atquery_sem);
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: xbee_send_atquery
+ *
+ * Description:
+ *   Helper function to send the AT query to the XBee
+ *
+ ****************************************************************************/
+
+void xbee_send_atquery(FAR struct xbee_priv_s *priv, FAR const char *atcommand)
 {
   uint8_t frame[8];
+
+  wlinfo("AT Query: %c%c\n", *atcommand, *(atcommand + 1));
 
   frame[0] = XBEE_STARTBYTE;
   frame[1] = 0;
@@ -1119,145 +1372,6 @@ void xbee_at_query(FAR struct xbee_priv_s *priv, FAR const char *atcommand)
   xbee_insert_checksum(frame, 8);
 
   xbee_send_apiframe(priv, frame, 8);
-}
-
-/****************************************************************************
- * Name: xbee_query_firmwareversion
- *
- * Description:
- *   Sends API frame with AT command request in order to get the firmware version
- *   from the device.
- *
- ****************************************************************************/
-
-void xbee_query_firmwareversion(FAR struct xbee_priv_s *priv)
-{
-  struct xbee_respwaiter_s respwaiter;
-
-  respwaiter.resp_id = XBEE_RESP_AT_FIRMWAREVERSION;
-  sem_init(&respwaiter.sem, 0, 0);
-  sem_setprotocol(&respwaiter.sem, SEM_PRIO_NONE);
-
-  xbee_register_respwaiter(priv, &respwaiter);
-  xbee_at_query(priv, "VR");
-
-  sem_wait(&respwaiter.sem);
-
-  xbee_unregister_respwaiter(priv, &respwaiter);
-
-  sem_destroy(&respwaiter.sem);
-}
-
-/****************************************************************************
- * Name: xbee_query_panid
- *
- * Description:
- *   Sends API frame with AT command request in order to get the PAN ID
- *   (Network ID) from the device.
- *
- ****************************************************************************/
-
-void xbee_query_panid(FAR struct xbee_priv_s *priv)
-{
-  struct xbee_respwaiter_s respwaiter;
-
-  respwaiter.resp_id = XBEE_RESP_AT_NETWORKID;
-  sem_init(&respwaiter.sem, 0, 0);
-  sem_setprotocol(&respwaiter.sem, SEM_PRIO_NONE);
-
-  xbee_register_respwaiter(priv, &respwaiter);
-  xbee_at_query(priv, "ID");
-
-  sem_wait(&respwaiter.sem);
-
-  xbee_unregister_respwaiter(priv, &respwaiter);
-
-  sem_destroy(&respwaiter.sem);
-}
-
-/****************************************************************************
- * Name: xbee_query_eaddr
- *
- * Description:
- *   Sends API frame with AT command request in order to get the IEEE 802.15.4
- *   Extended Address. (Serial Number) from the device.
- *
- ****************************************************************************/
-
-void xbee_query_eaddr(FAR struct xbee_priv_s *priv)
-{
-  struct xbee_respwaiter_s respwaiter;
-
-  respwaiter.resp_id = XBEE_RESP_AT_SERIALHIGH;
-  sem_init(&respwaiter.sem, 0, 0);
-  sem_setprotocol(&respwaiter.sem, SEM_PRIO_NONE);
-
-  xbee_register_respwaiter(priv, &respwaiter);
-  xbee_at_query(priv, "SH");
-
-  sem_wait(&respwaiter.sem);
-
-  respwaiter.resp_id = XBEE_RESP_AT_SERIALLOW;
-  xbee_at_query(priv, "SL");
-
-  sem_wait(&respwaiter.sem);
-
-  xbee_unregister_respwaiter(priv, &respwaiter);
-  sem_destroy(&respwaiter.sem);
-}
-
-/****************************************************************************
- * Name: xbee_query_saddr
- *
- * Description:
- *   Sends API frame with AT command request in order to get the
- *   Short Address. (Source Address (MY)) from the device.
- *
- ****************************************************************************/
-
-void xbee_query_saddr(FAR struct xbee_priv_s *priv)
-{
-  struct xbee_respwaiter_s respwaiter;
-
-  respwaiter.resp_id = XBEE_RESP_AT_SOURCEADDR;
-  sem_init(&respwaiter.sem, 0, 0);
-  sem_setprotocol(&respwaiter.sem, SEM_PRIO_NONE);
-
-  xbee_register_respwaiter(priv, &respwaiter);
-  xbee_at_query(priv, "MY");
-
-  sem_wait(&respwaiter.sem);
-
-  xbee_unregister_respwaiter(priv, &respwaiter);
-
-  sem_destroy(&respwaiter.sem);
-}
-
-/****************************************************************************
- * Name: xbee_query_chan
- *
- * Description:
- *   Sends API frame with AT command request in order to get the RF Channel
- *   (Operating Channel) from the device.
- *
- ****************************************************************************/
-
-void xbee_query_chan(FAR struct xbee_priv_s *priv)
-{
-  struct xbee_respwaiter_s respwaiter;
-
-  respwaiter.resp_id = XBEE_RESP_AT_CHAN;
-  sem_init(&respwaiter.sem, 0, 0);
-  sem_setprotocol(&respwaiter.sem, SEM_PRIO_NONE);
-
-  xbee_register_respwaiter(priv, &respwaiter);
-  xbee_at_query(priv, "CH");
-
-  sem_wait(&respwaiter.sem);
-
-  xbee_unregister_respwaiter(priv, &respwaiter);
-
-  sem_destroy(&respwaiter.sem);
 }
 
 /****************************************************************************
@@ -1343,6 +1457,67 @@ void xbee_set_chan(FAR struct xbee_priv_s *priv, uint8_t chan)
   frame[5] = 'C';
   frame[6] = 'H';
   frame[7]  = chan;
+
+  xbee_insert_checksum(frame, 9);
+
+  xbee_send_apiframe(priv, frame, 9);
+}
+
+/****************************************************************************
+ * Name: xbee_set_powerlevel
+ *
+ * Description:
+ *   Sends API frame with AT command request in order to set the RF power level
+ *   of the device.
+ *
+ ****************************************************************************/
+
+void xbee_set_powerlevel(FAR struct xbee_priv_s *priv, uint8_t level)
+{
+  uint8_t frame[9];
+
+  priv->pwrlvl = level;
+
+  frame[0] = XBEE_STARTBYTE;
+  frame[1] = 0;
+  frame[2] = 5;
+  frame[3] = XBEE_APIFRAME_ATCOMMMAND;
+  frame[4] = 0;
+  frame[5] = 'P';
+  frame[6] = 'L';
+  frame[7]  = level;
+
+  xbee_insert_checksum(frame, 9);
+
+  xbee_send_apiframe(priv, frame, 9);
+}
+
+/****************************************************************************
+ * Name: xbee_set_boostmode
+ *
+ * Description:
+ *   Sends API frame with AT command request in order to set the Boost mode
+ *   setting of the device. NOTE: XBee Pro always enables boost mode and
+ *   does not support this command
+ *
+ ****************************************************************************/
+
+void xbee_set_boostmode(FAR struct xbee_priv_s *priv, uint8_t mode)
+{
+  uint8_t frame[9];
+
+  if (mode > 1) return;
+
+  priv->boostmode = mode;
+
+  frame[0] = XBEE_STARTBYTE;
+  frame[1] = 0;
+  frame[2] = 5;
+  frame[3] = XBEE_APIFRAME_ATCOMMMAND;
+  frame[4] = 0;
+  frame[5] = 'P';
+  frame[6] = 'M';
+  frame[7]  = mode;
 
   xbee_insert_checksum(frame, 9);
 
@@ -1470,8 +1645,13 @@ void xbee_regdump(FAR struct xbee_priv_s *priv)
 
   wlinfo("XBee Firmware Version: %04x\n", priv->firmwareversion);
 
-  xbee_at_query(priv, "CE");
-  xbee_at_query(priv, "A1");
-  xbee_at_query(priv, "A2");
-  xbee_at_query(priv, "SP");
+  xbee_send_atquery(priv, "CE");
+  xbee_send_atquery(priv, "A1");
+  xbee_send_atquery(priv, "A2");
+  xbee_send_atquery(priv, "AI");
+  xbee_send_atquery(priv, "SP");
+  xbee_send_atquery(priv, "RR");
+  xbee_send_atquery(priv, "MM");
+  xbee_send_atquery(priv, "PL");
+  xbee_send_atquery(priv, "PM");
 }

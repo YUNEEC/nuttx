@@ -63,10 +63,10 @@
  *   removal of the message queue is postponed until all references to the
  *   message queue have been closed.
  *
- * Parameters:
+ * Input Parameters:
  *   mq_name - Name of the message queue
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:

@@ -1,7 +1,7 @@
 /************************************************************************************
  * configs/olimex-lpc1766stk/src/lpc1766stk.h
  *
- *   Copyright (C) 2010-2011, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2011, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -251,6 +251,22 @@
  ************************************************************************************/
 
 /************************************************************************************
+ * Name: lpc17_bringup
+ *
+ * Description:
+ *   Perform architecture-specific initialization
+ *
+ *   CONFIG_BOARD_INITIALIZE=y :
+ *     Called from board_initialize().
+ *
+ *   CONFIG_BOARD_INITIALIZE=y && CONFIG_LIB_BOARDCTL=y :
+ *     Called from the NSH library
+ *
+ ************************************************************************************/
+
+int lpc17_bringup(void);
+
+/************************************************************************************
  * Name: lpc1766stk_sspdev_initialize
  *
  * Description:
@@ -274,4 +290,3 @@ int lpc1766stk_can_setup(void);
 
 #endif /* __ASSEMBLY__ */
 #endif /* _CONFIGS_OLIMEX_LPC1766STK_SRC_LPC1766STK_H */
-

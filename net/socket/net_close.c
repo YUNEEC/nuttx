@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/socket/net_close.c
  *
- *   Copyright (C) 2007-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,11 +63,12 @@
  * Description:
  *   Performs the close operation on a socket instance
  *
- * Parameters:
+ * Input Parameters:
  *   psock   Socket instance
  *
  * Returned Value:
- *   0 on success; -1 on error with errno set appropriately.
+ *  Returns zero (OK) on success.  On failure, it returns a negated errno
+ *  value to indicate the nature of the error.
  *
  * Assumptions:
  *
@@ -75,15 +76,13 @@
 
 int psock_close(FAR struct socket *psock)
 {
-  int errcode;
   int ret;
 
   /* Verify that the sockfd corresponds to valid, allocated socket */
 
   if (!psock || psock->s_crefs <= 0)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* We perform the close operation only if this is the last count on
@@ -105,19 +104,14 @@ int psock_close(FAR struct socket *psock)
 
       if (ret < 0)
         {
-          errcode = -ret;
-          goto errout;
+          return ret;
         }
     }
 
   /* Then release our reference on the socket structure containing the connection */
 
-  sock_release(psock);
+  psock_release(psock);
   return OK;
-
-errout:
-  set_errno(errcode);
-  return ERROR;
 }
 
 /****************************************************************************
@@ -126,11 +120,12 @@ errout:
  * Description:
  *   Performs the close operation on socket descriptors
  *
- * Parameters:
+ * Input Parameters:
  *   sockfd   Socket descriptor of socket
  *
  * Returned Value:
- *   0 on success; -1 on error with errno set appropriately.
+ *  Returns zero (OK) on success.  On failure, it returns a negated errno
+ *  value to indicate the nature of the error.
  *
  * Assumptions:
  *

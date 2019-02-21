@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_i2c.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2016,2017 Sony Video & Sound Products Inc.
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
@@ -54,9 +54,11 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
-#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/clock.h>
+#include <nuttx/signal.h>
+#include <nuttx/semaphore.h>
+#include <nuttx/i2c/i2c_master.h>
 
 #include <arch/board/board.h>
 
@@ -260,10 +262,21 @@ static struct lc823450_i2c_priv_s lc823450_i2c1_priv =
 
 static inline void lc823450_i2c_sem_wait(FAR struct lc823450_i2c_priv_s *priv)
 {
-  while (sem_wait(&priv->sem_excl) != 0)
+  int ret;
+
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->sem_excl);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -276,7 +289,7 @@ static inline void lc823450_i2c_sem_wait(FAR struct lc823450_i2c_priv_s *priv)
 
 static inline void lc823450_i2c_sem_post(FAR struct lc823450_i2c_priv_s *priv)
 {
-  sem_post(&priv->sem_excl);
+  nxsem_post(&priv->sem_excl);
 }
 
 /****************************************************************************
@@ -297,11 +310,7 @@ static inline int lc823450_i2c_sem_waitdone(FAR struct lc823450_i2c_priv_s *priv
     {
       /* Get the current time */
 
-#ifdef CONFIG_CLOCK_MONOTONIC
-      (void)clock_gettime(CLOCK_MONOTONIC, &abstime);
-#else
       (void)clock_gettime(CLOCK_REALTIME, &abstime);
-#endif
 
       /* Calculate a time in the future */
 
@@ -320,16 +329,12 @@ static inline int lc823450_i2c_sem_waitdone(FAR struct lc823450_i2c_priv_s *priv
 
       /* Wait until either the transfer is complete or the timeout expires */
 
-#ifdef CONFIG_CLOCK_MONOTONIC
-      ret = sem_timedwait_monotonic(&priv->sem_isr, &abstime);
-#else
-      ret = sem_timedwait(&priv->sem_isr, &abstime);
-#endif
-      if (ret != OK && errno != EINTR)
+      ret = nxsem_timedwait(&priv->sem_isr, &abstime);
+      if (ret < 0 && errno != -EINTR)
         {
 
           /* Break out of the loop on irrecoverable errors.  This would
-           * include timeouts and mystery errors reported by sem_timedwait.
+           * include timeouts and mystery errors reported by nxsem_timedwait.
            * NOTE that we try again if we are awakened by a signal (EINTR).
            */
           break;
@@ -347,8 +352,8 @@ static inline int lc823450_i2c_sem_waitdone(FAR struct lc823450_i2c_priv_s *priv
 static inline int lc823450_i2c_sem_waitdone(FAR struct lc823450_i2c_priv_s *priv)
 {
   uint32_t timeout;
-  systime_t start;
-  systime_t elapsed;
+  clock_t start;
+  clock_t elapsed;
   int ret;
 
   /* Get the timeout value */
@@ -714,7 +719,7 @@ static int lc823450_i2c_poll(FAR struct lc823450_i2c_priv_s *priv)
       priv->irqstate = IRQSTATE_DONE;
 
 #ifndef CONFIG_I2C_POLLED
-      sem_post(&priv->sem_isr);
+      nxsem_post(&priv->sem_isr);
 #endif
     }
 
@@ -734,7 +739,7 @@ static int lc823450_i2c_poll(FAR struct lc823450_i2c_priv_s *priv)
 
           i2cinfo("other message remaining (msgc=%d)\n", priv->msgc);
 
-          if (priv->msgv->flags & I2C_M_NORESTART)
+          if (priv->msgv->flags & I2C_M_NOSTART)
             {
               /* In this case, we don't have to restart using START condition. */
 
@@ -760,12 +765,12 @@ static int lc823450_i2c_poll(FAR struct lc823450_i2c_priv_s *priv)
 
               i2cinfo("re-START condition\n");
 
+#ifdef CONFIG_I2C_RESET
               /* Reset I2C bus by softreset. There is not description of the reset,
                * but in order to recover I2C bus busy, it must be done.
                * Please refer to macaron's code.
                */
 
-#ifdef CONFIG_I2C_RESET
               lc823450_i2c_reset((FAR struct i2c_master_s *)priv);
 #endif
 
@@ -773,6 +778,7 @@ static int lc823450_i2c_poll(FAR struct lc823450_i2c_priv_s *priv)
               /* We have to enable interrupt again, because all registers are reset by
                * lc823450_i2c_reset().
                */
+
               lc823450_i2c_enableirq(priv);
 #endif
 
@@ -961,8 +967,12 @@ static int lc823450_i2c_transfer(FAR struct i2c_master_s *dev,
                                  FAR struct i2c_msg_s *msgs, int count)
 {
   FAR struct lc823450_i2c_priv_s *priv = (struct lc823450_i2c_priv_s *)dev;
+  irqstate_t irqs;
+  int ret = 0;
 
-  if (!msgs || count == 0)
+  DEBUGASSERT(count > 0);
+
+  if (count <= 0 || msgs == NULL)
     {
       i2cerr("ERROR: invalid param, %p %d\n", msgs, count);
       return -EINVAL;
@@ -971,11 +981,6 @@ static int lc823450_i2c_transfer(FAR struct i2c_master_s *dev,
    /* ensure that address or flags don't change meanwhile */
 
   lc823450_i2c_sem_wait(priv);
-
-  irqstate_t irqs;
-  int ret = 0;
-
-  ASSERT(count);
 
   priv->timedout = false;
 
@@ -1039,7 +1044,7 @@ static int lc823450_i2c_transfer(FAR struct i2c_master_s *dev,
            * transaction, STOP condition for write transaction
            */
 
-          usleep(10 * 1000);
+          nxsig_usleep(10 * 1000);
         }
       else
         {
@@ -1048,7 +1053,7 @@ static int lc823450_i2c_transfer(FAR struct i2c_master_s *dev,
           leave_critical_section(irqs);
         }
 
-#ifndef CONFIG_IPL2
+#ifndef CONFIG_LC823450_IPL2
       i2cerr("ERROR: I2C timed out (dev=%xh)\n", msgs->addr);
 #endif
     }
@@ -1102,7 +1107,7 @@ FAR struct i2c_master_s *lc823450_i2cbus_initialize(int port)
         break;
 #endif
     default:
-      ASSERT(false);
+      DEBUGASSERT(false);
       return NULL;
     }
 
@@ -1114,9 +1119,9 @@ FAR struct i2c_master_s *lc823450_i2cbus_initialize(int port)
 
   if ((volatile int)priv->refs++ == 0)
     {
-      sem_init(&priv->sem_excl, 0, 1);
+      nxsem_init(&priv->sem_excl, 0, 1);
 #ifndef CONFIG_I2C_POLLED
-      sem_init(&priv->sem_isr, 0, 0);
+      nxsem_init(&priv->sem_isr, 0, 0);
 #endif
       (void)lc823450_i2c_init(priv, port);
     }
@@ -1139,7 +1144,7 @@ int lc823450_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
   irqstate_t flags;
   int port = -1;
 
-  ASSERT(dev);
+  DEBUGASSERT(dev);
 
   /* Decrement refs and check for underflow */
 
@@ -1184,9 +1189,9 @@ int lc823450_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
 
   /* Release unused resources */
 
-  sem_destroy(&priv->sem_excl);
+  nxsem_destroy(&priv->sem_excl);
 #ifndef CONFIG_I2C_POLLED
-  sem_destroy(&priv->sem_isr);
+  nxsem_destroy(&priv->sem_isr);
 #endif
 
   return OK;

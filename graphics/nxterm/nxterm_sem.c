@@ -1,7 +1,7 @@
 /****************************************************************************
  * nuttx/graphics/nxterm/nxterm_sem.c
  *
- *   Copyright (C) 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,20 +80,20 @@ int nxterm_semwait(FAR struct nxterm_state_s *priv)
     {
       /* No.. then wait until the thread that does hold it is finished with it */
 
-      ret = sem_wait(&priv->exclsem);
+      ret = nxsem_wait(&priv->exclsem);
       if (ret == OK)
         {
           /* No I hold the semaphore */
 
           priv->holder = me;
         }
+
       return ret;
     }
 
   /* Abort, abort, abort!  I have been re-entered */
 
-  set_errno(EBUSY);
-  return ERROR;
+  return -EBUSY;
 }
 
 int nxterm_sempost(FAR struct nxterm_state_s *priv)
@@ -102,12 +102,12 @@ int nxterm_sempost(FAR struct nxterm_state_s *priv)
 
   /* Make sure that I really hold the semaphore */
 
-  ASSERT(priv->holder == me);
+  DEBUGASSERT(priv->holder == me);
 
   /* Then let go of it */
 
   priv->holder = NO_HOLDER;
-  return sem_post(&priv->exclsem);
+  return nxsem_post(&priv->exclsem);
 }
 
 #endif /* CONFIG_DEBUG_FEATURES */

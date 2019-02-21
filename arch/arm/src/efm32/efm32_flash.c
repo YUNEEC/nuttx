@@ -258,7 +258,7 @@ int __ramfunc__ msc_load_verify_address(uint32_t *address)
 }
 
 /****************************************************************************
- * Name:msc_load_data
+ * Name: msc_load_data
  *
  * Description:
  *   Perform data phase of FLASH write cycle.
@@ -577,6 +577,11 @@ size_t up_progmem_pagesize(size_t page)
   return 0;
 }
 
+size_t up_progmem_erasesize(size_t block)
+{
+  return up_progmem_pagesize(block);
+}
+
 ssize_t up_progmem_getpage(size_t addr)
 {
 #if (EFM32_FLASH_BASE != 0)
@@ -623,7 +628,7 @@ size_t up_progmem_getaddress(size_t page)
   return SIZE_MAX;
 }
 
-size_t up_progmem_npages(void)
+size_t up_progmem_neraseblocks(void)
 {
   return EFM32_FLASH_NPAGES+EFM32_USERDATA_NPAGES;
 }
@@ -633,14 +638,14 @@ bool up_progmem_isuniform(void)
   return false;
 }
 
-ssize_t __ramfunc__ up_progmem_erasepage(size_t page)
+ssize_t __ramfunc__ up_progmem_eraseblock(size_t block)
 {
   int ret = 0;
   int timeout;
   uint32_t regval;
   irqstate_t flags;
 
-  if (page >= (EFM32_FLASH_NPAGES+EFM32_USERDATA_NPAGES))
+  if (block >= (EFM32_FLASH_NPAGES+EFM32_USERDATA_NPAGES))
     {
       return -EFAULT;
     }
@@ -655,7 +660,7 @@ ssize_t __ramfunc__ up_progmem_erasepage(size_t page)
 
   /* Load address */
 
-  putreg32((uint32_t)up_progmem_getaddress(page), EFM32_MSC_ADDRB);
+  putreg32((uint32_t)up_progmem_getaddress(block), EFM32_MSC_ADDRB);
   putreg32(MSC_WRITECMD_LADDRIM, EFM32_MSC_WRITECMD);
 
   regval = getreg32(EFM32_MSC_STATUS);
@@ -667,14 +672,14 @@ ssize_t __ramfunc__ up_progmem_erasepage(size_t page)
       ret = -EINVAL;
     }
 
-  /* Check for write protected page */
+  /* Check for write protected block */
 
   if ((ret == 0) && (regval & MSC_STATUS_LOCKED))
     {
       ret = -EPERM;
     }
 
-  /* Send erase page command */
+  /* Send erase block command */
 
   if (ret == 0)
     {
@@ -702,7 +707,7 @@ ssize_t __ramfunc__ up_progmem_erasepage(size_t page)
     {
       /* Verify */
 
-      if (up_progmem_ispageerased(page) != 0)
+      if (up_progmem_ispageerased(block) != 0)
         {
           ret = -EIO;
         }
@@ -717,7 +722,7 @@ ssize_t __ramfunc__ up_progmem_erasepage(size_t page)
 
   /* Success */
 
-  return up_progmem_pagesize(page);
+  return up_progmem_erasesize(block);
 }
 
 ssize_t up_progmem_ispageerased(size_t page)

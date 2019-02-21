@@ -463,10 +463,10 @@ static inline void rcc_enableapb1(void)
 
   regval |= RCC_APB1ENR_PWREN;
 
-#if defined (CONFIG_STM32_DAC1) || defined(CONFIG_STM32_DAC2)
-  /* DAC interface clock enable */
+#if defined (CONFIG_STM32_DAC1)
+  /* DAC1 interface clock enable */
 
-  regval |= RCC_APB1ENR_DACEN;
+  regval |= RCC_APB1ENR_DAC1EN;
 #endif
 
 #ifdef CONFIG_STM32_UART7
@@ -717,7 +717,7 @@ static void stm32_stdclockconfig(void)
       regval |= STM32_RCC_CFGR_PPRE1;
       putreg32(regval, STM32_RCC_CFGR);
 
-#ifdef CONFIG_RTC_HSECLOCK
+#ifdef CONFIG_STM32_RTC_HSECLOCK
       /* Set the RTC clock divisor */
 
       regval  = getreg32(STM32_RCC_CFGR);
@@ -944,13 +944,13 @@ static void stm32_stdclockconfig(void)
         }
 #endif
 
-#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_RTC_LSICLOCK)
+#if defined(CONFIG_STM32_IWDG) || defined(CONFIG_STM32_RTC_LSICLOCK)
       /* Low speed internal clock source LSI */
 
       stm32_rcc_enablelsi();
 #endif
 
-#if defined(CONFIG_RTC_LSECLOCK)
+#if defined(CONFIG_STM32_RTC_LSECLOCK)
       /* Low speed external clock source LSE
        *
        * TODO: There is another case where the LSE needs to

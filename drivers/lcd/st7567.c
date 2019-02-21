@@ -164,12 +164,6 @@
 #  error "CONFIG_SPI_CMDDATA must be defined in your NuttX configuration"
 #endif
 
-/* Color is 1bpp monochrome with leftmost column contained in bits 0  */
-
-#ifdef CONFIG_NX_DISABLE_1BPP
-#  warning "1 bit-per-pixel support needed"
-#endif
-
 /* Color Properties *******************************************************************/
 /* The ST7567 display controller can handle a resolution of 128x64.
  */
@@ -348,7 +342,7 @@ static struct st7567_dev_s g_st7567dev =
  * Description:
  *   Select the SPI, locking and  re-configuring if necessary
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -385,7 +379,7 @@ static void st7567_select(FAR struct spi_dev_s *spi)
  * Description:
  *   De-select the SPI
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -480,7 +474,7 @@ static int st7567_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *buff
   fbmask  = 1 << (row & 7);
   fbptr   = &priv->fb[page * ST7567_XRES + col];
   ptr     = fbptr;
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
   usrmask = MS_BIT;
 #else
   usrmask = LS_BIT;
@@ -501,7 +495,7 @@ static int st7567_putrun(fb_coord_t row, fb_coord_t col, FAR const uint8_t *buff
 
       /* Inc/Decrement to the next source pixel */
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
       if (usrmask == LS_BIT)
         {
           buffer++;
@@ -628,7 +622,7 @@ static int st7567_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
 
   fbmask  = 1 << (row & 7);
   fbptr   = &priv->fb[page * ST7567_XRES + col];
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
   usrmask = MS_BIT;
 #else
   usrmask = LS_BIT;
@@ -650,7 +644,7 @@ static int st7567_getrun(fb_coord_t row, fb_coord_t col, FAR uint8_t *buffer,
        * this!
        */
 
-#ifdef CONFIG_NX_PACKEDMSFIRST
+#ifdef CONFIG_LCD_PACKEDMSFIRST
       if (usrmask == LS_BIT)
         {
           buffer++;

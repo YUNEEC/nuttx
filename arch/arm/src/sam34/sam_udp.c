@@ -61,6 +61,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbdev.h>
 #include <nuttx/usb/usbdev_trace.h>
@@ -2524,7 +2525,7 @@ static void sam_resume(struct sam_usbdev_s *priv)
 /****************************************************************************
  * Name: sam_ep_reset
  *
- * Description
+ * Description:
  *   Reset and disable one endpoints.
  *
  ****************************************************************************/
@@ -2564,7 +2565,7 @@ static void sam_ep_reset(struct sam_usbdev_s *priv, uint8_t epno)
 /****************************************************************************
  * Name: sam_epset_reset
  *
- * Description
+ * Description:
  *   Reset and disable a set of endpoints.
  *
  ****************************************************************************/
@@ -3523,7 +3524,7 @@ static int sam_wakeup(struct usbdev_s *dev)
 
   /* Wait 5msec in case we just entered the resume state */
 
-  usleep(5*1000);
+  nxsig_usleep(5*1000);
 
   /* Set the ESR bit to send the remote resume */
 

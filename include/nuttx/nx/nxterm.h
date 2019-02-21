@@ -57,10 +57,6 @@
 #  warning "NX is not enabled (CONFIG_NX)
 #endif
 
-#ifndef CONFIG_NX_MULTIUSER
-#  warning "NX Console requires multi-user support (CONFIG_NX_MULTIUSER)"
-#endif
-
 /* Nx Console configuration options:
  *
  * CONFIG_NXTERM
@@ -233,7 +229,7 @@ extern "C"
  *     nxtool_register() returns.
  *   minor - The device minor number
  *
- * Return:
+ * Returned Value:
  *   A non-NULL handle is returned on success.
  *
  ****************************************************************************/
@@ -256,7 +252,7 @@ NXTERM nx_register(NXWINDOW hwnd, FAR struct nxterm_window_s *wndo,
  *     nxtool_register() returns.
  *   minor - The device minor number
  *
- * Return:
+ * Returned Value:
  *   A non-NULL handle is returned on success.
  *
  ****************************************************************************/
@@ -281,7 +277,7 @@ NXTERM nxtk_register(NXTKWINDOW hfwnd, FAR struct nxterm_window_s *wndo,
  *     nxtool_register() returns.
  *   minor - The device minor number
  *
- * Return:
+ * Returned Value:
  *   A non-NULL handle is returned on success.
  *
  ****************************************************************************/

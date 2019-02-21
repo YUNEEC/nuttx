@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/z80sim/src/z80_serial.c
  *
- *   Copyright (C) 2007-2009, 2012 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,15 +55,7 @@
 #include "up_arch.h"
 #include "up_internal.h"
 
-#ifdef USE_SERIALDRIVER
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
+#if defined(USE_SERIALDRIVER) && CONFIG_NFILE_DESCRIPTORS > 0
 
 /****************************************************************************
  * Private Function Prototypes
@@ -215,8 +207,7 @@ static void up_detach(FAR struct uart_dev_s *dev)
 
 static int up_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
-  *get_errno_ptr() = ENOTTY;
-  return ERROR;
+  return -ENOTTY;
 }
 
 /****************************************************************************
@@ -344,7 +335,8 @@ void up_serialinit(void)
   (void)uart_register("/dev/console", &g_uartport);
   (void)uart_register("/dev/ttyS0", &g_uartport);
 }
-#endif /* USE_SERIALDRIVER */
+
+#endif /* USE_SERIALDRIVER && CONFIG_NFILE_DESCRIPTORS > 0 */
 
 /****************************************************************************
  * Name: up_putc

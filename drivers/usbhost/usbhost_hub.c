@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_hub.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Kaushal Parikh <kaushal@dspworks.in>
  *           Gregory Nutt <gnutt@nuttx.org>
  *
@@ -51,6 +51,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/arch.h>
+#include <nuttx/signal.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/clock.h>
 
@@ -221,7 +222,7 @@ static struct usbhost_registry_s g_hub =
  * Input Parameters:
  *   hport - A reference to the hub port instance to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -263,7 +264,7 @@ static void usbhost_hport_deactivate(FAR struct usbhost_hubport_s *hport)
  * Input Parameters:
  *   hport - The hub port to be activated.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero (OK) is returned on success; a negated errno value is returned
  *   on any failure.
  *
@@ -307,7 +308,7 @@ static int usbhost_hport_activate(FAR struct usbhost_hubport_s *hport)
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -495,7 +496,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_class_s *hubclass,
  * Input Parameters:
  *   hubclass - The USB host class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -597,7 +598,7 @@ static inline int usbhost_hubdesc(FAR struct usbhost_class_s *hubclass)
  *   hport - The port on the parent hub where the this hub is connected.
  *   on - True: enable power; false: Disable power
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -660,7 +661,7 @@ static int usbhost_hubpwr(FAR struct usbhost_hubpriv_s *priv,
  * Input Parameters:
  *   xfer - The USB host class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -834,7 +835,7 @@ static void usbhost_hub_event(FAR void *arg)
                 }
 
               debouncetime += 25;
-              usleep(25*1000);
+              nxsig_usleep(25*1000);
             }
 
           if (ret < 0 || debouncetime >= 1500)
@@ -862,7 +863,7 @@ static void usbhost_hub_event(FAR void *arg)
                   continue;
                 }
 
-              usleep(100*1000);
+              nxsig_usleep(100*1000);
 
               ctrlreq->type = USB_REQ_DIR_IN | USBHUB_REQ_TYPE_PORT;
               ctrlreq->req  = USBHUB_REQ_GETSTATUS;
@@ -1009,7 +1010,7 @@ static void usbhost_hub_event(FAR void *arg)
  *   class - The USB host class entry previously obtained from a call to
  *     create().
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -1089,7 +1090,7 @@ static void usbhost_disconnect_event(FAR void *arg)
 
   /* Destroy the semaphores */
 
-  sem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->exclsem);
 
   /* Disconnect the USB host device */
 
@@ -1111,7 +1112,7 @@ static void usbhost_disconnect_event(FAR void *arg)
  * Input Parameters:
  *   val - A pointer to the first byte of the little endian value.
  *
- * Returned Values:
+ * Returned Value:
  *   A uint16_t representing the whole 16-bit integer value
  *
  ****************************************************************************/
@@ -1131,7 +1132,7 @@ static inline uint16_t usbhost_getle16(const uint8_t *val)
  *   dest - A pointer to the first byte to save the little endian value.
  *   val - The 16-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1153,7 +1154,7 @@ static void usbhost_putle16(uint8_t *dest, uint16_t val)
  *   nbytes - The number of bytes actually transferred (or a negated errno
  *     value;
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -1243,7 +1244,7 @@ static void usbhost_callback(FAR void *arg, ssize_t nbytes)
  *   id - In the case where the device supports multiple base classes,
  *     subclasses, or protocols, this specifies which to configure for.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s that can be used by the USB host driver to communicate
  *   with the USB host class.  NULL is returned on failure; this function
@@ -1302,7 +1303,7 @@ static FAR struct usbhost_class_s *
 
   /* Initialize semaphores (this works okay in the interrupt context) */
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
 
   /* Initialize per-port data */
 
@@ -1350,7 +1351,7 @@ errout_with_hub:
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1438,7 +1439,7 @@ static int usbhost_connect(FAR struct usbhost_class_s *hubclass,
  *   class - The USB host class entry previously obtained from a call to
  *     create().
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -1496,7 +1497,7 @@ static int usbhost_disconnected(struct usbhost_class_s *hubclass)
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   On success this function will return zero (OK);  A negated errno value
  *   will be returned on failure.
  *

@@ -1,7 +1,8 @@
 /****************************************************************************
  * config/olimex-strp711/src/str71_spi.c
  *
- *   Copyright (C) 2008-2010, 2012, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008-2010, 2012, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -568,26 +569,31 @@ static inline void spi_drain(FAR struct str71x_spidev_s *priv)
 static int spi_lock(FAR struct spi_dev_s *dev, bool lock)
 {
   FAR struct str71x_spidev_s *priv = (FAR struct str71x_spidev_s *)dev;
+  int ret;
 
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
+          ret = nxsem_wait(&priv->exclsem);
+
           /* The only case that an error should occur here is if the wait
            * was awakened by a signal.
            */
 
-          DEBUGASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -946,7 +952,7 @@ static void spi_recvblock(FAR struct spi_dev_s *dev, FAR void *buffer, size_t bu
  *   Initialize the selected SPI port.  This function could get called
  *   multiple times for each STR7 devices that needs an SPI reference.
  *
- * Input Parameter:
+ * Input Parameters:
  *   Port number (for hardware that has mutiple SPI interfaces)
  *
  * Returned Value:

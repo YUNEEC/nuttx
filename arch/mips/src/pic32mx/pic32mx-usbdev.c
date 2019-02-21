@@ -1031,7 +1031,8 @@ static void pic32mx_delayedrestart(struct pic32mx_usbdev_s *priv, uint8_t epno)
 
   /* And start (or re-start) the watchdog timer */
 
-  wd_start(priv->wdog, RESTART_DELAY, pic32mx_rqrestart, 1, (uint32_t)priv);
+  (void)wd_start(priv->wdog, RESTART_DELAY, pic32mx_rqrestart, 1,
+                 (uint32_t)priv);
 }
 
 /****************************************************************************
@@ -1784,7 +1785,7 @@ static void pic32mx_eptransfer(struct pic32mx_usbdev_s *priv, uint8_t epno,
  * Name: pic32mx_ep0nextsetup
  *
  * Description:
- *   This function is called (1) after sucessful completion of an EP0 Setup
+ *   This function is called (1) after successful completion of an EP0 Setup
  *   command, or (2) after receipt of the OUT complete event (for simple
  *   transfers).  It simply sets up the single BDT to accept the next
  *   SETUP commend.

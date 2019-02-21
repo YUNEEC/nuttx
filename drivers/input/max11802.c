@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/input/max11802.c
  *
- *   Copyright (C) 2011-2012, 2014-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2014-2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *            Petteri Aimonen <jpa@nx.mail.kapsi.fi>
  *
@@ -104,7 +104,7 @@ static int max11802_sample(FAR struct max11802_dev_s *priv,
 static int max11802_waitsample(FAR struct max11802_dev_s *priv,
                                FAR struct max11802_sample_s *sample);
 static void max11802_worker(FAR void *arg);
-static int max11802_interrupt(int irq, FAR void *context);
+static int max11802_interrupt(int irq, FAR void *context, FAR void *arg);
 
 /* Character driver methods */
 
@@ -166,7 +166,7 @@ static struct max11802_dev_s *g_max11802list;
  *   to assure: (1) exclusive access to the SPI bus, and (2) to assure that
  *   the shared bus is properly configured for the touchscreen controller.
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -202,7 +202,7 @@ static void max11802_lock(FAR struct spi_dev_s *spi)
  *   Un-lock the SPI bus after each transfer, possibly losing the current
  *   configuration if we are sharing the SPI bus with other devices
  *
- * Parameters:
+ * Input Parameters:
  *   spi  - Reference to the SPI driver structure
  *
  * Returned Value:
@@ -270,7 +270,7 @@ static void max11802_notify(FAR struct max11802_dev_s *priv)
        * is no longer available.
        */
 
-      sem_post(&priv->waitsem);
+      nxsem_post(&priv->waitsem);
     }
 
   /* If there are threads waiting on poll() for MAX11802 data to become
@@ -287,7 +287,7 @@ static void max11802_notify(FAR struct max11802_dev_s *priv)
         {
           fds->revents |= POLLIN;
           iinfo("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 #endif
@@ -373,7 +373,7 @@ static int max11802_waitsample(FAR struct max11802_dev_s *priv,
    * run, but they cannot run yet because pre-emption is disabled.
    */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
   /* Try to get the a sample... if we cannot, then wait on the semaphore
    * that is posted when new sample data is available.
@@ -385,7 +385,7 @@ static int max11802_waitsample(FAR struct max11802_dev_s *priv,
 
       iinfo("Waiting..\n");
       priv->nwaiters++;
-      ret = sem_wait(&priv->waitsem);
+      ret = nxsem_wait(&priv->waitsem);
       priv->nwaiters--;
 
       if (ret < 0)
@@ -394,9 +394,8 @@ static int max11802_waitsample(FAR struct max11802_dev_s *priv,
            * the failure now.
            */
 
-          ierr("ERROR: sem_wait: %d\n", errno);
-          DEBUGASSERT(errno == EINTR);
-          ret = -EINTR;
+          ierr("ERROR: nxsem_wait: %d\n", ret);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
           goto errout;
         }
     }
@@ -408,7 +407,7 @@ static int max11802_waitsample(FAR struct max11802_dev_s *priv,
    * sample.  Interrupts and pre-emption will be re-enabled while we wait.
    */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
 
 errout:
   /* Then re-enable interrupts.  We might get interrupt here and there
@@ -497,7 +496,7 @@ static void max11802_worker(FAR void *arg)
   int                           ret;
   int                           tags, tags2;
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 
   /* Get a pointer the callbacks for convenience (and so the code is not so
    * ugly).
@@ -524,15 +523,15 @@ static void max11802_worker(FAR void *arg)
 
   do
     {
-      ret = sem_wait(&priv->devsem);
+      ret = nxsem_wait(&priv->devsem);
 
       /* This should only fail if the wait was cancelled by an signal
        * (and the worker thread will receive a lot of signals).
        */
 
-      DEBUGASSERT(ret == OK || errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
-  while (ret < 0);
+  while (ret == -EINTR);
 
   /* Check for pen up or down by reading the PENIRQ GPIO. */
 
@@ -593,8 +592,8 @@ static void max11802_worker(FAR void *arg)
 
        iinfo("Previous pen up event still in buffer\n");
        max11802_notify(priv);
-       wd_start(priv->wdog, MAX11802_WDOG_DELAY, max11802_wdog, 1,
-                (uint32_t)priv);
+       (void)wd_start(priv->wdog, MAX11802_WDOG_DELAY, max11802_wdog, 1,
+                      (uint32_t)priv);
        goto ignored;
     }
   else
@@ -633,8 +632,8 @@ static void max11802_worker(FAR void *arg)
 
       /* Continue to sample the position while the pen is down */
 
-      wd_start(priv->wdog, MAX11802_WDOG_DELAY, max11802_wdog, 1,
-               (uint32_t)priv);
+      (void)wd_start(priv->wdog, MAX11802_WDOG_DELAY, max11802_wdog, 1,
+                     (uint32_t)priv);
 
       /* Check if data is valid */
 
@@ -704,7 +703,7 @@ ignored:
 
   /* Release our lock on the state structure and unlock the SPI bus */
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   max11802_unlock(priv->spi);
 }
 
@@ -712,7 +711,7 @@ ignored:
  * Name: max11802_interrupt
  ****************************************************************************/
 
-static int max11802_interrupt(int irq, FAR void *context)
+static int max11802_interrupt(int irq, FAR void *context, FAR void *arg)
 {
   FAR struct max11802_dev_s    *priv;
   FAR struct max11802_config_s *config;
@@ -727,7 +726,7 @@ static int max11802_interrupt(int irq, FAR void *context)
        priv && priv->configs->irq != irq;
        priv = priv->flink);
 
-  ASSERT(priv != NULL);
+  DEBUGASSERT(priv != NULL);
 #endif
 
   /* Get a pointer the callbacks for convenience (and so the code is not so
@@ -769,13 +768,13 @@ static int max11802_open(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Increment the reference count */
@@ -798,7 +797,7 @@ static int max11802_open(FAR struct file *filep)
   priv->crefs = tmp;
 
 errout_with_sem:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 #else
   iinfo("Opening\n");
@@ -826,13 +825,13 @@ static int max11802_close(FAR struct file *filep)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Decrement the reference count unless it would decrement a negative
@@ -845,7 +844,7 @@ static int max11802_close(FAR struct file *filep)
       priv->crefs--;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 #endif
   iinfo("Closing\n");
   return OK;
@@ -887,14 +886,14 @@ static ssize_t max11802_read(FAR struct file *filep, FAR char *buffer,
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was cancelled by an signal */
 
-      ierr("ERROR: sem_wait: %d\n", errno);
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      ierr("ERROR: nxsem_wait: %d\n", ret);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Try to read sample data. */
@@ -976,13 +975,13 @@ static ssize_t max11802_read(FAR struct file *filep, FAR char *buffer,
   ret = SIZEOF_TOUCH_SAMPLE_S(1);
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   iinfo("Returning: %d\n", ret);
   return ret;
 }
 
 /****************************************************************************
- * Name:max11802_ioctl
+ * Name: max11802_ioctl
  ****************************************************************************/
 
 static int max11802_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
@@ -1000,13 +999,13 @@ static int max11802_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
   /* Get exclusive access to the driver data structure */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   /* Process the IOCTL by command */
@@ -1034,7 +1033,7 @@ static int max11802_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
         break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -1060,13 +1059,13 @@ static int max11802_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   /* Are we setting up the poll?  Or tearing it down? */
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
       /* This should only happen if the wait was canceled by an signal */
 
-      DEBUGASSERT(errno == EINTR);
-      return -EINTR;
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
+      return ret;
     }
 
   if (setup)
@@ -1125,7 +1124,7 @@ static int max11802_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 errout:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif
@@ -1193,14 +1192,14 @@ int max11802_register(FAR struct spi_dev_s *spi,
 
   /* Initialize semaphores */
 
-  sem_init(&priv->devsem,  0, 1);    /* Initialize device structure semaphore */
-  sem_init(&priv->waitsem, 0, 0);    /* Initialize pen event wait semaphore */
+  nxsem_init(&priv->devsem,  0, 1);    /* Initialize device structure semaphore */
+  nxsem_init(&priv->waitsem, 0, 0);    /* Initialize pen event wait semaphore */
 
   /* The pen event semaphore is used for signaling and, hence, should not
    * have priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Make sure that interrupts are disabled */
 
@@ -1236,6 +1235,11 @@ int max11802_register(FAR struct spi_dev_s *spi,
   SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), false);
 
   SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), true);
+  (void)SPI_SEND(priv->spi, MAX11802_CMD_SAMPLE_WR);
+  (void)SPI_SEND(priv->spi, MAX11802_SAMPLE);
+  SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), false);
+
+  SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), true);
   (void)SPI_SEND(priv->spi, MAX11802_CMD_TIMING_WR);
   (void)SPI_SEND(priv->spi, MAX11802_TIMING);
   SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), false);
@@ -1243,6 +1247,11 @@ int max11802_register(FAR struct spi_dev_s *spi,
   SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), true);
   (void)SPI_SEND(priv->spi, MAX11802_CMD_DELAY_WR);
   (void)SPI_SEND(priv->spi, MAX11802_DELAY);
+  SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), false);
+
+  SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), true);
+  (void)SPI_SEND(priv->spi, MAX11802_CMD_PULL_WR);
+  (void)SPI_SEND(priv->spi, MAX11802_PULL);
   SPI_SELECT(priv->spi, SPIDEV_TOUCHSCREEN(0), false);
 
   /* Test that the device access was successful. */
@@ -1302,7 +1311,7 @@ int max11802_register(FAR struct spi_dev_s *spi,
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->devsem);
 #ifdef CONFIG_MAX11802_MULTIPLE
   kmm_free(priv);
 #endif

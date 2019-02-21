@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_xdmac.c
  *
- *   Copyright (C) 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -370,21 +370,26 @@ static struct sam_xdmac_s g_xdmac;
 
 static void sam_takechsem(struct sam_xdmac_s *xdmac)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&xdmac->chsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&xdmac->chsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givechsem(struct sam_xdmac_s *xdmac)
 {
-  (void)sem_post(&xdmac->chsem);
+  (void)nxsem_post(&xdmac->chsem);
 }
 
 /****************************************************************************
@@ -397,21 +402,26 @@ static inline void sam_givechsem(struct sam_xdmac_s *xdmac)
 
 static void sam_takedsem(struct sam_xdmac_s *xdmac)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&xdmac->dsem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&xdmac->dsem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static inline void sam_givedsem(struct sam_xdmac_s *xdmac)
 {
-  (void)sem_post(&xdmac->dsem);
+  (void)nxsem_post(&xdmac->dsem);
 }
 
 /****************************************************************************
@@ -971,7 +981,7 @@ static inline uint32_t sam_rxcc(struct sam_xdmach_s *xdmach)
       /* Look up the DMA channel code for RX:  Peripheral is the source. */
 
       field   = sam_source_channel(xdmach, pid);
-      regval |= (field << XDMACH_CC_CSIZE_SHIFT);
+      regval |= (field << XDMACH_CC_PERID_SHIFT);
 
 #if 0 /* Not supported */
       /* 10. Set SWREQ to use software request (only relevant for a
@@ -1586,8 +1596,14 @@ void sam_dmainitialize(struct sam_xdmac_s *xdmac)
 
   /* Initialize semaphores */
 
-  sem_init(&xdmac->chsem, 0, 1);
-  sem_init(&xdmac->dsem, 0, SAMV7_NDMACHAN);
+  nxsem_init(&xdmac->chsem, 0, 1);
+  nxsem_init(&xdmac->dsem, 0, SAMV7_NDMACHAN);
+
+  /* The 'dsem' is used for signaling rather than mutual exclusion and,
+   * hence, should not have priority inheritance enabled.
+   */
+
+  nxsem_setprotocol(&xdmac->dsem, SEM_PRIO_NONE);
 }
 
 /****************************************************************************
@@ -1595,7 +1611,7 @@ void sam_dmainitialize(struct sam_xdmac_s *xdmac)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_dmainitialize
+ * Name: up_dma_initialize
  *
  * Description:
  *   Initialize the DMA subsystem
@@ -1605,7 +1621,7 @@ void sam_dmainitialize(struct sam_xdmac_s *xdmac)
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
   dmainfo("Initialize XDMAC\n");
 

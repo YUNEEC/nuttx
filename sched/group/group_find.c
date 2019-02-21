@@ -65,10 +65,10 @@
  *   group can disappear at any time leaving a stale pointer; an ID is cleaner
  *   because if the group disappears, this function will fail gracefully.
  *
- * Parameters:
+ * Input Parameters:
  *   gid - The group ID to find.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a pointer to the group task structure is returned.  This
  *   function can fail only if there is no group that corresponds to the
  *   group ID.
@@ -111,10 +111,10 @@ FAR struct task_group_s *group_findbygid(gid_t gid)
  *   task ID.  That task's ID is retained in the group as tg_task and will
  *   be remember even if the main task thread leaves the group.
  *
- * Parameters:
+ * Input Parameters:
  *   pid - The task ID of the main task thread.
  *
- * Return Value:
+ * Returned Value:
  *   On success, a pointer to the group task structure is returned.  This
  *   function can fail only if there is no group that corresponds to the
  *   task ID.

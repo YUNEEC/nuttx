@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/wireless/ieee80211/bcmf_sdio.h
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Simon Piriou <spiriou31@gmail.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,21 +33,28 @@
  *
  ****************************************************************************/
 
+#ifndef __DRIVERS_WIRELESS_IEEE80211_BCMF_SDIO_H
+#define __DRIVERS_WIRELESS_IEEE80211_BCMF_SDIO_H
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
-#ifndef __DRIVERS_WIRELESS_IEEE80211_BCMF_SDIO_H
-#define __DRIVERS_WIRELESS_IEEE80211_BCMF_SDIO_H
+#include <nuttx/config.h>
 
-#include "bcmf_driver.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <queue.h>
 #include <semaphore.h>
+
 #include <nuttx/sdio.h>
 
+#include "bcmf_driver.h"
 #include "bcmf_sdio_core.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 #define HEADER_SIZE        0x12 /* Default sdpcm + bdc header size */
 // TODO move to Kconfig
@@ -57,21 +64,30 @@
  * Public Types
  ****************************************************************************/
 
-/* sdio chip configuration structure */
+/* SDIO chip configuration structure */
 
 struct bcmf_sdio_chip
 {
   uint32_t ram_size;
   uint32_t core_base[MAX_CORE_ID];
 
-  uint8_t      *firmware_image;
-  unsigned int *firmware_image_size;
+  /* In-memory file images */
 
-  uint8_t      *nvram_image;
-  unsigned int *nvram_image_size;
+  FAR uint8_t *nvram_image;
+  FAR unsigned int *nvram_image_size;
+
+#ifndef CONFIG_IEEE80211_BROADCOM_FWFILES
+  FAR uint8_t *firmware_image;
+  FAR unsigned int *firmware_image_size;
+
+#ifdef CONFIG_IEEE80211_BROADCOM_HAVE_CLM
+  FAR uint8_t *clm_blob_image;
+  FAR unsigned int *clm_blob_image_size;
+#endif
+#endif
 };
 
-/* sdio bus structure extension */
+/* SDIO bus structure extension */
 
 struct bcmf_sdio_dev_s
 {
@@ -79,6 +95,7 @@ struct bcmf_sdio_dev_s
   FAR struct sdio_dev_s *sdio_dev; /* The SDIO device bound to this instance */
   int minor;                       /* Device minor number */
 
+  int  cur_chip_id;                /* Chip ID read from the card */
   struct bcmf_sdio_chip *chip;     /* Chip specific configuration */
 
   volatile bool ready;             /* Current device status */
@@ -111,7 +128,7 @@ struct bcmf_sdio_frame
   struct bcmf_frame_s header;
   bool                tx;
   dq_entry_t          list_entry;
-  uint8_t             data[HEADER_SIZE + MAX_NET_DEV_MTU +
+  uint8_t             data[HEADER_SIZE + MAX_NETDEV_PKTSIZE +
                            CONFIG_NET_GUARDSIZE];
 };
 

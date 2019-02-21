@@ -1,7 +1,8 @@
 /****************************************************************************
  *  sched/mqueue/mq_rcvinternal.c
  *
- *   Copyright (C) 2007, 2008, 2012-2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007, 2008, 2012-2013, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,104 +61,102 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_verifyreceive
+ * Name: nxmq_verify_receive
  *
  * Description:
- *   This is internal, common logic shared by both mq_receive and
- *   mq_timedreceive.  This function verifies the input parameters that are
- *   common to both functions.
+ *   This is internal, common logic shared by both [nx]mq_receive and
+ *   [nx]mq_timedreceive.  This function verifies the input parameters that
+ *   are common to both functions.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message Queue Descriptor
  *   msg - Buffer to receive the message
  *   msglen - Size of the buffer in bytes
  *
- * Return Value:
- *   One success, 0 (OK) is returned. On failure, -1 (ERROR) is returned and
- *   the errno is set appropriately:
+ * Returned Value:
+ *   One success, zero (OK) is returned.  A negated errno value is returned
+ *   on any failure:
  *
  *   EPERM    Message queue opened not opened for reading.
  *   EMSGSIZE 'msglen' was less than the maxmsgsize attribute of the message
  *            queue.
  *   EINVAL   Invalid 'msg' or 'mqdes'
  *
- * Assumptions:
- *
  ****************************************************************************/
 
-int mq_verifyreceive(mqd_t mqdes, FAR char *msg, size_t msglen)
+int nxmq_verify_receive(mqd_t mqdes, FAR char *msg, size_t msglen)
 {
   /* Verify the input parameters */
 
   if (!msg || !mqdes)
     {
-      set_errno(EINVAL);
-      return ERROR;
+      return -EINVAL;
     }
 
   if ((mqdes->oflags & O_RDOK) == 0)
     {
-      set_errno(EPERM);
-      return ERROR;
+      return -EPERM;
     }
 
   if (msglen < (size_t)mqdes->msgq->maxmsgsize)
     {
-      set_errno(EMSGSIZE);
-      return ERROR;
+      return -EMSGSIZE;
     }
 
   return OK;
 }
 
 /****************************************************************************
- * Name: mq_waitreceive
+ * Name: nxmq_wait_receive
  *
  * Description:
- *   This is internal, common logic shared by both mq_receive and
- *   mq_timedreceive.  This function waits for a message to be received on
- *   the specified message queue, removes the message from the queue, and
+ *   This is internal, common logic shared by both [nx]mq_receive and
+ *   [nx]mq_timedreceive.  This function waits for a message to be received
+ *   on the specified message queue, removes the message from the queue, and
  *   returns it.
  *
- * Parameters:
- *   mqdes - Message queue descriptor
+ * Input Parameters:
+ *   mqdes  - Message queue descriptor
+ *   rcvmsg - The caller-provided location in which to return the newly
+ *            received message.
  *
- * Return Value:
- *   On success, a reference to the received message.  If the wait was
- *   interrupted by a signal or a timeout, then the errno will be set
- *   appropriately and NULL will be returned.
+ * Returned Value:
+ *   One success, zero (OK) is returned.  A negated errno value is returned
+ *   on any failure.
  *
  * Assumptions:
  * - The caller has provided all validity checking of the input parameters
- *   using mq_verifyreceive.
+ *   using nxmq_verify_receive.
  * - Interrupts should be disabled throughout this call.  This is necessary
  *   because messages can be sent from interrupt level processing.
  * - For mq_timedreceive, setting of the timer and this wait must be atomic.
  *
  ****************************************************************************/
 
-FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
+int nxmq_wait_receive(mqd_t mqdes, FAR struct mqueue_msg_s **rcvmsg)
 {
   FAR struct tcb_s *rtcb;
   FAR struct mqueue_inode_s *msgq;
-  FAR struct mqueue_msg_s *rcvmsg;
+  FAR struct mqueue_msg_s *newmsg;
+  int ret;
 
-  /* mq_waitreceive() is not a cancellation point, but it is always called
-   * from a cancellation point.
+  DEBUGASSERT(rcvmsg != NULL);
+  *rcvmsg = NULL;  /* Assume failure */
+
+#ifdef CONFIG_CANCELLATION_POINTS
+  /* nxmq_wait_receive() is not a cancellation point, but it may be called
+   * from mq_receive() or mq_timedreceive() which are cancellation point.
    */
 
-  if (enter_cancellation_point())
+  if (check_cancellation_point())
     {
-#ifdef CONFIG_CANCELLATION_POINTS
       /* If there is a pending cancellation, then do not perform
        * the wait.  Exit now with ECANCELED.
        */
 
-      set_errno(ECANCELED);
-      leave_cancellation_point();
-      return NULL;
-#endif
+      return -ECANCELED;
     }
+#endif
 
   /* Get a pointer to the message queue */
 
@@ -165,7 +164,7 @@ FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
 
   /* Get the message from the head of the queue */
 
-  while ((rcvmsg = (FAR struct mqueue_msg_s *)sq_remfirst(&msgq->msglist)) == NULL)
+  while ((newmsg = (FAR struct mqueue_msg_s *)sq_remfirst(&msgq->msglist)) == NULL)
     {
       /* The queue is empty!  Should we block until there the above condition
        * has been satisfied?
@@ -173,13 +172,26 @@ FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
 
       if ((mqdes->oflags & O_NONBLOCK) == 0)
         {
+          int saved_errno;
+
           /* Yes.. Block and try again */
 
-          rtcb = this_task();
+          rtcb           = this_task();
           rtcb->msgwaitq = msgq;
           msgq->nwaitnotempty++;
 
-          set_errno(OK);
+          /* "Borrow" the per-task errno to communication wake-up error
+           * conditions.
+           */
+
+          saved_errno    = rtcb->pterrno;
+          rtcb->pterrno  = OK;
+
+          /* Make sure this is not the idle task, descheduling that
+           * isn't going to end well.
+           */
+
+          DEBUGASSERT(NULL != rtcb->flink);
           up_block_task(rtcb, TSTATE_WAIT_MQNOTEMPTY);
 
           /* When we resume at this point, either (1) the message queue
@@ -188,9 +200,12 @@ FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
            * errno value (should be either EINTR or ETIMEDOUT).
            */
 
-          if (get_errno() != OK)
+          ret            = rtcb->pterrno;
+          rtcb->pterrno  = saved_errno;
+
+          if (ret != OK)
             {
-              break;
+              return -ret;
             }
         }
       else
@@ -199,8 +214,7 @@ FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
            * message queue description referred to by 'mqdes'.
            */
 
-          set_errno(EAGAIN);
-          break;
+          return -EAGAIN;
         }
     }
 
@@ -208,45 +222,45 @@ FAR struct mqueue_msg_s *mq_waitreceive(mqd_t mqdes)
    * the queue while we are still in the critical section
    */
 
-  if (rcvmsg)
+  if (newmsg)
     {
       msgq->nmsgs--;
     }
 
-  leave_cancellation_point();
-  return rcvmsg;
+  *rcvmsg = newmsg;
+  return OK;
 }
 
 /****************************************************************************
- * Name: mq_doreceive
+ * Name: nxmq_do_receive
  *
  * Description:
- *   This is internal, common logic shared by both mq_receive and
- *   mq_timedreceive.  This function accepts the message obtained by
+ *   This is internal, common logic shared by both [nx]mq_receive and
+ *   [nx]mq_timedreceive.  This function accepts the message obtained by
  *   mq_waitmsg, provides the message content to the user, notifies any
  *   threads that were waiting for the message queue to become non-full,
  *   and disposes of the message structure
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor
  *   mqmsg   - The message obtained by mq_waitmsg()
  *   ubuffer - The address of the user provided buffer to receive the message
  *   prio    - The user-provided location to return the message priority.
  *
- * Return Value:
+ * Returned Value:
  *   Returns the length of the received message.  This function does not fail.
  *
  * Assumptions:
  * - The caller has provided all validity checking of the input parameters
- *   using mq_verifyreceive.
+ *   using nxmq_verify_receive.
  * - The user buffer, ubuffer, is known to be large enough to accept the
  *   largest message that an be sent on this message queue
  * - Pre-emption should be disabled throughout this call.
  *
  ****************************************************************************/
 
-ssize_t mq_doreceive(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg,
-                     FAR char *ubuffer, int *prio)
+ssize_t nxmq_do_receive(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg,
+                        FAR char *ubuffer, int *prio)
 {
   FAR struct tcb_s *btcb;
   irqstate_t flags;
@@ -270,7 +284,7 @@ ssize_t mq_doreceive(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg,
 
   /* We are done with the message.  Deallocate it now. */
 
-  mq_msgfree(mqmsg);
+  nxmq_free_msg(mqmsg);
 
   /* Check if any tasks are waiting for the MQ not full event. */
 
@@ -293,7 +307,7 @@ ssize_t mq_doreceive(mqd_t mqdes, FAR struct mqueue_msg_s *mqmsg,
        * time the task is unblocked
        */
 
-      ASSERT(btcb);
+      DEBUGASSERT(btcb != NULL);
 
       btcb->msgwaitq = NULL;
       msgq->nwaitnotfull--;

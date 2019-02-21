@@ -89,18 +89,8 @@ config GRAN
 		more losses of memory due to alignment and quantization waste.
 
 		NOTE: The current implementation also restricts the maximum
-		allocation size to 32 granaules.  That restriction could be
+		allocation size to 32 granules.  That restriction could be
 		eliminated with some additional coding effort.
-
-config GRAN_SINGLE
-	bool "Single Granule Allocator"
-	default n
-	depends on GRAN
-	---help---
-		Select if there is only one instance of the granule allocator (i.e.,
-		gran_initialize will be called only once. In this case, (1) there
-		are a few optimizations that can can be done and (2) the GRAN_HANDLE
-		is not needed.
 
 config GRAN_INTR
 	bool "Interrupt level support"
@@ -157,5 +147,12 @@ config MM_SHM
 	---help---
 		Build in support for the shared memory interfaces shmget(), shmat(),
 		shmctl(), and shmdt().
+
+config MM_FILL_ALLOCATIONS
+	bool "Fill allocations with debug value"
+	default n
+	---help---
+		Fill all malloc() allocations with 0xAA. This helps
+		detecting uninitialized variable errors.
 
 source "mm/iob/Kconfig"

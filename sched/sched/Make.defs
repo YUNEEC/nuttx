@@ -1,7 +1,7 @@
 ############################################################################
 # sched/sched/Make.defs
 #
-#   Copyright (C) 2014 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2014, 2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,10 @@ CSRCS += sched_cpuselect.c sched_cpupause.c
 CSRCS += sched_getaffinity.c sched_setaffinity.c
 endif
 
+ifeq ($(CONFIG_SIG_SIGSTOP_ACTION),y)
+CSRCS += sched_suspend.c sched_continue.c
+endif
+
 ifeq ($(CONFIG_SCHED_WAITPID),y)
 CSRCS += sched_waitpid.c
 ifeq ($(CONFIG_SCHED_HAVE_PARENT),y)
@@ -66,16 +70,16 @@ CSRCS += sched_roundrobin.c
 endif
 
 ifeq ($(CONFIG_SCHED_SPORADIC),y)
-CSRCS += sched_sporadic.c sched_suspendscheduler.c
-else ifeq ($(CONFIG_SCHED_INSTRUMENTATION),y)
+CSRCS += sched_sporadic.c
+endif
+
+ifeq ($(CONFIG_SCHED_SUSPENDSCHEDULER),y)
 CSRCS += sched_suspendscheduler.c
 endif
 
 ifneq ($(CONFIG_RR_INTERVAL),0)
 CSRCS += sched_resumescheduler.c
-else ifeq ($(CONFIG_SCHED_SPORADIC),y)
-CSRCS += sched_resumescheduler.c
-else ifeq ($(CONFIG_SCHED_INSTRUMENTATION),y)
+else ifeq ($(CONFIG_SCHED_RESUMESCHEDULER),y)
 CSRCS += sched_resumescheduler.c
 endif
 
@@ -83,6 +87,9 @@ ifeq ($(CONFIG_SCHED_CPULOAD),y)
 CSRCS += sched_cpuload.c
 ifeq ($(CONFIG_CPULOAD_ONESHOT),y)
 CSRCS += sched_cpuload_oneshot.c
+endif
+ifeq ($(CONFIG_CPULOAD_PERIOD),y)
+CSRCS += sched_cpuload_period.c
 endif
 endif
 
@@ -92,8 +99,21 @@ else
 CSRCS += sched_processtimer.c
 endif
 
+ifeq ($(CONFIG_SMP),y)
+CSRCS += sched_tasklistlock.c
+ifeq ($(CONFIG_ARCH_GLOBAL_IRQDISABLE),y)
+CSRCS += sched_thistask.c
+else ifeq ($(CONFIG_ARCH_HAVE_FETCHADD),y)
+CSRCS += sched_thistask.c
+endif
+endif
+
 ifeq ($(CONFIG_SCHED_INSTRUMENTATION_BUFFER),y)
 CSRCS += sched_note.c
+endif
+
+ifeq ($(CONFIG_SCHED_CRITMONITOR),y)
+CSRCS += sched_critmonitor.c
 endif
 
 # Include sched build support

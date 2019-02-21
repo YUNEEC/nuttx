@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/pthread/pthread_condtimedwait.c
  *
- *   Copyright (C) 2007-2009, 2013-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2013-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,7 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/wdog.h>
+#include <nuttx/signal.h>
 #include <nuttx/cancelpt.h>
 
 #include "sched/sched.h"
@@ -69,12 +70,12 @@
  *   This function is called if the timeout elapses before
  *   the condition is signaled.
  *
- * Parameters:
+ * Input Parameters:
  *   argc  - the number of arguments (should be 2)
  *   pid   - the task ID of the task to wakeup
  *   signo - The signal to use to wake up the task
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -88,10 +89,10 @@ static void pthread_condtimedout(int argc, uint32_t pid, uint32_t signo)
   FAR struct tcb_s *tcb;
   siginfo_t info;
 
-  /* The logic below if equivalent to sigqueue(), but uses sig_tcbdispatch()
-   * instead of sig_dispatch().  This avoids the group signal deliver logic
-   * and assures, instead, that the signal is delivered specifically to this
-   * thread that is known to be waiting on the signal.
+  /* The logic below if equivalent to nxsig_queue(), but uses
+   * nxsig_tcbdispatch() instead of nxsig_dispatch().  This avoids the group
+   * signal deliver logic and assures, instead, that the signal is delivered
+   * specifically to this thread that is known to be waiting on the signal.
    */
 
   /* Get the waiting TCB.  sched_gettcb() might return NULL if the task has
@@ -117,13 +118,13 @@ static void pthread_condtimedout(int argc, uint32_t pid, uint32_t signo)
        * a watchdog timer interrupt handler.
        */
 
-      (void)sig_tcbdispatch(tcb, &info);
+      (void)nxsig_tcbdispatch(tcb, &info);
     }
 
 #else /* HAVE_GROUP_MEMBERS */
 
   /* Things are a little easier if there are not group members.  We can just
-   * use sigqueue().
+   * use nxsig_queue().
    */
 
 #ifdef CONFIG_CAN_PASS_STRUCTS
@@ -132,9 +133,9 @@ static void pthread_condtimedout(int argc, uint32_t pid, uint32_t signo)
   /* Send the specified signal to the specified task. */
 
   value.sival_ptr = NULL;
-  (void)sigqueue((int)pid, (int)signo, value);
+  (void)nxsig_queue((int)pid, (int)signo, value);
 #else
-  (void)sigqueue((int)pid, (int)signo, NULL);
+  (void)nxsig_queue((int)pid, (int)signo, NULL);
 #endif
 
 #endif /* HAVE_GROUP_MEMBERS */
@@ -150,12 +151,12 @@ static void pthread_condtimedout(int argc, uint32_t pid, uint32_t signo)
  * Description:
  *   A thread can perform a timed wait on a condition variable.
  *
- * Parameters:
+ * Input Parameters:
  *   cond   - the condition variable to wait on
  *   mutex   - the mutex that protects the condition variable
  *   abstime - wait until this absolute time
  *
- * Return Value:
+ * Returned Value:
  *   OK (0) on success; A non-zero errno value is returned on failure.
  *
  * Assumptions:
@@ -168,8 +169,7 @@ int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex,
 {
   FAR struct tcb_s *rtcb = this_task();
   irqstate_t flags;
-  uint16_t oldstate;
-  ssystime_t ticks;
+  sclock_t ticks;
   int mypid = (int)getpid();
   int ret = OK;
   int status;
@@ -274,8 +274,10 @@ int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex,
                     {
                       /* Start the watchdog */
 
-                      wd_start(rtcb->waitdog, ticks, (wdentry_t)pthread_condtimedout,
-                               2, (uint32_t)mypid, (uint32_t)SIGCONDTIMEDOUT);
+                      (void)wd_start(rtcb->waitdog, ticks,
+                                     (wdentry_t)pthread_condtimedout,
+                                     2, (uint32_t)mypid,
+                                     (uint32_t)SIGCONDTIMEDOUT);
 
                       /* Take the condition semaphore.  Do not restore interrupts
                        * until we return from the wait.  This is necessary to
@@ -283,25 +285,25 @@ int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex,
                        * are started atomically.
                        */
 
-                      status = sem_wait((FAR sem_t *)&cond->sem);
+                      status = nxsem_wait((FAR sem_t *)&cond->sem);
 
                       /* Did we get the condition semaphore. */
 
-                      if (status != OK)
+                      if (status < 0)
                         {
-                          /* NO.. Handle the special case where the semaphore wait was
-                           * awakened by the receipt of a signal -- presumably the
-                           * signal posted by pthread_condtimedout().
+                          /* NO.. Handle the special case where the semaphore
+                           * wait was awakened by the receipt of a signal --
+                           * presumably the signal posted by pthread_condtimedout().
                            */
 
-                          if (get_errno() == EINTR)
+                          if (status == -EINTR)
                             {
-                              serr("ERROR: Timedout!\n");
+                              swarn("WARNING: Timedout!\n");
                               ret = ETIMEDOUT;
                             }
                           else
                             {
-                              ret = EINVAL;
+                              ret = status;
                             }
                         }
 
@@ -318,10 +320,7 @@ int pthread_cond_timedwait(FAR pthread_cond_t *cond, FAR pthread_mutex_t *mutex,
 
                   sinfo("Re-locking...\n");
 
-                  oldstate = pthread_disable_cancel();
                   status = pthread_mutex_take(mutex, false);
-                  pthread_enable_cancel(oldstate);
-
                   if (status == OK)
                     {
                       mutex->pid = mypid;

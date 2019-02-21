@@ -1,7 +1,7 @@
 ############################################################################
 # configs/lc823450-xgevk/src/Makefile
 #
-#  Copyright (C) 2017 Sony Corporation. All rights reserved.
+#  Copyright 2017 Sony Video & Sound Products Inc.
 #  Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -70,6 +70,18 @@ endif
 
 ifeq ($(CONFIG_NETDEVICES),y)
 CSRCS += lc823450_netinit.c
+endif
+
+ifeq ($(CONFIG_AUDIO_WM8776),y)
+CSRCS += lc823450_wm8776.c
+endif
+
+ifeq ($(CONFIG_ARCH_LEDS),y)
+CSRCS += lc823450_autoleds.c
+endif
+
+ifeq ($(CONFIG_LC823450_XGEVK_BTPOWER),y)
+CSRCS += lc823450_bt.c
 endif
 
 include $(TOPDIR)/configs/Board.mk

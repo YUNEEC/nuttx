@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/samv7/sam_qspi.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Authors: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -603,7 +603,7 @@ static void qspi_dma_timeout(int argc, uint32_t arg)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&priv->dmawait);
+  nxsem_post(&priv->dmawait);
 }
 #endif
 
@@ -650,7 +650,7 @@ static void qspi_dma_callback(DMA_HANDLE handle, void *arg, int result)
 
   /* Then wake up the waiting thread */
 
-  sem_post(&priv->dmawait);
+  nxsem_post(&priv->dmawait);
 }
 #endif
 
@@ -885,33 +885,27 @@ static int qspi_memory_dma(struct sam_qspidev_s *priv,
 
       ret = wd_start(priv->dmadog, DMA_TIMEOUT_TICKS,
                      (wdentry_t)qspi_dma_timeout, 1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
            spierr("ERROR: wd_start failed: %d\n", ret);
         }
 
       /* Wait for the DMA complete */
 
-      ret = sem_wait(&priv->dmawait);
+      ret = nxsem_wait(&priv->dmawait);
 
       /* Cancel the watchdog timeout */
 
       (void)wd_cancel(priv->dmadog);
 
-      /* Check if we were awakened by an error of some kind */
+      /* Check if we were awakened by an error of some kind.  EINTR is not a
+       * failure.  That simply means that the wait was awakened by a signal.
+       */
 
-      if (ret < 0)
+      if (ret < 0 && ret != -EINTR)
         {
-          /* EINTR is not a failure.  That simply means that the wait
-           * was awakened by a signal.
-           */
-
-          int errorcode = errno;
-          if (errorcode != EINTR)
-            {
-              DEBUGPANIC();
-              return -errorcode;
-            }
+          DEBUGPANIC();
+          return ret;
         }
 
       /* Not that we might be awakened before the wait is over due to
@@ -1061,27 +1055,32 @@ static void qspi_memcpy(uint8_t *dest, const uint8_t *src, size_t buflen)
 static int qspi_lock(struct qspi_dev_s *dev, bool lock)
 {
   struct sam_qspidev_s *priv = (struct sam_qspidev_s *)dev;
+  int ret;
 
   spiinfo("lock=%d\n", lock);
   if (lock)
     {
       /* Take the semaphore (perhaps waiting) */
 
-      while (sem_wait(&priv->exclsem) != 0)
+      do
         {
-          /* The only case that an error should occur here is if the wait was awakened
-           * by a signal.
+          ret = nxsem_wait(&priv->exclsem);
+
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
            */
 
-          ASSERT(errno == EINTR);
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
   else
     {
-      (void)sem_post(&priv->exclsem);
+      (void)nxsem_post(&priv->exclsem);
+      ret = OK;
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1715,7 +1714,7 @@ static int qspi_hw_initialize(struct sam_qspidev_s *priv)
  * Description:
  *   Initialize the selected QSPI port in master mode
  *
- * Input Parameter:
+ * Input Parameters:
  *   intf - Interface number(must be zero)
  *
  * Returned Value:
@@ -1738,7 +1737,7 @@ struct qspi_dev_s *sam_qspi_initialize(int intf)
 #ifdef CONFIG_SAMV7_QSPI
   if (intf == 0)
     {
-      /* If this function is called multiple times, the following operatinos
+      /* If this function is called multiple times, the following operations
        * will be performed multiple times.
        */
 
@@ -1775,7 +1774,7 @@ struct qspi_dev_s *sam_qspi_initialize(int intf)
        * access to the QSPI registers.
        */
 
-      sem_init(&priv->exclsem, 0, 1);
+      nxsem_init(&priv->exclsem, 0, 1);
 
 #ifdef CONFIG_SAMV7_QSPI_DMA
       /* Pre-allocate DMA channels. */
@@ -1795,8 +1794,8 @@ struct qspi_dev_s *sam_qspi_initialize(int intf)
        * signaling and, hence, should not have priority inheritance enabled.
        */
 
-      sem_init(&priv->dmawait, 0, 0);
-      sem_setprotocol(&priv->dmawait, SEM_PRIO_NONE);
+      nxsem_init(&priv->dmawait, 0, 0);
+      nxsem_setprotocol(&priv->dmawait, SEM_PRIO_NONE);
 
       /* Create a watchdog time to catch DMA timeouts */
 
@@ -1850,7 +1849,7 @@ errout_with_dmadog:
   wd_delete(priv->dmadog);
 
 errout_with_dmahandles:
-  sem_destroy(&priv->dmawait);
+  nxsem_destroy(&priv->dmawait);
 
   if (priv->dmach)
     {
@@ -1859,7 +1858,7 @@ errout_with_dmahandles:
     }
 #endif
 
-  sem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->exclsem);
   return NULL;
 }
 #endif /* CONFIG_SAMV7_QSPI */

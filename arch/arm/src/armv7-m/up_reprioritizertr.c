@@ -67,7 +67,7 @@
  *      the priority of the current, running task and it now has the
  *      priority.
  *
- * Inputs:
+ * Input Parameters:
  *   tcb: The TCB of the task that has been reprioritized
  *   priority: The new task priority
  *
@@ -87,7 +87,7 @@ void up_reprioritize_rtr(struct tcb_s *tcb, uint8_t priority)
 #endif
     )
     {
-       PANIC();
+       DEBUGPANIC();
     }
   else
     {

@@ -1,7 +1,8 @@
 /****************************************************************************
  * sched/semaphore/sem_holder.c
  *
- *   Copyright (C) 2009-2011, 2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2011, 2013, 2016-2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,10 +80,10 @@ static FAR struct semholder_s *g_freeholders;
 #endif
 
 /****************************************************************************
- * Name: sem_allocholder
+ * Name: nxsem_allocholder
  ****************************************************************************/
 
-static inline FAR struct semholder_s *sem_allocholder(sem_t *sem)
+static inline FAR struct semholder_s *nxsem_allocholder(sem_t *sem)
 {
   FAR struct semholder_s *pholder;
 
@@ -130,11 +131,11 @@ static inline FAR struct semholder_s *sem_allocholder(sem_t *sem)
 }
 
 /****************************************************************************
- * Name: sem_findholder
+ * Name: nxsem_findholder
  ****************************************************************************/
 
-static FAR struct semholder_s *sem_findholder(sem_t *sem,
-                                              FAR struct tcb_s *htcb)
+static FAR struct semholder_s *nxsem_findholder(sem_t *sem,
+                                                FAR struct tcb_s *htcb)
 {
   FAR struct semholder_s *pholder;
 
@@ -176,26 +177,27 @@ static FAR struct semholder_s *sem_findholder(sem_t *sem,
 }
 
 /****************************************************************************
- * Name: sem_findorallocateholder
+ * Name: nxsem_findorallocateholder
  ****************************************************************************/
 
 static inline FAR struct semholder_s *
-sem_findorallocateholder(sem_t *sem, FAR struct tcb_s *htcb)
+nxsem_findorallocateholder(sem_t *sem, FAR struct tcb_s *htcb)
 {
-  FAR struct semholder_s *pholder = sem_findholder(sem, htcb);
+  FAR struct semholder_s *pholder = nxsem_findholder(sem, htcb);
   if (!pholder)
     {
-      pholder = sem_allocholder(sem);
+      pholder = nxsem_allocholder(sem);
     }
 
   return pholder;
 }
 
 /****************************************************************************
- * Name: sem_freeholder
+ * Name: nxsem_freeholder
  ****************************************************************************/
 
-static inline void sem_freeholder(sem_t *sem, FAR struct semholder_s *pholder)
+static inline void nxsem_freeholder(sem_t *sem,
+                                    FAR struct semholder_s *pholder)
 {
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
   FAR struct semholder_s *curr;
@@ -236,29 +238,29 @@ static inline void sem_freeholder(sem_t *sem, FAR struct semholder_s *pholder)
 }
 
 /****************************************************************************
- * Name: sem_findandfreeholder
+ * Name: nxsem_findandfreeholder
  ****************************************************************************/
 
-static inline void sem_findandfreeholder(sem_t *sem, FAR struct tcb_s *htcb)
+static inline void nxsem_findandfreeholder(sem_t *sem, FAR struct tcb_s *htcb)
 {
-  FAR struct semholder_s *pholder = sem_findholder(sem, htcb);
+  FAR struct semholder_s *pholder = nxsem_findholder(sem, htcb);
 
   /* When no more counts are held, remove the holder from the list.  The
-   * count was decremented in sem_releaseholder.
+   * count was decremented in nxsem_releaseholder.
    */
 
   if (pholder != NULL && pholder->counts <= 0)
     {
-      sem_freeholder(sem, pholder);
+      nxsem_freeholder(sem, pholder);
     }
 }
 
 /****************************************************************************
- * Name: sem_foreachholder
+ * Name: nxsem_foreachholder
  ****************************************************************************/
 
-static int sem_foreachholder(FAR sem_t *sem, holderhandler_t handler,
-                             FAR void *arg)
+static int nxsem_foreachholder(FAR sem_t *sem, holderhandler_t handler,
+                               FAR void *arg)
 {
   FAR struct semholder_s *pholder;
   int ret = 0;
@@ -307,24 +309,24 @@ static int sem_foreachholder(FAR sem_t *sem, holderhandler_t handler,
 }
 
 /****************************************************************************
- * Name: sem_recoverholders
+ * Name: nxsem_recoverholders
  ****************************************************************************/
 
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
-static int sem_recoverholders(FAR struct semholder_s *pholder,
-                              FAR sem_t *sem, FAR void *arg)
+static int nxsem_recoverholders(FAR struct semholder_s *pholder,
+                                FAR sem_t *sem, FAR void *arg)
 {
-  sem_freeholder(sem, pholder);
+  nxsem_freeholder(sem, pholder);
   return 0;
 }
 #endif
 
 /****************************************************************************
- * Name: sem_boostholderprio
+ * Name: nxsem_boostholderprio
  ****************************************************************************/
 
-static int sem_boostholderprio(FAR struct semholder_s *pholder,
-                               FAR sem_t *sem, FAR void *arg)
+static int nxsem_boostholderprio(FAR struct semholder_s *pholder,
+                                 FAR sem_t *sem, FAR void *arg)
 {
   FAR struct tcb_s *htcb = (FAR struct tcb_s *)pholder->htcb;
   FAR struct tcb_s *rtcb = (FAR struct tcb_s *)arg;
@@ -339,7 +341,7 @@ static int sem_boostholderprio(FAR struct semholder_s *pholder,
     {
       serr("ERROR: TCB 0x%08x is a stale handle, counts lost\n", htcb);
       DEBUGPANIC();
-      sem_freeholder(sem, pholder);
+      nxsem_freeholder(sem, pholder);
     }
 
 #if CONFIG_SEM_NNESTPRIO > 0
@@ -386,7 +388,7 @@ static int sem_boostholderprio(FAR struct semholder_s *pholder,
            * switch may occur during up_block_task() processing.
            */
 
-          (void)sched_setpriority(htcb, rtcb->sched_priority);
+          (void)nxsched_setpriority(htcb, rtcb->sched_priority);
         }
       else
         {
@@ -424,7 +426,7 @@ static int sem_boostholderprio(FAR struct semholder_s *pholder,
        * will occur during up_block_task() processing.
        */
 
-      (void)sched_setpriority(htcb, rtcb->sched_priority);
+      (void)nxsched_setpriority(htcb, rtcb->sched_priority);
     }
 #endif
 
@@ -432,12 +434,12 @@ static int sem_boostholderprio(FAR struct semholder_s *pholder,
 }
 
 /****************************************************************************
- * Name: sem_verifyholder
+ * Name: nxsem_verifyholder
  ****************************************************************************/
 
 #ifdef CONFIG_DEBUG_ASSERTIONS
-static int sem_verifyholder(FAR struct semholder_s *pholder, FAR sem_t *sem,
-                            FAR void *arg)
+static int nxsem_verifyholder(FAR struct semholder_s *pholder,
+                              FAR sem_t *sem, FAR void *arg)
 {
 #if 0 /* Need to revisit this, but these assumptions seem to be untrue -- \
        * OR there is a bug??? */
@@ -458,12 +460,12 @@ static int sem_verifyholder(FAR struct semholder_s *pholder, FAR sem_t *sem,
 #endif
 
 /****************************************************************************
- * Name: sem_dumpholder
+ * Name: nxsem_dumpholder
  ****************************************************************************/
 
 #if defined(CONFIG_DEBUG_INFO) && defined(CONFIG_SEM_PHDEBUG)
-static int sem_dumpholder(FAR struct semholder_s *pholder, FAR sem_t *sem,
-                          FAR void *arg)
+static int nxsem_dumpholder(FAR struct semholder_s *pholder, FAR sem_t *sem,
+                            FAR void *arg)
 {
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
   _info("  %08x: %08x %08x %04x\n",
@@ -476,11 +478,11 @@ static int sem_dumpholder(FAR struct semholder_s *pholder, FAR sem_t *sem,
 #endif
 
 /****************************************************************************
- * Name: sem_restoreholderprio
+ * Name: nxsem_restoreholderprio
  ****************************************************************************/
 
-static int sem_restoreholderprio(FAR struct tcb_s *htcb,
-                                 FAR sem_t *sem, FAR void *arg)
+static int nxsem_restoreholderprio(FAR struct tcb_s *htcb,
+                                   FAR sem_t *sem, FAR void *arg)
 {
   FAR struct semholder_s *pholder = 0;
 #if CONFIG_SEM_NNESTPRIO > 0
@@ -500,10 +502,10 @@ static int sem_restoreholderprio(FAR struct tcb_s *htcb,
     {
       serr("ERROR: TCB 0x%08x is a stale handle, counts lost\n", htcb);
       DEBUGPANIC();
-      pholder = sem_findholder(sem, htcb);
+      pholder = nxsem_findholder(sem, htcb);
       if (pholder != NULL)
         {
-          sem_freeholder(sem, pholder);
+          nxsem_freeholder(sem, pholder);
         }
     }
 
@@ -534,7 +536,7 @@ static int sem_restoreholderprio(FAR struct tcb_s *htcb,
 
           /* Reset the holder's priority back to the base priority. */
 
-          sched_reprioritize(htcb, htcb->base_priority);
+          (void)nxsched_reprioritize(htcb, htcb->base_priority);
         }
 
       /* There are multiple pending priority levels. The holder thread's
@@ -576,7 +578,7 @@ static int sem_restoreholderprio(FAR struct tcb_s *htcb,
            * base_priority)
            */
 
-          sched_setpriority(htcb, rpriority);
+          nxsched_setpriority(htcb, rpriority);
         }
       else
         {
@@ -616,7 +618,7 @@ static int sem_restoreholderprio(FAR struct tcb_s *htcb,
        * priority.
        */
 
-      sched_reprioritize(htcb, htcb->base_priority);
+      (void)nxsched_reprioritize(htcb, htcb->base_priority);
 #endif
     }
 
@@ -624,49 +626,49 @@ static int sem_restoreholderprio(FAR struct tcb_s *htcb,
 }
 
 /****************************************************************************
- * Name: sem_restoreholderprioall
+ * Name: nxsem_restoreholderprioall
  *
  * Description:
  *   Reprioritize all holders
  *
  ****************************************************************************/
 
-static int sem_restoreholderprioall(FAR struct semholder_s *pholder,
-                                    FAR sem_t *sem, FAR void *arg)
+static int nxsem_restoreholderprioall(FAR struct semholder_s *pholder,
+                                      FAR sem_t *sem, FAR void *arg)
 {
-  return sem_restoreholderprio(pholder->htcb, sem, arg);
+  return nxsem_restoreholderprio(pholder->htcb, sem, arg);
 }
 
 /****************************************************************************
- * Name: sem_restoreholderprioA
+ * Name: nxsem_restoreholderprioA
  *
  * Description:
  *   Reprioritize all holders except the currently executing task
  *
  ****************************************************************************/
 
-static int sem_restoreholderprioA(FAR struct semholder_s *pholder,
-                                  FAR sem_t *sem, FAR void *arg)
+static int nxsem_restoreholderprioA(FAR struct semholder_s *pholder,
+                                    FAR sem_t *sem, FAR void *arg)
 {
   FAR struct tcb_s *rtcb = this_task();
   if (pholder->htcb != rtcb)
     {
-      return sem_restoreholderprio(pholder->htcb, sem, arg);
+      return nxsem_restoreholderprio(pholder->htcb, sem, arg);
     }
 
   return 0;
 }
 
 /****************************************************************************
- * Name: sem_restoreholderprioB
+ * Name: nxsem_restoreholderprioB
  *
  * Description:
  *   Reprioritize only the currently executing task
  *
  ****************************************************************************/
 
-static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
-                                  FAR sem_t *sem, FAR void *arg)
+static int nxsem_restoreholderprioB(FAR struct semholder_s *pholder,
+                                    FAR sem_t *sem, FAR void *arg)
 {
   FAR struct tcb_s *rtcb = this_task();
 
@@ -682,9 +684,9 @@ static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
        * causes a context switch.
        */
 
-      sem_findandfreeholder(sem, rtcb);
+      nxsem_findandfreeholder(sem, rtcb);
 #endif
-      (void)sem_restoreholderprio(rtcb, sem, arg);
+      (void)nxsem_restoreholderprio(rtcb, sem, arg);
       return 1;
     }
 
@@ -692,7 +694,7 @@ static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
 }
 
 /****************************************************************************
- * Name: sem_restorebaseprio_irq
+ * Name: nxsem_restorebaseprio_irq
  *
  * Description:
  *   This function is called after the an interrupt handler posts a count on
@@ -700,7 +702,7 @@ static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
  *   threads holding a count on the semaphore.  Their priority could have
  *   been boosted while they held the count.
  *
- * Parameters:
+ * Input Parameters:
  *   stcb - The TCB of the task that was just started (if any).  If the
  *     post action caused a count to be given to another thread, then stcb
  *     is the TCB that received the count.  Note, just because stcb received
@@ -715,7 +717,7 @@ static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
  *     - If it is >0 then there should be no threads waiting for counts and
  *       stcb should be null.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -723,8 +725,8 @@ static int sem_restoreholderprioB(FAR struct semholder_s *pholder,
  *
  ****************************************************************************/
 
-static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
-                                           FAR sem_t *sem)
+static inline void nxsem_restorebaseprio_irq(FAR struct tcb_s *stcb,
+                                             FAR sem_t *sem)
 {
   /* Perform the following actions only if a new thread was given a count.
    * The thread that received the count should be the highest priority
@@ -737,7 +739,7 @@ static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
     {
       /* Drop the priority of all holder threads */
 
-      (void)sem_foreachholder(sem, sem_restoreholderprioall, stcb);
+      (void)nxsem_foreachholder(sem, nxsem_restoreholderprioall, stcb);
     }
 
   /* If there are no tasks waiting for available counts, then all holders
@@ -747,13 +749,13 @@ static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
 #ifdef CONFIG_DEBUG_ASSERTIONS
   else
     {
-      (void)sem_foreachholder(sem, sem_verifyholder, NULL);
+      (void)nxsem_foreachholder(sem, nxsem_verifyholder, NULL);
     }
 #endif
 }
 
 /****************************************************************************
- * Name: sem_restorebaseprio_task
+ * Name: nxsem_restorebaseprio_task
  *
  * Description:
  *   This function is called after the current running task releases a
@@ -761,7 +763,7 @@ static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
  *   of any threads holding a count on the semaphore.  Their priority could
  *   have been boosted while they held the count.
  *
- * Parameters:
+ * Input Parameters:
  *   stcb - The TCB of the task that was just started (if any).  If the
  *     post action caused a count to be given to another thread, then stcb
  *     is the TCB that received the count.  Note, just because stcb received
@@ -776,7 +778,7 @@ static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
  *     - If it is >0 then there should be no threads waiting for counts and
  *       stcb should be null.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -784,8 +786,8 @@ static inline void sem_restorebaseprio_irq(FAR struct tcb_s *stcb,
  *
  ****************************************************************************/
 
-static inline void sem_restorebaseprio_task(FAR struct tcb_s *stcb,
-                                            FAR sem_t *sem)
+static inline void nxsem_restorebaseprio_task(FAR struct tcb_s *stcb,
+                                              FAR sem_t *sem)
 {
   FAR struct tcb_s *rtcb = this_task();
 
@@ -807,11 +809,11 @@ static inline void sem_restorebaseprio_task(FAR struct tcb_s *stcb,
        * except for the running thread.
        */
 
-      (void)sem_foreachholder(sem, sem_restoreholderprioA, stcb);
+      (void)nxsem_foreachholder(sem, nxsem_restoreholderprioA, stcb);
 
       /* Now, find an reprioritize only the ready to run task */
 
-      (void)sem_foreachholder(sem, sem_restoreholderprioB, stcb);
+      (void)nxsem_foreachholder(sem, nxsem_restoreholderprioB, stcb);
     }
 
   /* If there are no tasks waiting for available counts, then all holders
@@ -821,7 +823,7 @@ static inline void sem_restorebaseprio_task(FAR struct tcb_s *stcb,
 #ifdef CONFIG_DEBUG_ASSERTIONS
   else
     {
-      (void)sem_foreachholder(sem, sem_verifyholder, NULL);
+      (void)nxsem_foreachholder(sem, nxsem_verifyholder, NULL);
     }
 #endif
 
@@ -830,7 +832,7 @@ static inline void sem_restorebaseprio_task(FAR struct tcb_s *stcb,
    * counts, then we need to remove it from the list of holders.
    */
 
-  sem_findandfreeholder(sem, rtcb);
+  nxsem_findandfreeholder(sem, rtcb);
 }
 
 /****************************************************************************
@@ -838,22 +840,22 @@ static inline void sem_restorebaseprio_task(FAR struct tcb_s *stcb,
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sem_initholders
+ * Name: nxsem_initholders
  *
  * Description:
- *   Called from sem_initialize() to set up semaphore holder information.
+ *   Called from nxsem_initialize() to set up semaphore holder information.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void sem_initholders(void)
+void nxsem_initholders(void)
 {
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
   int i;
@@ -871,23 +873,23 @@ void sem_initholders(void)
 }
 
 /****************************************************************************
- * Name: sem_destroyholder
+ * Name: nxsem_destroyholder
  *
  * Description:
- *   Called from sem_destroyholder() to handle any holders of a semaphore when
- *   it is destroyed.
+ *   Called from nxsem_destroyholder() to handle any holders of a semaphore
+ *   when it is destroyed.
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the semaphore being destroyed
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void sem_destroyholder(FAR sem_t *sem)
+void nxsem_destroyholder(FAR sem_t *sem)
 {
   /* It is an error if a semaphore is destroyed while there are any holders
    * (except perhaps the thread release the semaphore itself).  Hmmm.. but
@@ -905,7 +907,7 @@ void sem_destroyholder(FAR sem_t *sem)
     {
       serr("ERROR: Semaphore destroyed with holders\n");
       DEBUGPANIC();
-      (void)sem_foreachholder(sem, sem_recoverholders, NULL);
+      (void)nxsem_foreachholder(sem, nxsem_recoverholders, NULL);
     }
 
 #else
@@ -921,17 +923,17 @@ void sem_destroyholder(FAR sem_t *sem)
 }
 
 /****************************************************************************
- * Name: sem_addholder_tcb
+ * Name: nxsem_addholder_tcb
  *
  * Description:
- *   Called from sem_wait() when the calling thread obtains the semaphore;
+ *   Called from nxsem_wait() when the calling thread obtains the semaphore;
  *   Called from sem_post() when the waiting thread obtains the semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   htcb - TCB of the thread that just obtained the semaphore
  *   sem  - A reference to the incremented semaphore
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) or -1 (ERROR) if unsuccessful
  *
  * Assumptions:
@@ -939,7 +941,7 @@ void sem_destroyholder(FAR sem_t *sem)
  *
  ****************************************************************************/
 
-void sem_addholder_tcb(FAR struct tcb_s *htcb, FAR sem_t *sem)
+void nxsem_addholder_tcb(FAR struct tcb_s *htcb, FAR sem_t *sem)
 {
   FAR struct semholder_s *pholder;
 
@@ -952,7 +954,7 @@ void sem_addholder_tcb(FAR struct tcb_s *htcb, FAR sem_t *sem)
     {
       /* Find or allocate a container for this new holder */
 
-      pholder = sem_findorallocateholder(sem, htcb);
+      pholder = nxsem_findorallocateholder(sem, htcb);
       if (pholder != NULL)
         {
           /* Then set the holder and increment the number of counts held by this
@@ -966,15 +968,15 @@ void sem_addholder_tcb(FAR struct tcb_s *htcb, FAR sem_t *sem)
 }
 
 /****************************************************************************
- * Name: sem_addholder
+ * Name: nxsem_addholder
  *
  * Description:
- *   Called from sem_wait() when the calling thread obtains the semaphore
+ *   Called from nxsem_wait() when the calling thread obtains the semaphore
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the incremented semaphore
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) or -1 (ERROR) if unsuccessful
  *
  * Assumptions:
@@ -982,28 +984,28 @@ void sem_addholder_tcb(FAR struct tcb_s *htcb, FAR sem_t *sem)
  *
  ****************************************************************************/
 
-void sem_addholder(FAR sem_t *sem)
+void nxsem_addholder(FAR sem_t *sem)
 {
-  sem_addholder_tcb(this_task(), sem);
+  nxsem_addholder_tcb(this_task(), sem);
 }
 
 /****************************************************************************
- * Name: void sem_boostpriority(sem_t *sem)
+ * Name: void nxsem_boostpriority(sem_t *sem)
  *
  * Description:
  *
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) or -1 (ERROR) if unsuccessful
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void sem_boostpriority(FAR sem_t *sem)
+void nxsem_boostpriority(FAR sem_t *sem)
 {
   FAR struct tcb_s *rtcb = this_task();
 
@@ -1012,38 +1014,38 @@ void sem_boostpriority(FAR sem_t *sem)
    * count.
    */
 
-  (void)sem_foreachholder(sem, sem_boostholderprio, rtcb);
+  (void)nxsem_foreachholder(sem, nxsem_boostholderprio, rtcb);
 }
 
 /****************************************************************************
- * Name: sem_releaseholder
+ * Name: nxsem_releaseholder
  *
  * Description:
  *   Called from sem_post() after a thread releases one count on the
  *   semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the semaphore being posted
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void sem_releaseholder(FAR sem_t *sem)
+void nxsem_releaseholder(FAR sem_t *sem)
 {
   FAR struct tcb_s *rtcb = this_task();
   FAR struct semholder_s *pholder;
 
   /* Find the container for this holder */
 
-  pholder = sem_findholder(sem, rtcb);
+  pholder = nxsem_findholder(sem, rtcb);
   if (pholder != NULL && pholder->counts > 0)
     {
       /* Decrement the counts on this holder -- the holder will be freed
-       * later in sem_restorebaseprio.
+       * later in nxsem_restorebaseprio.
        */
 
       pholder->counts--;
@@ -1051,7 +1053,7 @@ void sem_releaseholder(FAR sem_t *sem)
 }
 
 /****************************************************************************
- * Name: sem_restorebaseprio
+ * Name: nxsem_restorebaseprio
  *
  * Description:
  *   This function is called after the current running task releases a
@@ -1060,7 +1062,7 @@ void sem_releaseholder(FAR sem_t *sem)
  *   count on the semaphore.  Their priority could have been boosted while
  *   they held the count.
  *
- * Parameters:
+ * Input Parameters:
  *   stcb - The TCB of the task that was just started (if any).  If the
  *     post action caused a count to be given to another thread, then stcb
  *     is the TCB that received the count.  Note, just because stcb received
@@ -1075,7 +1077,7 @@ void sem_releaseholder(FAR sem_t *sem)
  *     - If it is >0 then there should be no threads waiting for counts and
  *       stcb should be null.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -1083,7 +1085,7 @@ void sem_releaseholder(FAR sem_t *sem)
  *
  ****************************************************************************/
 
-void sem_restorebaseprio(FAR struct tcb_s *stcb, FAR sem_t *sem)
+void nxsem_restorebaseprio(FAR struct tcb_s *stcb, FAR sem_t *sem)
 {
   /* Check our assumptions */
 
@@ -1100,27 +1102,27 @@ void sem_restorebaseprio(FAR struct tcb_s *stcb, FAR sem_t *sem)
 
   if (up_interrupt_context())
     {
-      sem_restorebaseprio_irq(stcb, sem);
+      nxsem_restorebaseprio_irq(stcb, sem);
     }
   else
     {
-      sem_restorebaseprio_task(stcb, sem);
+      nxsem_restorebaseprio_task(stcb, sem);
     }
 }
 
 /****************************************************************************
- * Name: sem_canceled
+ * Name: nxsem_canceled
  *
  * Description:
- *   Called from sem_waitirq() after a thread that was waiting for a semaphore
+ *   Called from nxsem_wait_irq() after a thread that was waiting for a semaphore
  *   count was awakened because of a signal and the semaphore wait has been
  *   cancelled.  This function restores the correct thread priority of each
  *   holder of the semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the semaphore no longer being waited for
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -1128,7 +1130,7 @@ void sem_restorebaseprio(FAR struct tcb_s *stcb, FAR sem_t *sem)
  ****************************************************************************/
 
 #ifndef CONFIG_DISABLE_SIGNALS
-void sem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
+void nxsem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
 {
   /* Check our assumptions */
 
@@ -1136,7 +1138,7 @@ void sem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
 
   /* Adjust the priority of every holder as necessary */
 
-  (void)sem_foreachholder(sem, sem_restoreholderprioall, stcb);
+  (void)nxsem_foreachholder(sem, nxsem_restoreholderprioall, stcb);
 }
 #endif
 
@@ -1146,10 +1148,10 @@ void sem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
  * Description:
  *   Show information about threads currently waiting on this semaphore
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the semaphore
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -1160,22 +1162,22 @@ void sem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
 void sem_enumholders(FAR sem_t *sem)
 {
 #ifdef CONFIG_DEBUG_INFO
-  (void)sem_foreachholder(sem, sem_dumpholder, NULL);
+  (void)nxsem_foreachholder(sem, nxsem_dumpholder, NULL);
 #endif
 }
 #endif
 
 /****************************************************************************
- * Name: sem_nfreeholders
+ * Name: nxsem_nfreeholders
  *
  * Description:
  *   Return the number of available holder containers.  This is a good way
  *   to find out which threads are not calling sem_destroy.
  *
- * Parameters:
+ * Input Parameters:
  *   sem - A reference to the semaphore
  *
- * Return Value:
+ * Returned Value:
  *   The number of available holder containers
  *
  * Assumptions:
@@ -1183,7 +1185,7 @@ void sem_enumholders(FAR sem_t *sem)
  ****************************************************************************/
 
 #if defined(CONFIG_DEBUG_FEATURES) && defined(CONFIG_SEM_PHDEBUG)
-int sem_nfreeholders(void)
+int nxsem_nfreeholders(void)
 {
 #if CONFIG_SEM_PREALLOCHOLDERS > 0
   FAR struct semholder_s *pholder;

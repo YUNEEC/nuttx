@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_adc.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Satoshi Mihara <Satoshi.Mihara@jp.sony.com>
@@ -79,8 +79,8 @@
 
 #define LC823450_MAX_ADCCLK   (5 * 1000 * 1000)   /* Hz */
 
-#ifndef CONFIG_ADC_NCHANNELS
-#  define CONFIG_ADC_NCHANNELS 6
+#ifndef CONFIG_LC823450_ADC_NCHANNELS
+#  define CONFIG_LC823450_ADC_NCHANNELS 6
 #endif
 
 #if defined(CONFIG_DVFS) && !defined(CONFIG_ADC_POLLED)
@@ -130,7 +130,7 @@ static struct lc823450_adc_inst_s *g_inst = NULL;
 
 /* IDs to recognize each AD channel */
 
-static const uint8_t lc823450_chanlist[CONFIG_ADC_NCHANNELS] =
+static const uint8_t lc823450_chanlist[CONFIG_LC823450_ADC_NCHANNELS] =
 {
   0,    /* Channel 0 */
   1,    /* Channel 1 */
@@ -226,7 +226,9 @@ static void lc823450_adc_start(FAR struct lc823450_adc_inst_s *inst)
   uint8_t i;
   uint32_t div;
 
-#ifdef CONFIG_ADC_POLLED
+#ifndef CONFIG_ADC_POLLED
+  int ret;
+#else
   irqstate_t flags;
 
   flags = enter_critical_section();
@@ -248,7 +250,7 @@ static void lc823450_adc_start(FAR struct lc823450_adc_inst_s *inst)
   /* Setup ADC channels */
 
   putreg32((i << rADCCTL_fADCNVCK_SHIFT) |
-           LC823450_ADCHST(CONFIG_ADC_NCHANNELS - 1) |
+           LC823450_ADCHST(CONFIG_LC823450_ADC_NCHANNELS - 1) |
            rADCCTL_fADCHSCN, rADCCTL);
 
   /* Start A/D conversion */
@@ -261,10 +263,19 @@ static void lc823450_adc_start(FAR struct lc823450_adc_inst_s *inst)
   while ((getreg32(rADCSTS) & rADCSTS_fADCMPL) == 0)
     ;
 #else
-  while (sem_wait(&inst->sem_isr) != 0)
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&inst->sem_isr);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 #endif
 
 #ifdef CONFIG_ADC_POLLED
@@ -282,10 +293,21 @@ static void lc823450_adc_start(FAR struct lc823450_adc_inst_s *inst)
 
 static inline void lc823450_adc_sem_wait(FAR struct lc823450_adc_inst_s *inst)
 {
-  while (sem_wait(&inst->sem_excl) != 0)
+  int ret;
+
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&inst->sem_excl);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -298,7 +320,7 @@ static inline void lc823450_adc_sem_wait(FAR struct lc823450_adc_inst_s *inst)
 
 static inline void lc823450_adc_sem_post(FAR struct lc823450_adc_inst_s *inst)
 {
-  sem_post(&inst->sem_excl);
+  nxsem_post(&inst->sem_excl);
 }
 
 /****************************************************************************
@@ -315,7 +337,7 @@ static int lc823450_adc_isr(int irq, void *context, FAR void *arg)
   ainfo("interrupt\n");
 
   lc823450_adc_clearirq();
-  sem_post(&g_inst->sem_isr);
+  nxsem_post(&g_inst->sem_isr);
   return OK;
 }
 #endif
@@ -466,7 +488,7 @@ static int lc823450_adc_ioctl(FAR struct adc_dev_s *dev, int cmd,
 
         /* Get ADC data */
 
-        for (ch = 0; ch < CONFIG_ADC_NCHANNELS; ch++)
+        for (ch = 0; ch < CONFIG_LC823450_ADC_NCHANNELS; ch++)
           {
             val = getreg32(LC823450_ADC0DT(ch));
 
@@ -532,12 +554,12 @@ FAR struct adc_dev_s *lc823450_adcinitialize(void)
 
       inst->dev.ad_ops = &lc823450_adc_ops;
       inst->dev.ad_priv = inst;
-      inst->nchannels = CONFIG_ADC_NCHANNELS;
+      inst->nchannels = CONFIG_LC823450_ADC_NCHANNELS;
       inst->chanlist = lc823450_chanlist;
 
-      sem_init(&inst->sem_excl, 0, 1);
+      nxsem_init(&inst->sem_excl, 0, 1);
 #ifndef CONFIG_ADC_POLLED
-      sem_init(&inst->sem_isr, 0, 0);
+      nxsem_init(&inst->sem_isr, 0, 0);
 #endif
 
       lc823450_adc_sem_wait(inst);
@@ -612,7 +634,7 @@ int lc823450_adc_receive(FAR struct adc_dev_s *dev, FAR struct adc_msg_s *msg)
   lc823450_adc_standby(0);
   lc823450_adc_start(inst);
 
-  for (ch = 0; ch < CONFIG_ADC_NCHANNELS; ch++)
+  for (ch = 0; ch < CONFIG_LC823450_ADC_NCHANNELS; ch++)
     {
       msg[ch].am_channel = ch;
       msg[ch].am_data = getreg32(LC823450_ADC0DT(ch));

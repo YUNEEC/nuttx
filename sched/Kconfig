@@ -186,7 +186,7 @@ config JULIAN_TIME
 
 config START_YEAR
 	int "Start year"
-	default 2017
+	default 2018
 	range 1970 2106
 	---help---
 		NuttX uses an unsigned 32-bit integer for time_t which provides a
@@ -249,11 +249,44 @@ config SPINLOCK
 		Enables suppport for spinlocks.  Spinlocks are current used only for
 		SMP suppport.
 
+config SPINLOCK_IRQ
+	bool "Support Spinlocks with IRQ control"
+	default n
+	depends on ARCH_GLOBAL_IRQDISABLE
+	---help---
+		Enables suppport for spinlocks with IRQ control. This feature can be
+		used to protect data in SMP mode.
+
+config IRQCHAIN
+	bool "Enable multi handler sharing a IRQ"
+	default n
+	---help---
+		Enable support for IRQCHAIN.
+
+if IRQCHAIN
+
+config PREALLOC_IRQCHAIN
+	int "Number of pre-allocated irq chains"
+	default 8
+	---help---
+		The number of pre-allocated irq chain structures.  The system manages
+		a pool of preallocated irq chain structures to minimize dynamic
+		allocations.  You will, however, get better performance and memory
+		usage if this value is tuned to minimize such allocations.
+
+endif # IRQCHAIN
+
+config IRQCOUNT
+	bool
+	default n
+
 config SMP
 	bool "Symmetric Multi-Processing (SMP)"
 	default n
 	depends on ARCH_HAVE_MULTICPU
 	select SPINLOCK
+	select SCHED_RESUMESCHEDULER
+	select IRQCOUNT
 	---help---
 		Enables support for Symmetric Multi-Processing (SMP) on a multi-CPU
 		platform.
@@ -269,7 +302,7 @@ config SMP_NCPUS
 		This value identifies the number of CPUs supported by the processor
 		that will be used for SMP.
 
-		If CONFIG_DEBUG_FEATURES is enbled, then the value one is permitted
+		If CONFIG_DEBUG_FEATURES is enabled, then the value one is permitted
 		for CONFIG_SMP_NCPUS.  This is not normally a valid setting for an
 		SMP configuration.  However, running the SMP logic in a single CPU
 		configuration is useful during certain testing.
@@ -313,6 +346,12 @@ config USER_ENTRYPOINT
 		applications this is of the form 'app_main' where 'app' is the application
 		name. If not defined, USER_ENTRYPOINT defaults to "main".
 
+config USERMAIN_PRIORITY
+	int "init thread priority"
+	default 100
+	---help---
+		The priority of the user initialization thread.
+
 endif # INIT_ENTRYPOINT
 
 if INIT_FILEPATH
@@ -327,7 +366,8 @@ config USER_INITPATH
 
 config INIT_SYMTAB
 	string "Symbol table"
-	default "NULL"
+	default "NULL" if !EXECFUNCS_HAVE_SYMTAB
+	default EXECFUNCS_SYMTAB_ARRAY if EXECFUNCS_HAVE_SYMTAB
 	depends on !BUILD_PROTECTED && !BUILD_KERNEL
 	---help---
 		The name of othe global array that holds the exported symbol table.
@@ -340,7 +380,8 @@ config INIT_SYMTAB
 
 config INIT_NEXPORTS
 	string "Symbol table size"
-	default "0"
+	default "0" if !EXECFUNCS_HAVE_SYMTAB
+	default EXECFUNCS_NSYMBOLS_VAR if EXECFUNCS_HAVE_SYMTAB
 	depends on !BUILD_PROTECTED && !BUILD_KERNEL
 	---help---
 		The size of the symbol table.  NOTE that is is logically a numeric
@@ -353,6 +394,40 @@ config INIT_NEXPORTS
 		Any kernel mode symbols tables would not be usable for resolving
 		symbols in user mode executables.
 
+menuconfig INIT_MOUNT
+	bool "Auto-mount init file system"
+	default n
+	depends on !DISABLE_MOUNTPOINT
+	---help---
+		In order to use the the initial startup program when CONFIG_INIT_FILEPATH
+		is provided, it is necessary to mount the initial file system that
+		provides init program.  Normally this mount is done in the board-specific
+		initialization logic.  However, if the mount is very simple, it can be
+		performed by the OS bring-up logic itself by selecting this option.
+
+if INIT_MOUNT
+
+config INIT_MOUNT_SOURCE
+	string "The block device to mount"
+	default "/dev/ram0"
+
+config INIT_MOUNT_TARGET
+	string "Path to the mounted file system"
+	default "/bin"
+
+config INIT_MOUNT_FSTYPE
+	string "The file system type to mount"
+	default "romfs"
+
+config INIT_MOUNT_FLAGS
+	hex "Flags passed to mount"
+	default 0
+
+config INIT_MOUNT_DATA
+	string "Additional data passed to mount"
+	default ""
+
+endif # INIT_MOUNT
 endif # INIT_FILEPATH
 
 config RR_INTERVAL
@@ -366,6 +441,8 @@ config RR_INTERVAL
 config SCHED_SPORADIC
 	bool "Support sporadic scheduling"
 	default n
+	select SCHED_SUSPENDSCHEDULER
+	select SCHED_RESUMESCHEDULER
 	---help---
 		Build in additional logic to support sporadic scheduling
 		(SCHED_SPORADIC).
@@ -519,10 +596,32 @@ config SCHED_WAITPID
 		compliant) and will enable the waitid() and wait() interfaces as
 		well.
 
+config SCHED_EXIT_KILL_CHILDREN
+	bool "Enable kill all children when exit"
+	default n
+	depends on SCHED_HAVE_PARENT && SCHED_CHILD_STATUS
+	---help---
+		When a task exits, all of its child threads will be killed.
+
+		Caution:  This selection should not be used unless you are certain
+		of what you are doing.  Uninformed of this option can often lead to
+		memory leaks since, for example, memory allocations held by threads
+		are not automatically freed!
+
 endmenu # Tasks and Scheduling
 
 menu "Pthread Options"
-	depends on !DISABLE_PTHREAD
+
+config NPTHREAD_KEYS
+	int "Maximum number of pthread keys"
+	default 4 if !DISABLE_PTHREAD
+	default 0 if DISABLE_PTHREAD
+	range 0 32
+	---help---
+		The number of items of thread-specific data that can be retained.
+		The value zero disables support for pthread-specific data.
+
+if !DISABLE_PTHREAD
 
 config PTHREAD_MUTEX_TYPES
 	bool "Enable mutex types"
@@ -534,7 +633,7 @@ config PTHREAD_MUTEX_TYPES
 choice
 	prompt "pthread mutex robustness"
 	default PTHREAD_MUTEX_ROBUST if !DEFAULT_SMALL
-	default PTHREAD_UNSAFE if DEFAULT_SMALL
+	default PTHREAD_MUTEX_UNSAFE if DEFAULT_SMALL
 
 config PTHREAD_MUTEX_ROBUST
 	bool "Robust mutexes"
@@ -573,13 +672,6 @@ config PTHREAD_MUTEX_DEFAULT_UNSAFE
 
 endchoice # Default NORMAL mutex robustness
 
-config NPTHREAD_KEYS
-	int "Maximum number of pthread keys"
-	default 4
-	---help---
-		The number of items of thread-
-		specific data that can be retained
-
 config PTHREAD_CLEANUP
 	bool "pthread cleanup stack"
 	default n
@@ -609,9 +701,96 @@ config CANCELLATION_POINTS
 		cancellation points will also used with the () task_delete() API even if
 		pthreads are not enabled.
 
+endif # !DISABLE_PTHREAD
+
 endmenu # Pthread Options
 
 menu "Performance Monitoring"
+
+config SCHED_SUSPENDSCHEDULER
+	bool
+	default n
+
+config SCHED_RESUMESCHEDULER
+	bool
+	default n
+
+config SCHED_IRQMONITOR
+	bool "Enable IRQ monitoring"
+	default n
+	depends on FS_PROCFS
+	---help---
+		Enabling counting of interrupts from all interrupt sources.  These
+		counts will be available in the mounted procfs file systems at the
+		top-level file, "irqs".
+
+config SCHED_IRQMONITOR_GETTIME
+	bool "Custom Platform-specific Timer"
+	default n
+	depends on SCHED_IRQMONITOR && SCHED_TICKLESS && !SCHED_CRITMONITOR
+	---help---
+		If CONFIG_SCHED_TICKLESS is enabled, then the high resolution
+		Tickless timer will be used by default.  Otherwise, a platform-
+		specific timer is expected (the same timer used with the Critical
+		Section Monitor).  The option will force use of that platform-
+		specifier timer even the CONFIG_SCHED_TICKLESs is defined.
+
+		if CONFIG_SCHED_TICKLESS is not enabled or CONFIG_SCHED_IRQMONITOR_GETTIME
+		is selected, then platform-specific logic must provide the following in
+		order to support high resolution timing:
+
+			uint32_t up_critmon_gettime(void);
+			void up_critmon_convert(uint32_t elapsed, FAR struct timespec *ts);
+
+		The first interface simply provides the current time value in unknown
+		units.  NOTE:  This function may be called early before the timer has
+		been initialized.  In that event, the function should just return a
+		start time of zero.
+
+		Nothing is assumed about the units of this time value.  The following
+		are assumed, however: (1) The time is an unsigned integer value, (2)
+		the time is monotonically increasing, and (3) the elapsed time (also
+		in unknown units) can be obtained by subtracting a start time from
+		the current time.
+
+		The second interface simple converts an elapsed time into well known
+		units for presentation by the ProcFS file system.
+
+config SCHED_CRITMONITOR
+	bool "Enable Critical Section monitoring"
+	default n
+	depends on FS_PROCFS
+	select SCHED_SUSPENDSCHEDULER
+	select SCHED_RESUMESCHEDULER
+	select IRQCOUNT
+	---help---
+		Enables logic that monitors the duration of time that a thread keeps
+		interrupts or pre-emption disabled.  These global locks can have
+		negative consequences to real timer performance:  Disabling interrupts
+		adds jitter in the time when a interrupt request is asserted until
+		the hardware can responds with the interrupt.  Disabling pre-emption
+		adds jitter in the timer from when the event is posted in the
+		interrupt handler until the task that responds to the event can run.
+
+		If this option is selected, then the following interfaces must be
+		provided by platform-specific logic:
+
+			uint32_t up_critmon_gettime(void);
+			void up_critmon_convert(uint32_t elapsed, FAR struct timespec *ts);
+
+		The first interface simply provides the current time value in unknown
+		units.  NOTE:  This function may be called early before the timer has
+		been initialized.  In that event, the function should just return a
+		start time of zero.
+
+		Nothing is assumed about the units of this time value.  The following
+		are assumed, however: (1) The time is an unsigned integer value, (2)
+		the time is monotonically increasing, and (3) the elapsed time (also
+		in unknown units) can be obtained by subtracting a start time from
+		the current time.
+
+		The second interface simple converts an elapsed time into well known
+		units for presentation by the ProcFS file system.
 
 config SCHED_CPULOAD
 	bool "Enable CPU load monitoring"
@@ -673,9 +852,12 @@ config SCHED_CPULOAD_TICKSPERSEC
 		that 100Hz is the default frequency of the system time and, hence,
 		the worst possible choice in most cases.
 
+choice
+	prompt "Select CPU load timer"
+	default CPULOAD_ONESHOT
+
 config CPULOAD_ONESHOT
 	bool "Use Oneshot timer"
-	default n
 	---help---
 		Use an MCU-specific oneshot timer as the external clock.  The
 		oneshot timer must be configured by board specific logic which must
@@ -688,14 +870,32 @@ config CPULOAD_ONESHOT
 		NOTE that in this configuration, CONFIG_SCHED_CPULOAD_TICKSPERSEC is
 		the sample rate that will be accomplished by programming the oneshot
 		time repeatedly.  If CPULOAD_ONESHOT_ENTROPY is also selected, then
-		the underly frequency driving the oneshote timer must be
+		the underly frequency driving the oneshot timer must be
 		significantly faster than CONFIG_SCHED_CPULOAD_TICKSPERSE to permit
 		precise modulation the sample periods.
 
-config CPULOAD_ONESHOT_ENTROPY
+config CPULOAD_PERIOD
+	bool "Use Period timer"
+	---help---
+		Use an MCU-specific period timer as the external clock.  The
+		period timer must be configured by board specific logic which must
+		then call:
+
+			void sched_period_extclk(FAR struct timer_lowerhalf_s *lower);
+
+		To start the CPU load measurement. See include/nuttx/clock.h
+
+		NOTE that in this configuration, CONFIG_SCHED_CPULOAD_TICKSPERSEC is
+		the sample rate that will be accomplished by programming the period
+		time.
+
+endchoice
+
+config CPULOAD_ENTROPY
 	int "Bits of entropy"
 	default 6
 	range 0 30
+	depends on CPULOAD_ONESHOT
 	---help---
 		This is the number of bits of entropy that will be applied. The
 		oneshot will be set to this interval:
@@ -705,11 +905,10 @@ config CPULOAD_ONESHOT_ENTROPY
 
 		Where
 
-			CPULOAD_ONESHOT_NOMINAL is the nominal sample internval implied
+			CPULOAD_ONESHOT_NOMINAL is the nominal sample interval implied
 			by CONFIG_SCHED_CPULOAD_TICKSPERSEC in units of microseconds.
-			CPULOAD_ONESHOT_ENTROPY is (1 << CONFIG_CPULOAD_ONESHOT_ENTROPY),
-			and
-			'error' is an error value that is retained from interval to
+			CPULOAD_ONESHOT_ENTROPY is (1 << CONFIG_CPULOAD_ENTROPY),
+			and 'error' is an error value that is retained from interval to
 			interval so that although individual intervals are randomized,
 			the average will still be CONFIG_SCHED_CPULOAD_TICKSPERSEC.
 
@@ -730,6 +929,8 @@ endif # SCHED_CPULOAD
 config SCHED_INSTRUMENTATION
 	bool "System performance monitor hooks"
 	default n
+	select SCHED_SUSPENDSCHEDULER
+	select SCHED_RESUMESCHEDULER
 	---help---
 		Enables instrumentation in scheduler to monitor system performance.
 		If enabled, then the board-specific logic must provide the following
@@ -776,6 +977,7 @@ config SCHED_INSTRUMENTATION_PREEMPTION
 config SCHED_INSTRUMENTATION_CSECTION
 	bool "Critical section monitor hooks"
 	default n
+	select IRQCOUNT
 	---help---
 		Enables additional hooks for entry and exit from critical sections.
 		Interrupts are disabled while within a critical section.  Board-
@@ -800,7 +1002,7 @@ config SCHED_INSTRUMENTATION_BUFFER
 	default n
 	---help---
 		If this option is selected, then in-memory buffering logic is
-		enabled to capature scheduler instrumentation data.  This has
+		enabled to capture scheduler instrumentation data.  This has
 		the advantage that (1) the platform logic does not have to provide
 		the sched_note_* interaces described for the previous settings.
 		Instead, the buffering logic catches all of these.  It encodes
@@ -928,6 +1130,9 @@ menuconfig PRIORITY_INHERITANCE
 		disabled for individual semaphores by calling:
 
 			int ret = sem_setprotocol(&sem, SEM_PRIO_NONE);
+
+		From applications, the functionally equivalent OS internal interface,
+		nxsem_setrotocol() should be used within the OS
 
 		And for individual pthread mutexes by setting the protocol attribute
 		before initializing the mutex:
@@ -1074,6 +1279,8 @@ config SCHED_ONEXIT_MAX
 
 endmenu # RTOS hooks
 
+menu "Signal Configuration"
+
 config SIG_EVTHREAD
 	bool "Support SIGEV_THHREAD"
 	default n
@@ -1086,8 +1293,74 @@ config SIG_EVTHREAD
 		different mechanism would need to be development to support this
 		feature on the PROTECTED or KERNEL build.
 
+menuconfig SIG_DEFAULT
+	bool "Default signal actions"
+	default n
+	depends on !DISABLE_SIGNALS
+	---help---
+		Enable to support default signal actions.
+
+if SIG_DEFAULT
+
+comment "Per-signal Default Actions"
+
+config SIG_SIGUSR1_ACTION
+	bool "SIGUSR1"
+	default n
+	---help---
+		Enable the default action for SIGUSR1 (terminate the task)
+		Make sure that your applications are expecting this POSIX behavior.
+		Backward compatible behavior would require that the application use
+		sigaction() to ignore SIGUSR1.
+
+config SIG_SIGUSR2_ACTION
+	bool "SIGUSR2"
+	default n
+	---help---
+		Enable the default action for SIGUSR2 (terminate the task)
+		Make sure that your applications are expecting this POSIX behavior.
+		Backward compatible behavior would require that the application use
+		sigaction() to ignore SIGUSR2.
+
+config SIG_SIGALRM_ACTION
+	bool "SIGALRM"
+	default n
+	---help---
+		Enable the default action for SIGALRM (terminate the task)
+		Make sure that your applications are expecting this POSIX behavior.
+		Backward compatible behavior would require that the application use
+		sigaction() to ignore SIGALRM.
+
+config SIG_SIGPOLL_ACTION
+	bool "SIGPOLL"
+	default n
+	depends on FS_AIO
+	---help---
+		Enable the default action for SIGPOLL (terminate the task)
+		Make sure that your applications are expecting this POSIX behavior.
+		Backward compatible behavior would require that the application use
+		sigaction() to ignore SIGPOLL.
+
+config SIG_SIGSTOP_ACTION
+	bool "SIGSTOP SIGSTP, and SIGCONT"
+	default y
+	---help---
+		Enable the default action for SIGSTOP and SIGSTP (suspend the
+		task) and SIGCONT (resume the task).
+
+config SIG_SIGKILL_ACTION
+	bool "SIGINT and SIGKILL"
+	default y
+	---help---
+		Enable the default action for SIGINT and SIGKILL (terminate the
+		task).
+
+endif # SIG_DEFAULT
+
 menu "Signal Numbers"
 	depends on !DISABLE_SIGNALS
+
+comment "Standard Signal Numbers"
 
 config SIG_SIGUSR1
 	int "SIGUSR1"
@@ -1101,7 +1374,7 @@ config SIG_SIGUSR2
 	---help---
 		Value of standard user signal 2 (SIGUSR2). Default: 2
 
-config SIG_SIGALARM
+config SIG_SIGALRM
 	int "SIGALRM"
 	default 3
 	---help---
@@ -1125,6 +1398,52 @@ config SIG_POLL
 		The SIGPOLL signal is sent to a process when an asynchronous I/O
 		event occurs (meaning it has been polled).  Default: 5
 
+if SIG_DEFAULT
+
+config SIG_STOP
+	int "SIGSTOP"
+	default 6
+	depends on SIG_SIGSTOP_ACTION
+	---help---
+		Suspend/pause a task.  SIGSTOP may not be caught or ignored.
+
+config SIG_STP
+	int "SIGSTP"
+	default 7
+	depends on SIG_SIGSTOP_ACTION
+	---help---
+		Suspend/pause a task.  Unlike SIGSTOP, this signal can be caught or
+		ignored.
+
+config SIG_CONT
+	int "SIGCONT"
+	default 8
+	depends on SIG_SIGSTOP_ACTION
+	---help---
+		Resume a suspended/paused task.  SIGSTOP only has an action when
+		send to a stopped task.  SIGCONT is ignored by other task.  SIGCONT
+		may not be caught or ignored by a stopped task.
+
+config SIG_KILL
+	int "SIGKILL"
+	default 9
+	depends on SIG_SIGKILL_ACTION
+	---help---
+		The SIGKILL signal is sent to cause a task termination event.
+		SIGKILL may not be caught or ignored.
+
+config SIG_INT
+	int "SIGINT"
+	default 10
+	depends on SIG_SIGKILL_ACTION
+	---help---
+		The SIGINT signal is sent to cause a task termination event.
+		SIGINT may be ignored or caught by the receiving task.
+
+endif # SIG_DEFAULT
+
+comment "Non-standard Signal Numbers"
+
 config SIG_SIGCONDTIMEDOUT
 	int "SIGCONDTIMEDOUT"
 	default 16
@@ -1143,6 +1462,7 @@ config SIG_SIGWORK
 		used for SIGWORK.  Default: 17
 
 endmenu # Signal Numbers
+endmenu # Signal Configuration
 
 menu "POSIX Message Queue Options"
 	depends on !DISABLE_MQUEUE
@@ -1204,6 +1524,24 @@ config SCHED_HPWORK
 
 if SCHED_HPWORK
 
+config SCHED_HPNTHREADS
+	int "Number of high-priority worker threads"
+	default 1
+	---help---
+		This options selects multiple, high-priority threads.  This is
+		essentially a "thread pool" that provides multi-threaded servicing
+		of the high-priority work queue.  This breaks the serialization
+		of the "queue" (hence, it is no longer a queue at all).
+
+		CAUTION: Some drivers may use the work queue to serialize
+		operations.  They may also use the high-priority work queue if it is
+		available.  If there are multiple high-priority worker threads, then
+		this can result in the loss of that serialization.  There may be
+		concurrent driver operations running on different HP threads and
+		this could lead to a failure.  You may need to visit the use of the
+		HP work queue on your configuration is you select
+		CONFIG_SCHED_HPNTHREADS > 1
+
 config SCHED_HPWORKPRIORITY
 	int "High priority worker thread priority"
 	default 224
@@ -1223,22 +1561,20 @@ config SCHED_HPWORKPRIORITY
 		priority worker thread can then be adjusted to match the highest
 		priority client.
 
-config SCHED_HPWORKPERIOD
-	int "High priority worker thread period"
-	default 100000 if SCHED_LPWORK
-	default 50000 if !SCHED_LPWORK
-	---help---
-		How often the worker thread checks for work in units of microseconds.
-		Default:  If the high priority worker thread is performing garbage
-		collection, then the default is 50*1000 (50 MS).  Otherwise, if the
-		lower priority worker thread is performing garbage collection, the
-		default is 100*1000.
-
 config SCHED_HPWORKSTACKSIZE
 	int "High priority worker thread stack size"
 	default 2048
 	---help---
 		The stack size allocated for the worker thread.  Default: 2K.
+
+config WQUEUE_NOTIFIER
+	bool "Generic work notifier"
+	default n
+	---help---
+		Enable building of work queue notifier logic that will execute a
+		worker function an event occurs.  This is is a general purpose
+		notifier, but was developed specifically to support poll() logic
+		where the poll must wait for an resources to become available.
 
 endif # SCHED_HPWORK
 
@@ -1272,8 +1608,8 @@ config SCHED_LPNTHREADS
 		example).
 
 		CAUTION: Some drivers may use the work queue to serialize
-		operations.  The may also use the low-priority work queue if it is
-		available.  If there are multiple low-priority worker thread, then
+		operations.  They may also use the low-priority work queue if it is
+		available.  If there are multiple low-priority worker threads, then
 		this can result in the loss of that serialization.  There may be
 		concurrent driver operations running on different LP threads and
 		this could lead to a failure.  You may need to visit the use of the
@@ -1282,7 +1618,7 @@ config SCHED_LPNTHREADS
 
 config SCHED_LPWORKPRIORITY
 	int "Low priority worker thread priority"
-	default 50
+	default 100
 	---help---
 		The minimum execution priority of the lower priority worker thread.
 
@@ -1291,7 +1627,7 @@ config SCHED_LPWORKPRIORITY
 		priority, of course, but has the added advantage that it supports
 		"priority inheritance" (if PRIORITY_INHERITANCE is also selected):
 		The priority of the lower priority worker thread can then be
-		adjusted to match the highest priority client.  Default: 50
+		adjusted to match the highest priority client.  Default: 100
 
 		NOTE: This priority inheritance feature is not automatic.  The
 		lower priority worker thread will always a fixed priority unless
@@ -1334,13 +1670,6 @@ config SCHED_LPWORKPRIOMAX
 		the maximum priority of the lower priority work thread.  Default:
 		176
 
-config SCHED_LPWORKPERIOD
-	int "Low priority worker thread period"
-	default 50000
-	---help---
-		How often the lower priority worker thread checks for work in units
-		of microseconds. Default: 50*1000 (50 MS).
-
 config SCHED_LPWORKSTACKSIZE
 	int "Low priority worker thread stack size"
 	default 2048
@@ -1358,7 +1687,7 @@ config IDLETHREAD_STACKSIZE
 	---help---
 		The size of the initial stack used by the IDLE thread.  The IDLE thread
 		is the thread that (1) performs the initial boot of the system up to the
-		point where start-up appliation is spawned, and (2) there after is the
+		point where start-up application is spawned, and (2) there after is the
 		IDLE thread that executes only when there is no other thread ready to run.
 
 config USERMAIN_STACKSIZE

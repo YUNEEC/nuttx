@@ -1,7 +1,7 @@
 /****************************************************************************
  * wireless/iee802154/mac802154_loopback.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,15 +71,18 @@
 
 #if !defined(CONFIG_SCHED_WORKQUEUE)
 #  error Worker thread support is required (CONFIG_SCHED_WORKQUEUE)
-#else
-#  if defined(CONFIG_IEEE802154_LOOPBACK_HPWORK)
-#    define LPBKWORK HPWORK
-#  elif defined(CONFIG_IEEE802154_LOOPBACK_LPWORK)
-#    define LPBKWORK LPWORK
-#  else
-#    error Neither CONFIG_IEEE802154_LOOPBACK_HPWORK nor CONFIG_IEEE802154_LOOPBACK_LPWORK defined
-#  endif
 #endif
+
+/* The low priority work queue is preferred.  If it is not enabled, LPWORK
+ * will be the same as HPWORK.
+ *
+ * NOTE:  However, the network should NEVER run on the high priority work
+ * queue!  That queue is intended only to service short back end interrupt
+ * processing that never suspends.  Suspending the high priority work queue
+ * may bring the system to its knees!
+ */
+
+#define LPBKWORK LPWORK
 
 /* Preferred address size */
 
@@ -174,7 +177,7 @@ static int  lo_ifup(FAR struct net_driver_s *dev);
 static int  lo_ifdown(FAR struct net_driver_s *dev);
 static void lo_txavail_work(FAR void *arg);
 static int  lo_txavail(FAR struct net_driver_s *dev);
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int  lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 static int  lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac);
 #endif
@@ -222,13 +225,16 @@ static void lo_addr2ip(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[1]  = 0;
   dev->d_ipv6addr[2]  = 0;
   dev->d_ipv6addr[3]  = 0;
-  dev->d_ipv6addr[4]  = (uint16_t)g_eaddr[0] << 8 | (uint16_t)g_eaddr[1];
-  dev->d_ipv6addr[5]  = (uint16_t)g_eaddr[2] << 8 | (uint16_t)g_eaddr[3];
-  dev->d_ipv6addr[6]  = (uint16_t)g_eaddr[4] << 8 | (uint16_t)g_eaddr[5];
-  dev->d_ipv6addr[7]  = (uint16_t)g_eaddr[6] << 8 | (uint16_t)g_eaddr[7];
-  dev->d_ipv6addr[4] ^= 0x200;
-}
+  dev->d_ipv6addr[4]  = HTONS((uint16_t)g_eaddr[7] << 8 | (uint16_t)g_eaddr[6]);
+  dev->d_ipv6addr[5]  = HTONS((uint16_t)g_eaddr[5] << 8 | (uint16_t)g_eaddr[4]);
+  dev->d_ipv6addr[6]  = HTONS((uint16_t)g_eaddr[3] << 8 | (uint16_t)g_eaddr[2]);
+  dev->d_ipv6addr[7]  = HTONS((uint16_t)g_eaddr[1] << 8 | (uint16_t)g_eaddr[0]);
+
+  /* Invert the U/L bit */
+
+  dev->d_ipv6addr[4] ^= HTONS(0x0200);
 #endif
+}
 #else
 static void lo_addr2ip(FAR struct net_driver_s *dev)
 {
@@ -247,8 +253,7 @@ static void lo_addr2ip(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[4]  = 0;
   dev->d_ipv6addr[5]  = HTONS(0x00ff);
   dev->d_ipv6addr[6]  = HTONS(0xfe00);
-  dev->d_ipv6addr[7]  = (uint16_t)g_saddr[0] << 8 | (uint16_t)g_saddr[1];
-  dev->d_ipv6addr[7] ^= 0x200;
+  dev->d_ipv6addr[7]  = HTONS((uint16_t)g_saddr[1] << 8 |  (uint16_t)g_saddr[0]);
 #endif
 }
 #endif
@@ -296,7 +301,7 @@ static inline void lo_netmask(FAR struct net_driver_s *dev)
  *   a callback from devif_poll() or devif_timer().  devif_poll() will be
  *   called only during normal TX polling.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -416,7 +421,7 @@ static int lo_loopback(FAR struct net_driver_s *dev)
  * Description:
  *   Perform loopback of received framelist.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -444,7 +449,7 @@ static void lo_loopback_work(FAR void *arg)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -485,7 +490,7 @@ static void lo_poll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -522,7 +527,7 @@ static void lo_poll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Ethernet interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -590,7 +595,7 @@ static int lo_ifup(FAR struct net_driver_s *dev)
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -622,7 +627,7 @@ static int lo_ifdown(FAR struct net_driver_s *dev)
  * Description:
  *   Perform an out-of-cycle poll on the worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the NuttX driver state structure (cast to void*)
  *
  * Returned Value:
@@ -666,7 +671,7 @@ static void lo_txavail_work(FAR void *arg)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -711,7 +716,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -722,7 +727,7 @@ static int lo_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
 #ifdef CONFIG_NET_6LOWPAN_EXTENDEDADDR
@@ -746,7 +751,7 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -757,7 +762,7 @@ static int lo_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
 #ifdef CONFIG_NET_6LOWPAN_EXTENDEDADDR
@@ -780,7 +785,7 @@ static int lo_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Handle network IOCTL commands directed to this device.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *   cmd - The IOCTL command
  *   arg - The argument for the IOCTL command
@@ -888,13 +893,13 @@ static int lo_ioctl(FAR struct net_driver_s *dev, int cmd,
  * Description:
  *   Calculate the MAC header length given the frame meta-data.
  *
- * Input parameters:
- *   netdev    - The networkd device that will mediate the MAC interface
+ * Input Parameters:
+ *   netdev    - The network device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
  *
  * Returned Value:
- *   A non-negative MAC headeer length is returned on success; a negated
+ *   A non-negative MAC header length is returned on success; a negated
  *   errno value is returned on any failure.
  *
  ****************************************************************************/
@@ -911,8 +916,8 @@ static int lo_get_mhrlen(FAR struct radio_driver_s *netdev,
  * Description:
  *   Requests the transfer of a list of frames to the MAC.
  *
- * Input parameters:
- *   netdev    - The networkd device that will mediate the MAC interface
+ * Input Parameters:
+ *   netdev    - The network device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
  *   framelist - Head of a list of frames to be transferred.
@@ -983,9 +988,9 @@ static int lo_req_data(FAR struct radio_driver_s *netdev,
  *   run time.  This information is provided to the 6LoWPAN network via the
  *   following structure.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev     - The network device to be queried
- *   properties - Location where radio properities will be returned.
+ *   properties - Location where radio properties will be returned.
  *
  * Returned Value:
  *   Zero (OK) returned on success; a negated errno value is returned on
@@ -1044,7 +1049,7 @@ static int lo_properties(FAR struct radio_driver_s *netdev,
  * Description:
  *   Initialize and register the Ieee802.15.4 MAC loopback network driver.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -1075,7 +1080,7 @@ int ieee8021514_loopback(void)
   dev->d_ifup         = lo_ifup;          /* I/F up (new IP address) callback */
   dev->d_ifdown       = lo_ifdown;        /* I/F down callback */
   dev->d_txavail      = lo_txavail;       /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   dev->d_addmac       = lo_addmac;        /* Add multicast MAC address */
   dev->d_rmmac        = lo_rmmac;         /* Remove multicast MAC address */
 #endif

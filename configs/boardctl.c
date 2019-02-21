@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/boardctl.c
  *
- *   Copyright (C) 2015-2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015-2017, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -276,6 +276,22 @@ int boardctl(unsigned int cmd, uintptr_t arg)
         }
         break;
 
+#ifdef CONFIG_BOARDCTL_FINALINIT
+      /* CMD:           BOARDIOC_FINALINIT
+       * DESCRIPTION:   Perform one-time application initialization after
+       *                start-up script.
+       * ARG:           The argument has no meaning
+       * CONFIGURATION: CONFIG_BOARDCTL_FINALINIT
+       * DEPENDENCIES:  Board logic must provide board_app_finalinitialize
+       */
+
+      case BOARDIOC_FINALINIT:
+        {
+          ret = board_app_finalinitialize(arg);
+        }
+        break;
+#endif
+
 #ifdef CONFIG_BOARDCTL_POWEROFF
       /* CMD:           BOARDIOC_POWEROFF
        * DESCRIPTION:   Power off the board
@@ -386,66 +402,17 @@ int boardctl(unsigned int cmd, uintptr_t arg)
         break;
 #endif
 
-#ifdef CONFIG_NX_MULTIUSER
+#ifdef CONFIG_NX
       /* CMD:           BOARDIOC_NX_START
        * DESCRIPTION:   Start the NX servier
        * ARG:           None
-       * CONFIGURATION: CONFIG_NX_MULTIUSER
+       * CONFIGURATION: CONFIG_NX
        * DEPENDENCIES:  Base graphics logic provides nx_start()
        */
 
       case BOARDIOC_NX_START:
         {
           ret = nx_start();
-        }
-        break;
-#endif
-
-#ifdef CONFIG_BOARDCTL_TSCTEST
-      /* CMD:           BOARDIOC_TSCTEST_SETUP
-       * DESCRIPTION:   Touchscreen controller test configuration
-       * ARG:           Touch controller device minor number
-       * CONFIGURATION: CONFIG_LIB_BOARDCTL && CONFIG_BOARDCTL_TSCTEST
-       * DEPENDENCIES:  Board logic must provide board_tsc_setup()
-       */
-
-      case BOARDIOC_TSCTEST_SETUP:
-        {
-          ret = board_tsc_setup((int)arg);
-        }
-        break;
-
-      /* CMD:           BOARDIOC_TSCTEST_TEARDOWN
-       * DESCRIPTION:   Touchscreen controller test configuration
-       * ARG:           None
-       * CONFIGURATION: CONFIG_LIB_BOARDCTL && CONFIG_BOARDCTL_TSCTEST
-       * DEPENDENCIES:  Board logic must provide board_tsc_teardown()
-       */
-
-      case BOARDIOC_TSCTEST_TEARDOWN:
-        {
-          board_tsc_teardown();
-          ret = OK;
-        }
-        break;
-#endif
-
-#ifdef CONFIG_BOARDCTL_GRAPHICS
-      /* CMD:           BOARDIOC_GRAPHICS_SETUP
-       * DESCRIPTION:   Configure graphics that require special initialization
-       *                procedures
-       * ARG:           A pointer to an instance of struct boardioc_graphics_s
-       * CONFIGURATION: CONFIG_LIB_BOARDCTL && CONFIG_BOARDCTL_GRAPHICS
-       * DEPENDENCIES:  Board logic must provide board_graphics_setup()
-       */
-
-      case BOARDIOC_GRAPHICS_SETUP:
-        {
-          FAR struct boardioc_graphics_s *setup =
-            (FAR struct boardioc_graphics_s *)arg;
-
-          setup->dev = board_graphics_setup(setup->devno);
-          ret = setup->dev ? OK : -ENODEV;
         }
         break;
 #endif

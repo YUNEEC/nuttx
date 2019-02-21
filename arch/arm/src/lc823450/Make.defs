@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/lc823450/Make.defs
 #
-#   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+#   Copyright 2014, 2015, 2016, 2017, 2018 Sony Video & Sound Products Inc.
 #   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
 #   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
 #   Author: Yasuhiro Osaki <Yasuhiro.Osaki@jp.sony.com>
@@ -35,11 +35,7 @@
 #
 ############################################################################
 
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 HEAD_ASRC =
-else
-HEAD_ASRC = lc823450_vectors.S
-endif
 
 CMN_UASRCS =
 CMN_UCSRCS =
@@ -54,19 +50,24 @@ CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
 CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_systemreset.c
 CMN_CSRCS += up_unblocktask.c up_usestack.c up_doirq.c up_hardfault.c
-CMN_CSRCS += up_svcall.c up_vfork.c
-CMN_CSRCS += up_allocateheap.c
+CMN_CSRCS += up_svcall.c up_vfork.c up_trigger_irq.c
 
 # CMN_CSRCS += up_dwt.c
 
 CMN_CSRCS += up_stackframe.c
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_ASRCS += up_exception.S
 CMN_CSRCS += up_vectors.c
-endif
 
 ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
 CMN_CSRCS += up_ramvec_initialize.c up_ramvec_attach.c
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CMN_CSRCS += up_task_start.c up_pthread_start.c
+ifneq ($(CONFIG_DISABLE_SIGNALS),y)
+CMN_CSRCS += up_signal_dispatch.c
+CMN_UASRCS += up_signal_handler.S
+endif
 endif
 
 ifeq ($(CONFIG_ARCH_MEMCPY),y)
@@ -77,23 +78,28 @@ ifeq ($(CONFIG_ARCH_MEMMOVE),y)
 CMN_CSRCS += up_memmove.c
 endif
 
-ifeq ($(CONFIG_DEBUG_STACK),y)
+ifeq ($(CONFIG_STACK_COLORATION),y)
 CMN_CSRCS += up_checkstack.c
 endif
 
 CHIP_ASRCS  =
 
-CHIP_CSRCS  = lc823450_start.c lc823450_irq.c lc823450_idle.c
-CHIP_CSRCS += lc823450_timerisr.c lc823450_lowputc.c
-CHIP_CSRCS += lc823450_serial.c lc823450_clockconfig.c lc823450_syscontrol.c
-CHIP_CSRCS += lc823450_gpio.c
+CHIP_CSRCS  = lc823450_allocateheap2.c lc823450_start.c lc823450_irq.c lc823450_timer.c
+CHIP_CSRCS += lc823450_lowputc.c lc823450_serial.c lc823450_clockconfig.c
+CHIP_CSRCS += lc823450_syscontrol.c lc823450_gpio.c
+
+# Configuration-dependent LC823450 files
+
+ifneq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
+CHIP_CSRCS += lc823450_idle.c
+endif
 
 ifeq ($(CONFIG_WATCHDOG),y)
 CHIP_CSRCS += lc823450_wdt.c
 endif
 
 ifeq ($(CONFIG_LC823450_SPIFI), y)
-CHIP_CSRCS += lc823450_spifi.c
+CHIP_CSRCS += lc823450_spifi2.c
 endif
 
 ifeq ($(CONFIG_LC823450_SDIF), y)
@@ -111,10 +117,6 @@ endif
 
 ifeq ($(CONFIG_SPI), y)
 CHIP_CSRCS += lc823450_spi.c
-endif
-
-ifeq ($(CONFIG_ARMV7M_MPU),y)
-CMN_CSRCS += up_mpu.c lc823450_mpuinit.c
 endif
 
 ifeq ($(CONFIG_ARCH_DMA), y)
@@ -137,32 +139,18 @@ ifeq ($(CONFIG_ADC),y)
 CHIP_CSRCS += lc823450_adc.c
 endif
 
-ifeq ($(CONFIG_IPL2),y)
-ifeq ($(CONFIG_SPIFLASH_BOOT),y)
-CHIP_CSRCS += lc823450_spif_ipl2.c
-else
+ifeq ($(CONFIG_LC823450_IPL2),y)
 CHIP_CSRCS += lc823450_ipl2.c
-endif
 endif
 
 ifeq ($(CONFIG_DVFS),y)
-CHIP_CSRCS += lc823450_dvfs.c
+CHIP_CSRCS += lc823450_dvfs2.c
+CHIP_CSRCS += lc823450_procfs_dvfs.c
 endif
 
 ifeq ($(CONFIG_PM),y)
 CHIP_CSRCS += lc823450_pminitialize.c
 CHIP_CSRCS += lc823450_sleep.c
-endif
-
-#CHIP_CSRCS += lc823450_allocateheap.c
-
-ifeq ($(CONFIG_MM_MULTIHEAP), y)
-CHIP_CSRCS += lc823450_mm.c
-CHIP_CSRCS += lc823450_sram.c
-endif
-
-ifeq ($(CONFIG_LC823450_SPIFI_RAMFAT), y)
-CHIP_CSRCS += lc823450_ramfat.c
 endif
 
 ifeq ($(CONFIG_SMP), y)
@@ -180,4 +168,17 @@ endif
 ifeq ($(CONFIG_LC823450_MTD),y)
 CHIP_CSRCS += lc823450_mtd.c
 CHIP_CSRCS += lc823450_mmcl.c
+endif
+
+ifeq ($(CONFIG_LC823450_I2S0),y)
+CHIP_CSRCS += lc823450_i2s.c
+endif
+
+ifeq ($(CONFIG_BUILD_PROTECTED),y)
+CHIP_CSRCS += lc823450_userspace.c
+endif
+
+ifeq ($(CONFIG_ARM_MPU),y)
+CMN_CSRCS  += up_mpu.c
+CHIP_CSRCS += lc823450_mpuinit2.c
 endif

@@ -26,7 +26,6 @@ if IOEXPANDER_PCA9555
 config PCA9555_MULTIPLE
 	bool "Multiple PCA9555 Devices"
 	default n
-	depends on EXPERIMENTAL
 	---help---
 		Can be defined to support multiple PCA9555 devices on board.
 
@@ -182,6 +181,14 @@ config DEV_GPIO
 		Enables a simple GPIO input/output driver to support application-
 		space testing of hardware.
 
+config DEV_GPIO_NSIGNALS
+	int "Max number of signals"
+	default 1
+	depends on DEV_GPIO
+	---help---
+		The maximum number of signals that can be registered with the GPIO
+		driver
+
 config GPIO_LOWER_HALF
 	bool "GPIO Lower Half"
 	default n
@@ -189,5 +196,16 @@ config GPIO_LOWER_HALF
 	---help---
 		Enable support for a lower half driver that provides GPIO driver
 		support for I/O expander pins.
+
+if GPIO_LOWER_HALF
+
+config GPIO_LOWER_HALF_INTTYPE
+	int "default interrupt type for GPIO_INTERRUPT_PIN pintype"
+	default 14
+	---help---
+		This is the default interrupt type (IOEXPANDER_VAL_BOTH) for
+		GPIO_INTERRUPT_PIN pintype in gplf driver register.
+
+endif
 
 endmenu # IO Expander/GPIO Support

@@ -1,7 +1,8 @@
 /****************************************************************************
  * fs/vfs/fs_write.c
  *
- *   Copyright (C) 2007-2009, 2012-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2012-2014, 2016-2017 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +52,7 @@
 #endif
 
 #include <nuttx/cancelpt.h>
+#include <nuttx/net/net.h>
 
 #include "inode/inode.h"
 
@@ -63,23 +65,36 @@
  *
  * Description:
  *   Equivalent to the standard write() function except that is accepts a
- *   struct file instance instead of a file descriptor.  Currently used
- *   only by aio_write();
+ *   struct file instance instead of a file descriptor.  It is functionally
+ *   equivalent to write() except that in addition to the differences in
+ *   input paramters:
+ *
+ *  - It does not modify the errno variable,
+ *  - It is not a cancellation point, and
+ *  - It does not handle socket descriptors.
+ *
+ * Input Parameters:
+ *   filep  - Instance of struct file to use with the write
+ *   buf    - Data to write
+ *   nbytes - Length of data to write
+ *
+ * Returned Value:
+ *  On success, the number of bytes written are returned (zero indicates
+ *  nothing was written).  On any failure, a negated errno value is returned
+ *  (see comments withwrite() for a description of the appropriate errno
+ *  values).
  *
  ****************************************************************************/
 
 ssize_t file_write(FAR struct file *filep, FAR const void *buf, size_t nbytes)
 {
   FAR struct inode *inode;
-  ssize_t ret;
-  int errcode;
 
   /* Was this file opened for write access? */
 
   if ((filep->f_oflags & O_WROK) == 0)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Is a driver registered? Does it support the write method? */
@@ -87,23 +102,86 @@ ssize_t file_write(FAR struct file *filep, FAR const void *buf, size_t nbytes)
   inode = filep->f_inode;
   if (!inode || !inode->u.i_ops || !inode->u.i_ops->write)
     {
-      errcode = EBADF;
-      goto errout;
+      return -EBADF;
     }
 
   /* Yes, then let the driver perform the write */
 
-  ret = inode->u.i_ops->write(filep, buf, nbytes);
-  if (ret < 0)
+  return inode->u.i_ops->write(filep, buf, nbytes);
+}
+
+/****************************************************************************
+ * Name: nx_write
+ *
+ * Description:
+ *  nx_write() writes up to nytes bytes to the file referenced by the file
+ *  descriptor fd from the buffer starting at buf.  nx_write() is an
+ *  internal OS function.  It is functionally equivalent to write() except
+ *  that:
+ *
+ *  - It does not modify the errno variable, and
+ *  - It is not a cancellation point.
+ *
+ * Input Parameters:
+ *   fd     - file descriptor (or socket descriptor) to write to
+ *   buf    - Data to write
+ *   nbytes - Length of data to write
+ *
+ * Returned Value:
+ *  On success, the number of bytes written are returned (zero indicates
+ *  nothing was written).  On any failure, a negated errno value is returned
+ *  (see comments withwrite() for a description of the appropriate errno
+ *   values).
+ *
+ ****************************************************************************/
+
+ssize_t nx_write(int fd, FAR const void *buf, size_t nbytes)
+{
+#if CONFIG_NFILE_DESCRIPTORS > 0
+  FAR struct file *filep;
+#endif
+  ssize_t ret;
+
+  if (buf == NULL)
     {
-      errcode = -ret;
-      goto errout;
+      return -EINVAL;
     }
 
-  return ret;
+  /* Did we get a valid file descriptor? */
 
-errout:
-  set_errno(errcode);
+#if CONFIG_NFILE_DESCRIPTORS > 0
+  if ((unsigned int)fd >= CONFIG_NFILE_DESCRIPTORS)
+#endif
+    {
+#if defined(CONFIG_NET_TCP) && CONFIG_NSOCKET_DESCRIPTORS > 0
+      /* Write to a socket descriptor is equivalent to send with flags == 0. */
+
+      ret = nx_send(fd, buf, nbytes, 0);
+#else
+      ret = -EBADF;
+#endif
+    }
+
+#if CONFIG_NFILE_DESCRIPTORS > 0
+  else
+    {
+      /* The descriptor is in the right range to be a file descriptor..
+       * write to the file.  Note that fs_getfilep() will set the errno on
+       * failure.
+       */
+
+      ret = (ssize_t)fs_getfilep(fd, &filep);
+      if (ret >= 0)
+        {
+          /* Perform the write operation using the file descriptor as an
+           * index.  Note that file_write() will set the errno on failure.
+           */
+
+          ret = file_write(filep, buf, nbytes);
+        }
+    }
+#endif
+
   return ret;
 }
 
@@ -114,13 +192,13 @@ errout:
  *  write() writes up to nytes bytes to the file referenced by the file
  *  descriptor fd from the buffer starting at buf.
  *
- * Parameters:
- *   fd       file descriptor (or socket descriptor) to write to
- *   buf      Data to write
- *   nbytes   Length of data to write
+ * Input Parameters:
+ *   fd     - file descriptor (or socket descriptor) to write to
+ *   buf    - Data to write
+ *   nbytes - Length of data to write
  *
  * Returned Value:
- *  On success, the number of bytes  written are returned (zero indicates
+ *  On success, the number of bytes written are returned (zero indicates
  *  nothing was written). On error, -1 is returned, and errno is set appro-
  *  priately:
  *
@@ -153,64 +231,24 @@ errout:
  *    signal. (Thus, the write return value is seen only if the program
  *    catches, blocks or ignores this signal.)
  *
- * Assumptions:
- *
- ********************************************************************************************/
+ ****************************************************************************/
 
 ssize_t write(int fd, FAR const void *buf, size_t nbytes)
 {
-#if CONFIG_NFILE_DESCRIPTORS > 0
-  FAR struct file *filep;
-#endif
   ssize_t ret;
 
   /* write() is a cancellation point */
 
   (void)enter_cancellation_point();
 
-  /* Did we get a valid file descriptor? */
+  /* Let nx_write() do all of the work */
 
-#if CONFIG_NFILE_DESCRIPTORS > 0
-  if ((unsigned int)fd >= CONFIG_NFILE_DESCRIPTORS)
-#endif
+  ret = nx_write(fd, buf, nbytes);
+  if (ret < 0)
     {
-#if defined(CONFIG_NET_TCP) && CONFIG_NSOCKET_DESCRIPTORS > 0
-      /* Write to a socket descriptor is equivalent to send with flags == 0.
-       * Note that send() will set the errno on failure.
-       */
-
-      ret = send(fd, buf, nbytes, 0);
-#else
-      set_errno(EBADF);
-      ret = ERROR ERROR;
-#endif
+      set_errno(-ret);
+      ret = ERROR;
     }
-
-#if CONFIG_NFILE_DESCRIPTORS > 0
-  else
-    {
-      /* The descriptor is in the right range to be a file descriptor..
-       * write to the file.  Note that fs_getfilep() will set the errno on
-       * failure.
-       */
-
-      filep = fs_getfilep(fd);
-      if (filep == NULL)
-        {
-          /* The errno value has already been set */
-
-          ret = ERROR;
-        }
-      else
-        {
-          /* Perform the write operation using the file descriptor as an
-           * index.  Note that file_write() will set the errno on failure.
-           */
-
-          ret = file_write(filep, buf, nbytes);
-        }
-    }
-#endif
 
   leave_cancellation_point();
   return ret;

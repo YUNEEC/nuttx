@@ -114,12 +114,12 @@ struct syslog_channel_s
 {
   /* I/O redirection methods */
 
-#ifdef CONFIG_SYSLOG_WRITE
-  syslog_write_t sc_write;  /* Write multiple bytes */
-#endif
   syslog_putc_t  sc_putc;   /* Normal buffered output */
   syslog_putc_t  sc_force;  /* Low-level output for interrupt handlers */
   syslog_flush_t sc_flush;  /* Flush buffered output (on crash) */
+#ifdef CONFIG_SYSLOG_WRITE
+  syslog_write_t sc_write;  /* Write multiple bytes */
+#endif
 
   /* Implementation specific logic may follow */
 };
@@ -149,7 +149,7 @@ extern "C"
  *   Configure the SYSLOGging function to use the provided channel to
  *   generate SYSLOG output.
  *
- * Input buffer:
+ * Input Parameters:
  *   channel - Provides the interface to the channel to be used.
  *
  * Returned Value:
@@ -243,6 +243,14 @@ int syslog_file_channel(FAR const char *devpath);
  *   Interrupts are disabled at the time of the crash and this logic must
  *   perform the flush using low-level, non-interrupt driven logic.
  *
+ *   REVISIT:  There is an implementation problem in that if a character
+ *   driver is the underlying device, then there is no mechanism to flush
+ *   the data buffered in the driver with interrupts disabled.
+ *
+ *   Currently, this function on (a) dumps the interrupt buffer (if the
+ *   SYSLOG interrupt buffer is enabled), and (b) only the SYSLOG interface
+ *   supports supports the 'sc_force()' method.
+ *
  * Input Parameters:
  *   None
  *
@@ -252,21 +260,13 @@ int syslog_file_channel(FAR const char *devpath);
  *
  ****************************************************************************/
 
-#if 0
-/* REVISIT: (1) Not yet integrated into assertion handlers and (2) there is
- * an implementation problem in that if a character driver is the underlying
- * device, then there is no mechanism to flush the data buffered in the
- * driver with interrupts disabled.
- */
-
 int syslog_flush(void);
-#endif
 
 /****************************************************************************
- * Name: _vsyslog
+ * Name: nx_vsyslog
  *
  * Description:
- *   _vsyslog() handles the system logging system calls. It is functionally
+ *   nx_vsyslog() handles the system logging system calls. It is functionally
  *   equivalent to vsyslog() except that (1) the per-process priority
  *   filtering has already been performed and the va_list parameter is
  *   passed by reference.  That is because the va_list is a structure in
@@ -275,25 +275,7 @@ int syslog_flush(void);
  *
  ****************************************************************************/
 
-int _vsyslog(int priority, FAR const IPTR char *src, FAR va_list *ap);
-
-/****************************************************************************
- * Name: syslog_register
- *
- * Description:
- *   Register a simple character driver at /dev/syslog whose write() method
- *   will transfer data to the SYSLOG device.  This can be useful if, for
- *   example, you want to redirect the output of a program to the SYSLOG.
- *
- *   NOTE that unlike other syslog output, this data is unformatted raw
- *   byte output with no time-stamping or any other SYSLOG features
- *   supported.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_SYSLOG_CHARDEV
-void syslog_register(void);
-#endif
+int nx_vsyslog(int priority, FAR const IPTR char *src, FAR va_list *ap);
 
 #undef EXTERN
 #ifdef __cplusplus

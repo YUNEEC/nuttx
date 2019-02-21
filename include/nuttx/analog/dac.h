@@ -1,14 +1,14 @@
 /************************************************************************************
  * include/nuttx/analog/dac.h
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2017, 2018 Gregory Nutt. All rights reserved.
  *   Copyright (C) 2011 Li Zhuoyi. All rights reserved.
  *   Author: Li Zhuoyi <lzyy.cn@gmail.com>
  *   History: 0.1 2011-08-04 initial version
  *
  * Derived from include/nuttx/can/can.h
  *
- *   Copyright (C) 2008, 2009 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2008, 2009, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,11 +55,13 @@
 #include <stdbool.h>
 #include <semaphore.h>
 #include <nuttx/fs/fs.h>
+#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/spi/spi.h>
 
 /************************************************************************************
  * Pre-processor Definitions
  ************************************************************************************/
+
 /* Default configuration settings that may be overridden in the board configuration.
  * file.  The configured size is limited to 255 to fit into a uint8_t.
  */
@@ -86,7 +88,7 @@ struct dac_fifo_s
   sem_t         af_sem;                  /* Counting semaphore */
   uint8_t       af_head;                 /* Index to the head [IN] index in the circular buffer */
   uint8_t       af_tail;                 /* Index to the tail [OUT] index in the circular buffer */
-                                         /* Circular buffer of CAN messages */
+                                         /* Circular buffer of DAC messages */
   struct dac_msg_s af_buffer[CONFIG_DAC_FIFOSIZE];
 };
 
@@ -190,7 +192,7 @@ int dac_register(FAR const char *path, FAR struct dac_dev_s *dev);
  * Input Parameters:
  *    dev - An instance of the device-specific DAC interface
  *
- * Return:
+ * Returned Value:
  *   OK on success; a negated errno on failure.
  *
  ************************************************************************************/
@@ -207,6 +209,26 @@ int dac_txdone(FAR struct dac_dev_s *dev);
  ************************************************************************************/
 
 FAR struct dac_dev_s *up_ad5410initialize(FAR struct spi_dev_s *spi, unsigned int devno);
+
+FAR struct dac_dev_s *dac7571_initialize(FAR struct i2c_master_s *i2c, uint8_t addr);
+
+/****************************************************************************
+ * Name: lmp92001_dac_initialize
+ *
+ * Description:
+ *   Initialize DAC
+ *
+ * Input Parameters:
+ *   I2C Port number
+ *   Device address
+ *
+ * Returned Value:
+ *   Valid LM92001 device structure reference on success; a NULL on failure
+ *
+ ****************************************************************************/
+
+FAR struct dac_dev_s *lmp92001_dac_initialize(FAR struct i2c_master_s *i2c,
+                                               uint8_t addr);
 
 #if defined(__cplusplus)
 }

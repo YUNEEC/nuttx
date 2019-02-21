@@ -50,16 +50,16 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sem_initialize
+ * Name: nxsem_initialize
  *
  * Description:
  *   The control structures for all semaphores may be initialized by calling
- *   sem_initialize().  This should be done once at power-on.
+ *   nxsem_initialize().  This should be done once at power-on.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -67,11 +67,11 @@
  *
  ****************************************************************************/
 
-void sem_initialize(void)
+void nxsem_initialize(void)
 {
   /* Initialize holder structures needed to support priority inheritance */
 
-  sem_initholders();
+  nxsem_initholders();
 }
 
 #endif /* CONFIG_PRIORITY_INHERITANCE */

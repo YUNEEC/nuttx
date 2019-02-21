@@ -208,6 +208,7 @@ static const uint16_t I2CEVENT_ISR_SHUTDOWN = 1001;        /* ISR gets shutdown 
 static const uint16_t I2CEVENT_ISR_EMPTY_CALL = 1002;      /* ISR gets called but no I2C logic comes into play */
 static const uint16_t I2CEVENT_MSG_HANDLING = 1003;        /* Message Handling 1/1: advances the msg processing param = msgc */
 static const uint16_t I2CEVENT_POLL_DEV_NOT_RDY = 1004;    /* During polled operation if device is not ready yet */
+static const uint16_t I2CEVENT_ISR_SR1ERROR = 1005;        /* ERROR set in SR1 at end of transfer */
 static const uint16_t I2CEVENT_ISR_CALL = 1111;            /* ISR called */
 
 static const uint16_t I2CEVENT_SENDADDR = 5;               /* Start/Master bit set and address sent, param = priv->msgv->addr(EV5 in reference manual) */
@@ -244,7 +245,7 @@ struct stm32_trace_s
   uint32_t count;              /* Interrupt count when status change */
   uint32_t event;              /* Last event that occurred with this status */
   uint32_t parm;               /* Parameter associated with the event */
-  systime_t time;              /* First of event or first status */
+  clock_t time;                /* First of event or first status */
 };
 
 /* I2C Device hardware configuration */
@@ -288,7 +289,7 @@ struct stm32_i2c_priv_s
 
 #ifdef CONFIG_I2C_TRACE
   int tndx;                    /* Trace array index */
-  systime_t start_time;        /* Time when the trace was started */
+  clock_t start_time;          /* Time when the trace was started */
 
   /* The actual trace data */
 
@@ -513,10 +514,21 @@ static inline void stm32_i2c_modifyreg(FAR struct stm32_i2c_priv_s *priv,
 
 static inline void stm32_i2c_sem_wait(FAR struct stm32_i2c_priv_s *priv)
 {
-  while (sem_wait(&priv->sem_excl) != 0)
+  int ret;
+
+  do
     {
-      ASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->sem_excl);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /************************************************************************************
@@ -574,7 +586,7 @@ static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 
   /* Signal the interrupt handler that we are waiting.  NOTE:  Interrupts
    * are currently disabled but will be temporarily re-enabled below when
-   * sem_timedwait() sleeps.
+   * nxsem_timedwait() sleeps.
    */
 
   priv->intstate = INTSTATE_WAITING;
@@ -611,11 +623,11 @@ static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 
       /* Wait until either the transfer is complete or the timeout expires */
 
-      ret = sem_timedwait(&priv->sem_isr, &abstime);
-      if (ret != OK && errno != EINTR)
+      ret = nxsem_timedwait(&priv->sem_isr, &abstime);
+      if (ret < 0 && ret != -EINTR)
         {
           /* Break out of the loop on irrecoverable errors.  This would
-           * include timeouts and mystery errors reported by sem_timedwait.
+           * include timeouts and mystery errors reported by nxsem_timedwait.
            * NOTE that we try again if we are awakened by a signal (EINTR).
            */
 
@@ -643,9 +655,9 @@ static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 #else
 static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 {
-  systime_t timeout;
-  systime_t start;
-  systime_t elapsed;
+  clock_t timeout;
+  clock_t start;
+  clock_t elapsed;
   int ret;
 
   /* Get the timeout value */
@@ -658,7 +670,7 @@ static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 
   /* Signal the interrupt handler that we are waiting.  NOTE:  Interrupts
    * are currently disabled but will be temporarily re-enabled below when
-   * sem_timedwait() sleeps.
+   * nxsem_timedwait() sleeps.
    */
 
   priv->intstate = INTSTATE_WAITING;
@@ -702,9 +714,9 @@ static int stm32_i2c_sem_waitdone(FAR struct stm32_i2c_priv_s *priv)
 
 static inline void stm32_i2c_sem_waitstop(FAR struct stm32_i2c_priv_s *priv)
 {
-  systime_t start;
-  systime_t elapsed;
-  systime_t timeout;
+  clock_t start;
+  clock_t elapsed;
+  clock_t timeout;
   uint32_t cr1;
   uint32_t sr1;
 
@@ -767,7 +779,7 @@ static inline void stm32_i2c_sem_waitstop(FAR struct stm32_i2c_priv_s *priv)
 
 static inline void stm32_i2c_sem_post(FAR struct stm32_i2c_priv_s *priv)
 {
-  sem_post(&priv->sem_excl);
+  nxsem_post(&priv->sem_excl);
 }
 
 /************************************************************************************
@@ -780,15 +792,15 @@ static inline void stm32_i2c_sem_post(FAR struct stm32_i2c_priv_s *priv)
 
 static inline void stm32_i2c_sem_init(FAR struct stm32_i2c_priv_s *priv)
 {
-  sem_init(&priv->sem_excl, 0, 1);
+  nxsem_init(&priv->sem_excl, 0, 1);
 
 #ifndef CONFIG_I2C_POLLED
   /* This semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_init(&priv->sem_isr, 0, 0);
-  sem_setprotocol(&priv->sem_isr, SEM_PRIO_NONE);
+  nxsem_init(&priv->sem_isr, 0, 0);
+  nxsem_setprotocol(&priv->sem_isr, SEM_PRIO_NONE);
 #endif
 }
 
@@ -802,9 +814,9 @@ static inline void stm32_i2c_sem_init(FAR struct stm32_i2c_priv_s *priv)
 
 static inline void stm32_i2c_sem_destroy(FAR struct stm32_i2c_priv_s *priv)
 {
-  sem_destroy(&priv->sem_excl);
+  nxsem_destroy(&priv->sem_excl);
 #ifndef CONFIG_I2C_POLLED
-  sem_destroy(&priv->sem_isr);
+  nxsem_destroy(&priv->sem_isr);
 #endif
 }
 
@@ -911,7 +923,7 @@ static void stm32_i2c_tracedump(FAR struct stm32_i2c_priv_s *priv)
   syslog(LOG_DEBUG, "Elapsed time: %ld\n",
          (long)(clock_systimer() - priv->start_time));
 
-  for (i = 0; i <= priv->tndx; i++)
+  for (i = 0; i < priv->tndx; i++)
     {
       trace = &priv->trace[i];
       syslog(LOG_DEBUG,
@@ -1589,7 +1601,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
            * do nothing.
            */
 
-          else if (priv->msgc > 0 && ((priv->msgv->flags & I2C_M_NORESTART) != 0))
+          else if (priv->msgc > 0 && ((priv->msgv->flags & I2C_M_NOSTART) != 0))
             {
               /* Set condition to get to next message */
 
@@ -1813,7 +1825,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
    * device wasn't ready yet.
    */
 
-   else
+  else
     {
 #ifdef CONFIG_I2C_POLLED
       stm32_i2c_traceevent(priv, I2CEVENT_POLL_DEV_NOT_RDY, 0);
@@ -1825,7 +1837,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
       i2cerr("ERROR:  No correct state detected(start bit, read or write) \n");
       i2cerr("   state %i\n", status);
 
-      /* set condition to terminate ISR and wake waiting thread */
+      /* Set condition to terminate ISR and wake waiting thread */
 
       priv->dcnt = -1;
       priv->msgc = 0;
@@ -1844,7 +1856,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
 
   if ((status & I2C_SR1_ERRORMASK) != 0)
     {
-      stm32_i2c_traceevent(priv, I2CEVENT_ERROR, status & I2C_SR1_ERRORMASK);
+      stm32_i2c_traceevent(priv, I2CEVENT_ISR_SR1ERROR, status & I2C_SR1_ERRORMASK);
 
       /* Clear interrupt flags */
 
@@ -1884,7 +1896,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
            * and wake it up.
            */
 
-          sem_post(&priv->sem_isr);
+          nxsem_post(&priv->sem_isr);
           priv->intstate = INTSTATE_DONE;
         }
 #endif
@@ -2254,11 +2266,11 @@ static int stm32_i2c_reset(FAR struct i2c_master_s * dev)
   uint32_t frequency;
   int ret = ERROR;
 
-  ASSERT(dev);
+  DEBUGASSERT(dev);
 
   /* Our caller must own a ref */
 
-  ASSERT(priv->refs > 0);
+  DEBUGASSERT(priv->refs > 0);
 
   /* Lock out other clients */
 
@@ -2436,7 +2448,7 @@ int stm32_i2cbus_uninitialize(FAR struct i2c_master_s *dev)
   FAR struct stm32_i2c_priv_s *priv = (FAR struct stm32_i2c_priv_s *)dev;
   irqstate_t flags;
 
-  ASSERT(dev);
+  DEBUGASSERT(dev);
 
   /* Decrement reference count and check for underflow */
 

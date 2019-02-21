@@ -218,6 +218,34 @@
 #  define BOARD_SPIFI_FREQUENCY     (102000000) /* 204MHz / 14 = 14.57MHz */
 #endif
 
+/* SD/MMC or SDIO interface ************************************************/
+
+#define BOARD_SDMMC_CEIL(a,b)    (((a) + (b) - 1) / (b))
+
+/* For LPC4330 family there is no predivider for the clock */
+
+#define BOARD_SDMMC_FREQUENCY    BOARD_MAIN_CLK
+
+/* Mode-dependent function clock division
+ *
+ * NOTE:  Clock division is 2*n. For example, value of 0 means divide by
+ * 2 * 0 = 0 (no division, bypass), value of 1 means divide by 2 * 1 = 2, value
+ * of 255 means divide by 2 * 255 = 510, and so on.
+ *
+ * SD/MMC logic will write the value ((clkdiv + 1) >> 1) as the divisor.  So an
+ * odd value calculated below will be moved up to next higher divider value.  So
+ * the value 3 will cause 2 to be written as the divider value and the effective
+ * divider will be 4.
+ *
+ * NOTE: The SDIO function clock to the interface can be up to 52 MHZ.
+ *       See UM10503 Section 22.2.
+ */
+
+#define BOARD_CLKDIV_INIT       BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 400000)
+#define BOARD_CLKDIV_MMCXFR     BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 20000000)
+#define BOARD_CLKDIV_SDWIDEXFR  BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 25000000)
+#define BOARD_CLKDIV_SDXFR      BOARD_SDMMC_CEIL(BOARD_SDMMC_FREQUENCY, 25000000)
+
 /* UART clocking ***********************************************************/
 /* Configure all U[S]ARTs to use the XTAL input frequency */
 
@@ -315,46 +343,6 @@
 #define PINCONF_ENET_RESET  PINCONF_GPIO0p4
 #define GPIO_ENET_RESET     (GPIO_MODE_OUTPUT | GPIO_VALUE_ONE | GPIO_PORT0 | GPIO_PIN4)
 #define PINCONF_ENET_MDC    PINCONF_ENET_MDC_3
+#define PINCONF_ENET_TX_EN  PINCONF_ENET_TX_EN_1
 
-/****************************************************************************
- * Public Types
- ****************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/****************************************************************************
- * Public Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Name: lpc43_boardinitialize
- *
- * Description:
- *   All LPC43xx architectures must provide the following entry point.  This entry point
- *   is called early in the intitialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ****************************************************************************/
-
-void lpc43_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __ARCH_BOARD_BOARD_H */

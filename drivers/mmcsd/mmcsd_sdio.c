@@ -1,8 +1,9 @@
 /****************************************************************************
  * drivers/mmcsd/mmcsd_sdio.c
  *
- *   Copyright (C) 2009-2013, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2009-2013, 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
+ *           Bob Feretich <bob.fereich@rafresearch.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -96,7 +97,7 @@
 
 #define MMCSD_SCR_DATADELAY     (100)      /* Wait up to 100MS to get SCR */
 #define MMCSD_BLOCK_RDATADELAY  (100)      /* Wait up to 100MS to get one data block */
-#define MMCSD_BLOCK_WDATADELAY  (200)      /* Wait up to 200MS to write one data block */
+#define MMCSD_BLOCK_WDATADELAY  (230)      /* Wait up to 230MS to write one data block */
 
 #define IS_EMPTY(priv) (priv->type == MMCSD_CARDTYPE_UNKNOWN)
 
@@ -127,7 +128,7 @@ struct mmcsd_state_s
 
   uint8_t mode:2;                  /* (See MMCSDMODE_* definitions) */
   uint8_t type:4;                  /* Card type (See MMCSD_CARDTYPE_* definitions) */
-  uint8_t buswidth:4;              /* Bus widthes supported (SD only) */
+  uint8_t buswidth:4;              /* Bus widths supported (SD only) */
   sdio_capset_t caps;              /* SDIO driver capabilities/limitations */
   uint16_t selblocklen;            /* The currently selected block length */
   uint16_t rca;                    /* Relative Card Address (RCS) register */
@@ -143,6 +144,7 @@ struct mmcsd_state_s
 #else
   uint32_t capacity;               /* Total capacity of volume (Limited to 4Gb) */
 #endif
+
   /* Read-ahead and write buffering support */
 
 #if defined(CONFIG_DRVR_WRITEBUFFER) || defined(CONFIG_DRVR_READAHEAD)
@@ -159,7 +161,7 @@ struct mmcsd_state_s
 static void    mmcsd_takesem(FAR struct mmcsd_state_s *priv);
 
 #ifndef CONFIG_SDIO_MUXBUS
-#  define mmcsd_givesem(p) sem_post(&priv->sem);
+#  define mmcsd_givesem(p) nxsem_post(&priv->sem);
 #endif
 
 /* Command/response helpers *************************************************/
@@ -279,18 +281,23 @@ static const struct block_operations g_bops =
 
 static void mmcsd_takesem(FAR struct mmcsd_state_s *priv)
 {
+  int ret;
+
   /* Take the semaphore, giving exclusive access to the driver (perhaps
    * waiting)
    */
 
-  while (sem_wait(&priv->sem) != 0)
+  do
     {
+      ret = nxsem_wait(&priv->sem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Lock the bus if mutually exclusive access to the SDIO bus is required
    * on this platform.
@@ -310,7 +317,7 @@ static void mmcsd_givesem(FAR struct mmcsd_state_s *priv)
    */
 
   SDIO_LOCK(priv->dev, FALSE);
-  sem_post(&priv->sem);
+  nxsem_post(&priv->sem);
 }
 #endif
 
@@ -998,6 +1005,10 @@ static int mmcsd_getR1(FAR struct mmcsd_state_s *priv, FAR uint32_t *r1)
            */
 
           priv->locked = ((localR1 & MMCSD_R1_CARDISLOCKED) != 0);
+
+          /* We must tell someone which error bits were set. */
+
+          fwarn("WARNING: mmcsd_getR1 returned errors: R1=%08x\n", localR1);
           ret = -EIO;
         }
       else
@@ -1121,8 +1132,8 @@ static int mmcsd_eventwait(FAR struct mmcsd_state_s *priv,
 
 static int mmcsd_transferready(FAR struct mmcsd_state_s *priv)
 {
-  systime_t starttime;
-  systime_t elapsed;
+  clock_t starttime;
+  clock_t elapsed;
   uint32_t r1;
   int ret;
 
@@ -1186,10 +1197,13 @@ static int mmcsd_transferready(FAR struct mmcsd_state_s *priv)
         }
 
       /* Check for the programming state. This is not an error.  It means
-       * that the card is still busy from the last (write) transfer.
+       * that the card is still busy from the last (write) transfer.  The
+       * card can also still be receiving data, for example, if hardware
+       * receive FIFOs are not yet empty.
        */
 
-      else if (!IS_STATE(r1, MMCSD_R1_STATE_PRG))
+      else if (!IS_STATE(r1, MMCSD_R1_STATE_PRG) &&
+               !IS_STATE(r1, MMCSD_R1_STATE_RCV))
         {
           /* Any other state would be an error in this context.  There is
            * a possibility that the card is not selected.  In this case,
@@ -1300,7 +1314,7 @@ static ssize_t mmcsd_readsingle(FAR struct mmcsd_state_s *priv,
       return -EPERM;
     }
 
-#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
   /* If we think we are going to perform a DMA transfer, make sure that we
    * will be able to before we commit the card to the operation.
    */
@@ -1395,6 +1409,9 @@ static ssize_t mmcsd_readsingle(FAR struct mmcsd_state_s *priv,
 
   ret = mmcsd_eventwait(priv, SDIOWAIT_TIMEOUT | SDIOWAIT_ERROR,
                         MMCSD_BLOCK_RDATADELAY);
+#ifdef CONFIG_SDIO_DMA
+  SDIO_DMADELYDINVLDT(priv->dev, buffer, priv->blocksize);
+#endif
   if (ret != OK)
     {
       ferr("ERROR: CMD17 transfer failed: %d\n", ret);
@@ -1434,7 +1451,7 @@ static ssize_t mmcsd_readmultiple(FAR struct mmcsd_state_s *priv,
       return -EPERM;
     }
 
-#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
   /* If we think we are going to perform a DMA transfer, make sure that we
    * will be able to before we commit the card to the operation.
    */
@@ -1537,6 +1554,10 @@ static ssize_t mmcsd_readmultiple(FAR struct mmcsd_state_s *priv,
   /* Send STOP_TRANSMISSION */
 
   ret = mmcsd_stoptransmission(priv);
+#ifdef CONFIG_SDIO_DMA
+  SDIO_DMADELYDINVLDT(priv->dev, buffer, priv->blocksize * nblocks);
+#endif
+
   if (ret != OK)
     {
       ferr("ERROR: mmcsd_stoptransmission failed: %d\n", ret);
@@ -1640,7 +1661,7 @@ static ssize_t mmcsd_writesingle(FAR struct mmcsd_state_s *priv,
       return -EPERM;
     }
 
-#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
   /* If we think we are going to perform a DMA transfer, make sure that we
    * will be able to before we commit the card to the operation.
    */
@@ -1781,6 +1802,8 @@ static ssize_t mmcsd_writesingle(FAR struct mmcsd_state_s *priv,
  *
  * Description:
  *   Write multiple, contiguous blocks of data to the physical device.
+ *   This function expects that the data to be written is contained in
+ *   one large buffer that is pointed to by buffer.
  *
  ****************************************************************************/
 
@@ -1792,6 +1815,7 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
   off_t  offset;
   size_t nbytes;
   int ret;
+  int evret = OK;
 
   finfo("startblock=%d nblocks=%d\n", startblock, nblocks);
   DEBUGASSERT(priv != NULL && buffer != NULL && nblocks > 1);
@@ -1806,7 +1830,7 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
       return -EPERM;
     }
 
-#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_SDIO_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
   /* If we think we are going to perform a DMA transfer, make sure that we
    * will be able to before we commit the card to the operation.
    */
@@ -1861,10 +1885,10 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
       return ret;
     }
 
-  /* If this is an SD card, then send ACMD23 (SET_WR_BLK_COUNT) just before
-   * sending CMD25 (WRITE_MULTIPLE_BLOCK).  This sets the number of write
-   * blocks to be pre-erased and might make the following multiple block write
-   * command faster.
+  /* If this is an SD card, then send ACMD23 (SET_WR_BLK_ERASE_COUNT) just
+   * before sending CMD25 (WRITE_MULTIPLE_BLOCK).  This sets the number of
+   * write blocks to be pre-erased and might make the following multiple block
+   * write command faster.
    */
 
   if (IS_SD(priv->type))
@@ -1879,13 +1903,34 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
           return ret;
         }
 
-      /* Send CMD23, SET_WR_BLK_COUNT, and verify that good R1 status is returned */
+      /* Send CMD23, SET_WR_BLK_ERASE_COUNT, and verify that good R1 status
+       * is returned.
+       */
 
-      mmcsd_sendcmdpoll(priv, SD_ACMD23, 0);
+      mmcsd_sendcmdpoll(priv, SD_ACMD23, nblocks);
       ret = mmcsd_recvR1(priv, SD_ACMD23);
       if (ret != OK)
         {
           ferr("ERROR: mmcsd_recvR1 for ACMD23 failed: %d\n", ret);
+          return ret;
+        }
+    }
+
+  /* If Controller does not need DMA setup before the write then send CMD25
+   * now.
+   */
+
+  if ((priv->caps & SDIO_CAPS_DMABEFOREWRITE) == 0)
+    {
+      /* Send CMD25, WRITE_MULTIPLE_BLOCK, and verify that good R1 status
+       * is returned
+       */
+
+      mmcsd_sendcmdpoll(priv, MMCSD_CMD25, offset);
+      ret = mmcsd_recvR1(priv, MMCSD_CMD25);
+      if (ret != OK)
+        {
+          ferr("ERROR: mmcsd_recvR1 for CMD25 failed: %d\n", ret);
           return ret;
         }
     }
@@ -1918,30 +1963,46 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
 
   priv->wrbusy = true;
 
-  /* Send CMD25, WRITE_MULTIPLE_BLOCK, and verify that good R1 status
-   * is returned
-   */
+  /* If Controller needs DMA setup before write then only send CMD25 now. */
 
-  mmcsd_sendcmdpoll(priv, MMCSD_CMD25, offset);
-  ret = mmcsd_recvR1(priv, MMCSD_CMD25);
-  if (ret != OK)
+  if ((priv->caps & SDIO_CAPS_DMABEFOREWRITE) != 0)
     {
-      ferr("ERROR: mmcsd_recvR1 for CMD25 failed: %d\n", ret);
-      return ret;
+      /* Send CMD25, WRITE_MULTIPLE_BLOCK, and verify that good R1 status
+       * is returned
+       */
+
+      mmcsd_sendcmdpoll(priv, MMCSD_CMD25, offset);
+      ret = mmcsd_recvR1(priv, MMCSD_CMD25);
+      if (ret != OK)
+        {
+          ferr("ERROR: mmcsd_recvR1 for CMD25 failed: %d\n", ret);
+          return ret;
+        }
     }
 
   /* Wait for the transfer to complete */
 
-  ret = mmcsd_eventwait(priv, SDIOWAIT_TIMEOUT | SDIOWAIT_ERROR, nblocks * MMCSD_BLOCK_WDATADELAY);
-  if (ret != OK)
+  evret = mmcsd_eventwait(priv, SDIOWAIT_TIMEOUT | SDIOWAIT_ERROR,
+                          nblocks * MMCSD_BLOCK_WDATADELAY);
+  if (evret != OK)
     {
-      ferr("ERROR: CMD18 transfer failed: %d\n", ret);
-      return ret;
+      ferr("ERROR: CMD25 transfer failed: %d\n", evret);
+
+      /* If we return from here, we probably leave the sd-card in
+       * Receive-data State. Instead, we will remember that
+       * an error occurred and try to execute the STOP_TRANSMISSION
+       * to put the sd-card back into Transfer State.
+       */
     }
 
   /* Send STOP_TRANSMISSION */
 
   ret = mmcsd_stoptransmission(priv);
+  if (evret != OK)
+    {
+      return evret;
+    }
+
   if (ret != OK)
     {
       ferr("ERROR: mmcsd_stoptransmission failed: %d\n", ret);
@@ -2737,9 +2798,9 @@ static int mmcsd_cardidentify(FAR struct mmcsd_state_s *priv)
 {
   uint32_t response;
   uint32_t sdcapacity = MMCSD_ACMD41_STDCAPACITY;
-  systime_t start;
-  systime_t elapsed;
-  int      ret;
+  clock_t start;
+  clock_t elapsed;
+  int ret;
 
   /* Assume failure to identify the card */
 
@@ -3006,7 +3067,7 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
    * else
    */
 
-#ifdef CONFIG_MMCSD_HAVECARDDETECT
+#ifdef CONFIG_MMCSD_HAVE_CARDDETECT
   if (priv->probed && SDIO_PRESENT(priv->dev))
     {
       return OK;
@@ -3033,7 +3094,7 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
       if (ret != OK)
         {
           ferr("ERROR: Failed to initialize card: %d\n", ret);
-#ifdef CONFIG_MMCSD_HAVECARDDETECT
+#ifdef CONFIG_MMCSD_HAVE_CARDDETECT
           SDIO_CALLBACKENABLE(priv->dev, SDIOMEDIA_INSERTED);
 #endif
         }
@@ -3070,7 +3131,7 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
               finfo("Capacity: %lu Kbytes\n", (unsigned long)(priv->capacity / 1024));
               priv->mediachanged = true;
 
-#ifdef CONFIG_MMCSD_HAVECARDDETECT
+#ifdef CONFIG_MMCSD_HAVE_CARDDETECT
               /* Set up to receive asynchronous, media removal events */
 
               SDIO_CALLBACKENABLE(priv->dev, SDIOMEDIA_EJECTED);
@@ -3091,7 +3152,7 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
       /* There is no card in the slot */
 
       finfo("No card\n");
-#ifdef CONFIG_MMCSD_HAVECARDDETECT
+#ifdef CONFIG_MMCSD_HAVE_CARDDETECT
       SDIO_CALLBACKENABLE(priv->dev, SDIOMEDIA_INSERTED);
 #endif
       ret = -ENODEV;
@@ -3288,7 +3349,7 @@ int mmcsd_slotinitialize(int minor, FAR struct sdio_dev_s *dev)
       /* Initialize the MMC/SD state structure */
 
       memset(priv, 0, sizeof(struct mmcsd_state_s));
-      sem_init(&priv->sem, 0, 1);
+      nxsem_init(&priv->sem, 0, 1);
 
       /* Bind the MMCSD driver to the MMCSD state structure */
 
@@ -3367,3 +3428,4 @@ errout_with_alloc:
 }
 
 #endif /* defined (CONFIG_MMCSD) && defined (CONFIG_MMCSD_SDIO) */
+

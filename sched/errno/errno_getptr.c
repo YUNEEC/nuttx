@@ -72,10 +72,10 @@ static int g_irqerrno;
  * Description:
  *   Return a pointer to the thread specific errno.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   A pointer to the per-thread errno variable.
  *
  * Assumptions:

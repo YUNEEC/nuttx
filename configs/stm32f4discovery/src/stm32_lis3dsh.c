@@ -47,8 +47,6 @@
 
 #include "stm32.h"
 #include "stm32f4discovery.h"
-#include <stm32_gpio.h>
-#include <nuttx/sensors/lis3dsh.h>
 
 #if defined(CONFIG_STM32F4DISCO_LIS3DSH) && defined(CONFIG_LIS3DSH)
 
@@ -70,7 +68,7 @@
  *   Attach the lis3dsh interrupt handler to PE0/EXT0 on the STM32F4 as wired
  *   on STM32F4Discovery
  *
- * Input parameters:
+ * Input Parameters:
  *   *config - The lis3dsh instance configuration data containing the IRQ number,
  *     device ID and interrupt handler
  *   interrupt_handler - The interrupt handler to attach
@@ -100,14 +98,14 @@ int attach_disc_lis3dsh(FAR struct lis3dsh_config_s *config, xcpt_t interrupt_ha
  * Description:
  *   Initialize and register the LIS3DSH 3-axis accelerometer.
  *
- * Input parameters:
+ * Input Parameters:
  *   devpath - The full path to the driver to register. E.g., "/dev/acc0"
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure.
  *
  ************************************************************************************/
- 
+
 int stm32_lis3dshinitialize(FAR const char *devpath)
 {
   static struct lis3dsh_config_s acc0_config;
@@ -115,7 +113,7 @@ int stm32_lis3dshinitialize(FAR const char *devpath)
   int ret;
 
   sninfo("Initializing LIS3DSH\n");
-  
+
   acc0_config.irq=22;
   acc0_config.spi_devid=0;
   acc0_config.attach = &attach_disc_lis3dsh;

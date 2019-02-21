@@ -69,7 +69,7 @@
  *   domain is selected, then the setup is already in place and we need do
  *   nothing.
  *
- * Parameters:
+ * Input Parameters:
  *   fwd - The forwarding state structure
  *
  * Returned Value:
@@ -128,7 +128,7 @@ static inline void forward_ipselect(FAR struct forward_s *fwd)
  *   NOTE 3: If CONFIG_NET_ARP_SEND then we can be assured that the IP
  *   address mapping is already in the ARP table.
  *
- * Parameters:
+ * Input Parameters:
  *   fwd - The forwarding state structure
  *
  * Returned Value:
@@ -158,8 +158,11 @@ static inline bool ipfwd_addrchk(FAR struct forward_s *fwd)
 #endif
     {
 #if !defined(CONFIG_NET_ARP_IPIN) && !defined(CONFIG_NET_ARP_SEND)
-      FAR stuct ipv4_hdr_s *ipv4 = (FAR stuct ipv4_hdr_s *)fwd->f_iob->io_data;
-      return (arp_find(ipv4->destipaddr) != NULL);
+      FAR struct ipv4_hdr_s *ipv4 = (FAR struct ipv4_hdr_s *)fwd->f_iob->io_data;
+      int ret;
+
+      ret = arp_find(*(in_addr_t *)ipv4->destipaddr, NULL);
+      return (ret >= 0);
 #else
       return true;
 #endif
@@ -171,9 +174,9 @@ static inline bool ipfwd_addrchk(FAR struct forward_s *fwd)
   else
 #endif
     {
-#if !defined(CONFIG_NET_ICMPv6_NEIGHBOR)
-      FAR stuct ipv6_hdr_s *ipv4 = (FAR stuct ipv6_hdr_s *)fwd->f_iob->io_data;
-      return (neighbor_findentry(ipv6->destipaddr) != NULL);
+#if defined(CONFIG_NET_ICMPv6_NEIGHBOR)
+      FAR struct ipv6_hdr_s *ipv6 = (FAR struct ipv6_hdr_s *)fwd->f_iob->io_data;
+      return (neighbor_lookup(ipv6->destipaddr, NULL) >= 0);
 #else
       return true;
 #endif
@@ -189,13 +192,14 @@ static inline bool ipfwd_addrchk(FAR struct forward_s *fwd)
  * Name: ipfwd_eventhandler
  *
  * Description:
- *   This function is called from the interrupt level to perform the actual
+ *   This function is called with the network locked to perform the actual
  *   send operation when polled by the lower, device interfacing layer.
  *
- * Parameters:
- *   dev        The structure of the network driver that caused the interrupt
- *   conn       An instance of the forwarding structure cast to void *
- *   pvpriv     An instance of struct forward_s cast to void*
+ * Input Parameters:
+ *   dev        The structure of the network driver that generated the
+ *              event
+ *   conn       An instance of the forwarding structure cast to (void *)
+ *   pvpriv     An instance of struct forward_s cast to (void *)
  *   flags      Set of events describing why the callback was invoked
  *
  * Returned Value:

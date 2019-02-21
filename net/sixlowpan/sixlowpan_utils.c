@@ -59,6 +59,7 @@
 #include <nuttx/wireless/pktradio.h>
 #include <nuttx/wireless/ieee802154/ieee802154_mac.h>
 
+#include "route/route.h"
 #include "inet/inet.h"
 #include "sixlowpan/sixlowpan_internal.h"
 
@@ -126,7 +127,7 @@ static void sixlowpan_baddrfromip(const net_ipv6addr_t ipaddr, FAR uint8_t *badd
 {
   /* Big-endian uint16_t to byte order */
 
-  baddr[0] = ipaddr[7] >> 8 ^ 0x02;
+  baddr[0] = NTOHS(ipaddr[7]) & 0xff;
 }
 #endif
 
@@ -135,9 +136,8 @@ static void sixlowpan_saddrfromip(const net_ipv6addr_t ipaddr, FAR uint8_t *sadd
 {
   /* Big-endian uint16_t to byte order */
 
-  saddr[0]  = ipaddr[7] >> 8;
-  saddr[1]  = ipaddr[7] & 0xff;
-  saddr[0] ^= 0x02;
+  saddr[0]  = NTOHS(ipaddr[7]) >> 8;
+  saddr[1]  = NTOHS(ipaddr[7]) & 0xff;
 }
 #endif
 
@@ -147,14 +147,12 @@ static void sixlowpan_eaddrfromip(const net_ipv6addr_t ipaddr, FAR uint8_t *eadd
   FAR uint8_t *eptr = eaddr;
   int i;
 
-  DEBUGASSERT(ipaddr[0] == HTONS(0xfe80));
-
   for (i = 4; i < 8; i++)
     {
       /* Big-endian uint16_t to byte order */
 
-      *eptr++ = ipaddr[i] >> 8;
-      *eptr++ = ipaddr[i] & 0xff;
+      *eptr++ = NTOHS(ipaddr[i]) >> 8;
+      *eptr++ = NTOHS(ipaddr[i]) & 0xff;
     }
 
   eaddr[0] ^= 0x02;
@@ -167,6 +165,63 @@ static void sixlowpan_eaddrfromip(const net_ipv6addr_t ipaddr, FAR uint8_t *eadd
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: sixlowpan_nexthopaddr
+ *
+ * Description:
+ *   sixlowpan_nexthopaddr(): If the destination is on-link, extract the
+ *   IEEE 802.15.14 destination address from the destination IP address. If the
+ *   destination is not reachable directly, use the routing table (if available)
+ *   or fall back to the default router IP address and use the router IP address
+ *   to derive the IEEE 802.15.4 MAC address.
+ *
+ ****************************************************************************/
+
+int sixlowpan_nexthopaddr(FAR struct radio_driver_s *radio,
+                          FAR const net_ipv6addr_t ipaddr,
+                          FAR struct netdev_varaddr_s *destaddr)
+{
+  FAR net_ipv6addr_t router;
+  int ret;
+
+  /* Try to get the IEEE 802.15.4 MAC address of the destination.  This
+   * assumes an encoding of the MAC address in the IPv6 address.
+   */
+
+  ret = sixlowpan_destaddrfromip(radio, ipaddr, destaddr);
+  if (ret < 0)
+    {
+      /* Destination address is not on the local network */
+
+#ifdef CONFIG_NET_ROUTE
+      /* We have a routing table.. find the correct router to use in
+       * this case (or, as a fall-back, use the device's default router
+       * address).  We will use the router IPv6 address instead of the
+       * destination address when determining the MAC address.
+       */
+
+      netdev_ipv6_router(&radio->r_dev, ipaddr, router);
+#else
+      /* Use the device's default router IPv6 address instead of the
+       * destination address when determining the MAC address.
+       */
+
+      net_ipv6addr_copy(router, radio->r_dev.d_ipv6draddr);
+#endif
+      /* Get the IEEE 802.15.4 MAC address of the router.  This
+       * assumes an encoding of the MAC address in the IPv6 address.
+       */
+
+      ret = sixlowpan_destaddrfromip(radio, router, destaddr);
+      if (ret < 0)
+        {
+          return ret;
+        }
+    }
+
+  return OK;
+}
+
+/****************************************************************************
  * Name: sixlowpan_destaddrfromip
  *
  * Description:
@@ -177,7 +232,7 @@ static void sixlowpan_eaddrfromip(const net_ipv6addr_t ipaddr, FAR uint8_t *eadd
  *
  *    128  112  96   80    64   48   32   16
  *    ---- ---- ---- ----  ---- ---- ---- ----
- *    ff02 xxxx xxxx xxxx  xxxx xxxx xxxx xxxx Multicast
+ *    ffxx xxxx xxxx xxxx  xxxx xxxx xxxx xxxx Multicast address (RFC 3513)
  *    ff02 0000 0000 0000  0000 0000 0000 0001 All nodes multicast group
  *    xxxx 0000 0000 0000  0000 00ff fe00 xx00 1-byte short address IEEE 48-bit MAC
  *    xxxx 0000 0000 0000  0000 00ff fe00 xxxx 2-byte short address IEEE 48-bit MAC
@@ -214,50 +269,54 @@ int sixlowpan_destaddrfromip(FAR struct radio_driver_s *radio,
 
 #else /* CONFIG_NET_STARPOINT */
 
-   /* Check for a multicast address */
+  /* Check for a multicast address */
 
-   if (ipaddr[0] == HTONS(0xff02))
-     {
-        DEBUGASSERT(radio->r_properties != NULL);
-        ret = radio->r_properties(radio, &properties);
-        if (ret < 0)
-          {
-            return ret;
-          }
+  if (net_is_addr_mcast(ipaddr))
+    {
+      DEBUGASSERT(radio->r_properties != NULL);
+      ret = radio->r_properties(radio, &properties);
+      if (ret < 0)
+        {
+          return ret;
+        }
 
-        /* Check for the broadcast IP address
-         *
-         * IPv6 does not implement the method of broadcast, and therefore
-         * does not define broadcast addresses. Instead, IPv6 uses multicast
-         * addressing to the all-nodes multicast group: ff02:0:0:0:0:0:0:1.
-         *
-         * However, the use of the all-nodes group is not common, and most
-         * IPv6 protocols use a dedicated link-local multicast group to avoid
-         * disturbing every interface in the network.
-         */
+      /* Check for the broadcast IP address
+       *
+       * IPv6 does not implement the method of broadcast, and therefore
+       * does not define broadcast addresses. Instead, IPv6 uses multicast
+       * addressing to the all-nodes multicast group: ff02:0:0:0:0:0:0:1.
+       *
+       * However, the use of the all-nodes group is not common, and most
+       * IPv6 protocols use a dedicated link-local multicast group to avoid
+       * disturbing every interface in the network.
+       */
 
-        if (net_ipv6addr_cmp(ipaddr, g_ipv6_allnodes))
-          {
-            memcpy(destaddr, &properties.sp_bcast,
-                   sizeof(struct netdev_varaddr_s));
-          }
-        else
-          {
-            memcpy(destaddr, &properties.sp_mcast,
-                   sizeof(struct netdev_varaddr_s));
-          }
+      if (net_ipv6addr_cmp(ipaddr, g_ipv6_allnodes))
+        {
+          memcpy(destaddr, &properties.sp_bcast,
+                 sizeof(struct netdev_varaddr_s));
+        }
 
-          return OK;
-     }
+      /* Some other RFC 3513 multicast address */
 
-   /* Otherwise, the destination MAC address is encoded in the IP address */
+      else
+        {
+          memcpy(destaddr, &properties.sp_mcast,
+                 sizeof(struct netdev_varaddr_s));
+        }
 
-   /* Check for compressible link-local address.
-    * REVISIT:  This should not restrict us to link-local addresses.
-    */
+      return OK;
+    }
 
-  if (ipaddr[0] != HTONS(0xfe80) || ipaddr[1] != 0 ||
-      ipaddr[2] != 0             || ipaddr[3] != 0)
+  /* Otherwise, the destination MAC address is encoded in the IP address */
+
+  /* If the address is link-local, or matches the prefix of the local address,
+   * the interface identifier can be extracted from the lower bits of the address.
+   */
+
+  if (!sixlowpan_islinklocal(ipaddr) &&
+      !net_ipv6addr_maskcmp(radio->r_dev.d_ipv6addr, ipaddr,
+                            radio->r_dev.d_ipv6netmask))
     {
       return -EADDRNOTAVAIL;
     }
@@ -374,7 +433,7 @@ static inline void sixlowpan_ipfrombyte(FAR const uint8_t *byte,
   ipaddr[4]  = 0;
   ipaddr[5]  = HTONS(0x00ff);
   ipaddr[6]  = HTONS(0xfe00);
-  ipaddr[7]  = (uint16_t)byte[0] << 8 ^ 0x0200;
+  ipaddr[7]  = HTONS((uint16_t)byte[0]);
 }
 #endif
 
@@ -389,8 +448,10 @@ static inline void sixlowpan_ipfromsaddr(FAR const uint8_t *saddr,
   ipaddr[4]  = 0;
   ipaddr[5]  = HTONS(0x00ff);
   ipaddr[6]  = HTONS(0xfe00);
-  ipaddr[7]  = (uint16_t)saddr[0] << 8 |  (uint16_t)saddr[1];
-  ipaddr[7] ^= 0x0200;
+
+  /* Preserve big-endian */
+
+  memcpy(&ipaddr[7], saddr, 2);
 }
 #endif
 
@@ -402,11 +463,17 @@ static inline void sixlowpan_ipfromeaddr(FAR const uint8_t *eaddr,
   ipaddr[1]  = 0;
   ipaddr[2]  = 0;
   ipaddr[3]  = 0;
-  ipaddr[4]  = (uint16_t)eaddr[0] << 8 | (uint16_t)eaddr[1];
-  ipaddr[5]  = (uint16_t)eaddr[2] << 8 | (uint16_t)eaddr[3];
-  ipaddr[6]  = (uint16_t)eaddr[4] << 8 | (uint16_t)eaddr[5];
-  ipaddr[7]  = (uint16_t)eaddr[6] << 8 | (uint16_t)eaddr[7];
-  ipaddr[4] ^= 0x0200;
+
+  /* Preserve big-endian */
+
+  memcpy(&ipaddr[4], eaddr    , 2);
+  memcpy(&ipaddr[5], eaddr + 2, 2);
+  memcpy(&ipaddr[6], eaddr + 4, 2);
+  memcpy(&ipaddr[7], eaddr + 6, 2);
+
+  /* Invert the U/L bit */
+
+  ipaddr[4] ^= HTONS(0x0200);
 }
 #endif
 
@@ -461,7 +528,7 @@ static inline bool sixlowpan_isbytebased(const net_ipv6addr_t ipaddr,
 {
   return (ipaddr[5] == HTONS(0x00ff) &&
           ipaddr[6] == HTONS(0xfe00) &&
-          ipaddr[7] == (((uint16_t)byte << 8) ^ 0x0200));
+          ipaddr[7] == HTONS((uint16_t)byte));
 }
 #endif
 
@@ -470,16 +537,22 @@ static inline bool sixlowpan_issaddrbased(const net_ipv6addr_t ipaddr,
 {
   return (ipaddr[5] == HTONS(0x00ff) &&
           ipaddr[6] == HTONS(0xfe00) &&
-          ipaddr[7] == (GETUINT16(saddr, 0) ^ 0x0200));
+          ipaddr[7] == *(uint16_t *)saddr);
 }
 
 static inline bool sixlowpan_iseaddrbased(const net_ipv6addr_t ipaddr,
                                           FAR const uint8_t *eaddr)
 {
-  return (ipaddr[4] == (GETUINT16(eaddr, 0) ^ 0x0200) &&
-          ipaddr[5] ==  GETUINT16(eaddr, 2) &&
-          ipaddr[6] ==  GETUINT16(eaddr, 4) &&
-          ipaddr[7] ==  GETUINT16(eaddr, 6));
+  /* If the U/L bit is not set, indicating that the address is universal, it
+   * can not be eaddr-based since EUI-64's are always universal
+   */
+
+  if ((ipaddr[4] & HTONS(0x0200)) == 0) return false;
+
+  return (ipaddr[4] == ((*(uint16_t *)eaddr) ^ HTONS(0x0200)) &&
+          ipaddr[5] ==   *(uint16_t *)(eaddr + 2) &&
+          ipaddr[6] ==   *(uint16_t *)(eaddr + 4) &&
+          ipaddr[7] ==   *(uint16_t *)(eaddr + 6));
 }
 
 bool sixlowpan_ismacbased(const net_ipv6addr_t ipaddr,
@@ -514,7 +587,7 @@ bool sixlowpan_ismacbased(const net_ipv6addr_t ipaddr,
  * Description:
  *   Get the maximum frame length supported by radio network drvier.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *
  * Returned Value:
@@ -548,7 +621,7 @@ int sixlowpan_radio_framelen(FAR struct radio_driver_s *radio)
  * Description:
  *   Get the source PAN ID from the IEEE802.15.4 MAC layer.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio - Reference to a radio network driver state instance.
  *   panid - The location in which to return the PAN ID.  0xfff may be
  *           returned if the device is not associated.
@@ -576,7 +649,11 @@ int sixlowpan_src_panid(FAR struct radio_driver_s *radio,
       return ret;
     }
 
-  IEEE802154_PANIDCOPY(panid, arg.u.getreq.attrval.mac.panid);
+  /* MAC802154 gives us PAN ID in Little Endinan Order, but we need it in Network Order */
+
+  panid[0] = arg.u.getreq.attrval.mac.panid[1];
+  panid[1] = arg.u.getreq.attrval.mac.panid[0];
+
   return OK;
 }
 #endif
@@ -588,7 +665,7 @@ int sixlowpan_src_panid(FAR struct radio_driver_s *radio,
  *   Extract the source MAC address from the radio-specific RX metadata, and
  *   return the source address in a radio-agnostic form.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio    - Reference to a radio network driver state instance.
  *   metadata - Opaque reference to the radio-specific RX metadata.
  *   srcaddr  - The location in which to return the source MAC address.
@@ -615,12 +692,28 @@ int sixlowpan_extract_srcaddr(FAR struct radio_driver_s *radio,
       if (ind->src.mode == IEEE802154_ADDRMODE_SHORT)
         {
           srcaddr->nv_addrlen = NET_6LOWPAN_SADDRSIZE;
-          memcpy(srcaddr->nv_addr, ind->src.saddr, NET_6LOWPAN_SADDRSIZE);
+
+          /* MAC802154 gives us Short Address in Little Endinan Order, but we
+           * need it in Network Order */
+
+          srcaddr->nv_addr[0] = ind->src.saddr[1];
+          srcaddr->nv_addr[1] = ind->src.saddr[0];
         }
       else
         {
           srcaddr->nv_addrlen = NET_6LOWPAN_EADDRSIZE;
-          memcpy(srcaddr->nv_addr, ind->src.eaddr, NET_6LOWPAN_EADDRSIZE);
+
+          /* MAC802154 gives us Extended Address in Little Endinan Order, but
+           * we need it in Network Order */
+
+          srcaddr->nv_addr[0] = ind->src.eaddr[7];
+          srcaddr->nv_addr[1] = ind->src.eaddr[6];
+          srcaddr->nv_addr[2] = ind->src.eaddr[5];
+          srcaddr->nv_addr[3] = ind->src.eaddr[4];
+          srcaddr->nv_addr[4] = ind->src.eaddr[3];
+          srcaddr->nv_addr[5] = ind->src.eaddr[2];
+          srcaddr->nv_addr[6] = ind->src.eaddr[1];
+          srcaddr->nv_addr[7] = ind->src.eaddr[0];
         }
 
       return OK;
@@ -655,7 +748,7 @@ int sixlowpan_extract_srcaddr(FAR struct radio_driver_s *radio,
  *   Extract the destination MAC address from the radio-specific RX metadata,
  *   and return the destination address in a radio-agnostic form.
  *
- * Input parameters:
+ * Input Parameters:
  *   radio    - Reference to a radio network driver state instance.
  *   metadata - Opaque reference to the radio-specific RX metadata.
  *   destaddr - The location in which to return the destination MAC address.
@@ -682,12 +775,28 @@ int sixlowpan_extract_destaddr(FAR struct radio_driver_s *radio,
       if (ind->dest.mode == IEEE802154_ADDRMODE_SHORT)
         {
           destaddr->nv_addrlen = NET_6LOWPAN_SADDRSIZE;
-          memcpy(destaddr->nv_addr, ind->dest.saddr, NET_6LOWPAN_SADDRSIZE);
+
+          /* MAC802154 gives us Short Address in Little Endinan Order, but we
+           * need it in Network Order */
+
+          destaddr->nv_addr[0] = ind->dest.saddr[1];
+          destaddr->nv_addr[1] = ind->dest.saddr[0];
         }
       else
         {
           destaddr->nv_addrlen = NET_6LOWPAN_EADDRSIZE;
-          memcpy(destaddr->nv_addr, ind->dest.eaddr, NET_6LOWPAN_EADDRSIZE);
+
+          /* MAC802154 gives us Extended Address in Little Endinan Order, but
+           * we need it in Network Order */
+
+          destaddr->nv_addr[0] = ind->dest.eaddr[7];
+          destaddr->nv_addr[1] = ind->dest.eaddr[6];
+          destaddr->nv_addr[2] = ind->dest.eaddr[5];
+          destaddr->nv_addr[3] = ind->dest.eaddr[4];
+          destaddr->nv_addr[4] = ind->dest.eaddr[3];
+          destaddr->nv_addr[5] = ind->dest.eaddr[2];
+          destaddr->nv_addr[6] = ind->dest.eaddr[1];
+          destaddr->nv_addr[7] = ind->dest.eaddr[0];
         }
 
       return OK;

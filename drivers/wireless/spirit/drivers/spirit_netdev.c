@@ -336,7 +336,7 @@ static int  spirit_ifup(FAR struct net_driver_s *dev);
 static int  spirit_ifdown(FAR struct net_driver_s *dev);
 static int  spirit_txavail(FAR struct net_driver_s *dev);
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int  spirit_addmac(FAR struct net_driver_s *dev,
               FAR const uint8_t *mac);
 static int  spirit_rmmac(FAR struct net_driver_s *dev,
@@ -476,7 +476,7 @@ static struct spirit_pktstack_address_s g_addrinit =
  * Description:
  *   Get exclusive access to the incoming RX packet queue.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to a driver state structure instance
  *
  * Returned Value:
@@ -486,10 +486,21 @@ static struct spirit_pktstack_address_s g_addrinit =
 
 static void spirit_rxlock(FAR struct spirit_driver_s *priv)
 {
-  while (sem_wait(&priv->rxsem) < 0)
+  int ret;
+
+  do
     {
-      DEBUGASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->rxsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -498,7 +509,7 @@ static void spirit_rxlock(FAR struct spirit_driver_s *priv)
  * Description:
  *   Relinquish exclusive access to the incoming RX packet queue.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to a driver state structure instance
  *
  * Returned Value:
@@ -508,7 +519,7 @@ static void spirit_rxlock(FAR struct spirit_driver_s *priv)
 
 static inline void spirit_rxunlock(FAR struct spirit_driver_s *priv)
 {
-  sem_post(&priv->rxsem);
+  nxsem_post(&priv->rxsem);
 }
 
 /****************************************************************************
@@ -517,7 +528,7 @@ static inline void spirit_rxunlock(FAR struct spirit_driver_s *priv)
  * Description:
  *   Get exclusive access to the outgoing TX packet queue.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to a driver state structure instance
  *
  * Returned Value:
@@ -527,10 +538,21 @@ static inline void spirit_rxunlock(FAR struct spirit_driver_s *priv)
 
 static void spirit_txlock(FAR struct spirit_driver_s *priv)
 {
-  while (sem_wait(&priv->txsem) < 0)
+  int ret;
+
+  do
     {
-      DEBUGASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->txsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -539,7 +561,7 @@ static void spirit_txlock(FAR struct spirit_driver_s *priv)
  * Description:
  *   Relinquish exclusive access to the outgoing TX packet queue.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to a driver state structure instance
  *
  * Returned Value:
@@ -549,7 +571,7 @@ static void spirit_txlock(FAR struct spirit_driver_s *priv)
 
 static inline void spirit_txunlock(FAR struct spirit_driver_s *priv)
 {
-  sem_post(&priv->txsem);
+  nxsem_post(&priv->txsem);
 }
 
 /****************************************************************************
@@ -560,7 +582,7 @@ static inline void spirit_txunlock(FAR struct spirit_driver_s *priv)
  *   8-bit node-address for the radio.  We will then derive the IPv6
  *   address for that.
  *
- * Parameters:
+ * Input Parameters:
  *   spirit - Reference to a Spirit library state structure instance
  *
  * Returned Value:
@@ -598,7 +620,7 @@ static void spirit_set_ipaddress(FAR struct net_driver_s *dev)
   dev->d_ipv6addr[4]  = 0;
   dev->d_ipv6addr[5]  = HTONS(0x00ff);
   dev->d_ipv6addr[6]  = HTONS(0xfe00);
-  dev->d_ipv6addr[7]  = (uint16_t)addr->nv_addr[0] << 8 ^ 0x0200;
+  dev->d_ipv6addr[7]  = (uint16_t)addr->nv_addr[0] << 8;
 }
 
 /****************************************************************************
@@ -607,7 +629,7 @@ static void spirit_set_ipaddress(FAR struct net_driver_s *dev)
  * Description:
  *   Got to the READY state (if possible).
  *
- * Parameters:
+ * Input Parameters:
  *   spirit - Reference to a Spirit library state structure instance
  *
  * Returned Value:
@@ -665,7 +687,7 @@ errout_with_irqdisable:
  * Description:
  *   Free the IOB and the meta data at the head of the TX packet queue.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
@@ -706,7 +728,7 @@ static void spirit_free_txhead(FAR struct spirit_driver_s *priv)
  * Description:
  *   Start hardware transmission.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to the driver state structure (cast to NULL)
  *
  * Returned Value:
@@ -940,7 +962,7 @@ errout_with_lock:
  * Description:
  *   Schedule to send data on the HP worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to driver state structure
  *
  * Returned Value:
@@ -974,7 +996,7 @@ static void spirit_schedule_transmit_work(FAR struct spirit_driver_s *priv)
  *   2. When the preceding TX packet send timesout and the interface is reset
  *   3. During normal TX polling
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1003,7 +1025,7 @@ static int spirit_txpoll_callback(FAR struct net_driver_s *dev)
  * Description:
  *   Pass received packets to the network on the LP worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   arg - Reference to driver state structure (cast to void *)
  *
  * Returned Value:
@@ -1091,7 +1113,7 @@ static void spirit_receive_work(FAR void *arg)
  * Description:
  *   Schedule to receive data on the LP worker thread.
  *
- * Parameters:
+ * Input Parameters:
  *   priv - Reference to driver state structure
  *
  * Returned Value:
@@ -1652,7 +1674,7 @@ static int spirit_interrupt(int irq, FAR void *context, FAR void *arg)
  * Description:
  *   Perform TX timeout related work from the HP worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1708,7 +1730,7 @@ static void spirit_txtimeout_work(FAR void *arg)
  *   Our TX watchdog timed out.  Called from the timer interrupt handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1745,7 +1767,7 @@ static void spirit_txtimeout_expiry(int argc, wdparm_t arg, ...)
  * Description:
  *   Perform periodic polling from the worker thread
  *
- * Parameters:
+ * Input Parameters:
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
@@ -1812,7 +1834,7 @@ static void spirit_txpoll_work(FAR void *arg)
  * Description:
  *   Periodic timer handler.  Called from the timer interrupt handler.
  *
- * Parameters:
+ * Input Parameters:
  *   argc - The number of available arguments
  *   arg  - The first argument
  *
@@ -1841,7 +1863,7 @@ static void spirit_txpoll_expiry(int argc, wdparm_t arg, ...)
  *   NuttX Callback: Bring up the Spirit interface when an IP address is
  *   provided
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -1958,7 +1980,7 @@ error_with_ifalmostup:
  * Description:
  *   NuttX Callback: Stop the interface.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2053,7 +2075,7 @@ static int spirit_ifdown(FAR struct net_driver_s *dev)
  *   stimulus perform an out-of-cycle poll and, thereby, reduce the TX
  *   latency.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *
  * Returned Value:
@@ -2081,7 +2103,7 @@ static int spirit_txavail(FAR struct net_driver_s *dev)
  *   NuttX Callback: Add the specified MAC address to the hardware multicast
  *   address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be added
  *
@@ -2090,7 +2112,7 @@ static int spirit_txavail(FAR struct net_driver_s *dev)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int spirit_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   return -ENOSYS;
@@ -2104,7 +2126,7 @@ static int spirit_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *   NuttX Callback: Remove the specified MAC address from the hardware
  *   multicast address filtering
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - Reference to the NuttX driver state structure
  *   mac  - The MAC address to be removed
  *
@@ -2113,7 +2135,7 @@ static int spirit_addmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
 static int spirit_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
 {
   return -ENOSYS;
@@ -2126,7 +2148,7 @@ static int spirit_rmmac(FAR struct net_driver_s *dev, FAR const uint8_t *mac)
  * Description:
  *   Handle network IOCTL commands directed to this device.
  *
- * Parameters:
+ * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *   cmd - The IOCTL command
  *   arg - The argument for the IOCTL command
@@ -2240,7 +2262,7 @@ static int spirit_ioctl(FAR struct net_driver_s *dev, int cmd,
  * Description:
  *   Calculate the MAC header length given the frame meta-data.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev    - The network device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
@@ -2272,7 +2294,7 @@ static int spirit_get_mhrlen(FAR struct radio_driver_s *netdev,
  *   indirectly as a consequence of a TX poll that generates a series of
  *   6LoWPAN radio packets.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev    - The network device that will mediate the MAC interface
  *   meta      - Obfuscated metadata structure needed to create the radio
  *               MAC header
@@ -2385,7 +2407,7 @@ static int spirit_req_data(FAR struct radio_driver_s *netdev,
  *   run time.  This information is provided to the 6LoWPAN network via the
  *   following structure.
  *
- * Input parameters:
+ * Input Parameters:
  *   netdev     - The network device to be queried
  *   properties - Location where radio properities will be returned.
  *
@@ -2758,7 +2780,7 @@ int spirit_hw_initialize(FAR struct spirit_driver_s *priv,
  * Description:
  *   Initialize the IEEE802.15.4 driver and register it as a network device.
  *
- * Parameters:
+ * Input Parameters:
  *   spi   - A reference to the platform's SPI driver for the spirit1
  *   lower - The MCU-specific interrupt used to control low-level MCU
  *           functions (i.e., spirit1 GPIO interrupts).
@@ -2790,15 +2812,15 @@ int spirit_netdev_initialize(FAR struct spi_dev_s *spi,
 
   priv->lower = lower;
 
-  /* Create a watchdog for timing polling for and timing of transmisstions */
+  /* Create a watchdog for timing polling for and timing of transmissions */
 
   priv->txpoll        = wd_create();       /* Create periodic poll timer */
   priv->txtimeout     = wd_create();       /* Create TX timeout timer */
 
   DEBUGASSERT(priv->txpoll != NULL && priv->txtimeout != NULL);
 
-  sem_init(&priv->rxsem, 0, 1);            /* Access to RX packet queue */
-  sem_init(&priv->txsem, 0, 1);            /* Access to TX packet queue */
+  nxsem_init(&priv->rxsem, 0, 1);            /* Access to RX packet queue */
+  nxsem_init(&priv->txsem, 0, 1);            /* Access to TX packet queue */
 
   /* Initialize the IEEE 802.15.4 network device fields */
 
@@ -2813,7 +2835,7 @@ int spirit_netdev_initialize(FAR struct spi_dev_s *spi,
   dev->d_ifup         = spirit_ifup;       /* I/F up (new IP address) callback */
   dev->d_ifdown       = spirit_ifdown;     /* I/F down callback */
   dev->d_txavail      = spirit_txavail;    /* New TX data callback */
-#ifdef CONFIG_NET_IGMP
+#ifdef CONFIG_NET_MCASTGROUP
   dev->d_addmac       = spirit_addmac;     /* Add multicast MAC address */
   dev->d_rmmac        = spirit_rmmac;      /* Remove multicast MAC address */
 #endif

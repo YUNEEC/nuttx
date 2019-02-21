@@ -72,6 +72,7 @@
 #include <signal.h>
 #include <mqueue.h>
 #include <spawn.h>
+#include <termios.h>
 #include <assert.h>
 
 /* Errno access is awkward. We need to generate get_errno() and set_errno()
@@ -85,21 +86,8 @@
 #undef get_errno
 #undef set_errno
 
-#include <nuttx/errno.h>
+#include <errno.h>
 #include <nuttx/clock.h>
-
-/* clock_systimer is a special case:  In the kernel build, proxying for
- * clock_systimer() must be handled specially.  In the kernel phase of
- * the build, clock_systimer() is macro that simply accesses a global
- * variable.  In the user phase of the kernel build, clock_systimer()
- * is a proxy function.
- *
- * In order to fill out the table g_funclookup[], this function will stand
- * in during the kernel phase of the build so that clock_systemer() will
- * have an address that can be included in the g_funclookup[] table.
- */
-
-systime_t syscall_clock_systimer(void);
 
 /****************************************************************************
  * Pre-processor Definitions

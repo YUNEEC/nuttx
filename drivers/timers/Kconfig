@@ -13,6 +13,17 @@ config TIMER
 		driver. See include/nuttx/timers/timer.h for further timer driver
 		information.
 
+if TIMER
+
+config TIMER_ARCH
+	bool "Timer Arch Implementation"
+	select ARCH_HAVE_TICKLESS
+	select ARCH_HAVE_TIMEKEEPING
+	---help---
+		Implement timer arch API on top of timer driver interface.
+
+endif # TIMER
+
 config ONESHOT
 	bool "Oneshot timer driver"
 	default n
@@ -20,6 +31,17 @@ config ONESHOT
 		This selection enables building of the "upper-half" oneshot timer
 		driver. See include/nuttx/timers/oneshot.h for further oneshot timer
 		driver information.
+
+if ONESHOT
+
+config ALARM_ARCH
+	bool "Alarm Arch Implementation"
+	select ARCH_HAVE_TICKLESS
+	select ARCH_HAVE_TIMEKEEPING
+	---help---
+		Implement alarm arch API on top of oneshot driver interface.
+
+endif # ONESHOT
 
 menuconfig RTC
 	bool "RTC Driver Support"
@@ -95,34 +117,17 @@ config RTC_DRIVER
 
 if RTC_DRIVER
 
+config RTC_ARCH
+	bool "RTC Arch Implementation"
+	default n
+	---help---
+		Implement RTC arch API on top of RTC driver interface.
+
 config RTC_PERIODIC
 	bool "RTC Periodic Interrupts"
 	default n
-	depends on EXPERIMENTAL
 	---help---
 		Add interrupt controls for RTCs that support periodic interrupts.
-
-config RTC_ONESEC
-	bool "RTC Once-per-second interrupts"
-	default n
-	depends on EXPERIMENTAL
-	---help---
-		Add interrupt controls for RTCs that support once-per-second interrupts.
-
-config RTC_EPOCHYEAR
-	bool "RTC epoch year"
-	default n
-	depends on EXPERIMENTAL
-	---help---
-		Add controls for RTCs that support epoch year settings.
-
-		Many RTCs encode the year in an 8-bit register which is either interpreted
-		as an 8-bit binary number or as a BCD number. In both cases, the number is
-		interpreted relative to this RTC's Epoch. The RTC's Epoch is initialized to
-		1900 on most systems but on Alpha and MIPS it might also be initialized to
-		1952, 1980, or 2000, depending on the value of an RTC register for the year.
-		With some RTCs, these operations can be used to read or to set the RTC's
-		Epoch, respectively.
 
 config RTC_IOCTL
 	bool "RTC IOCTLs"
@@ -165,7 +170,7 @@ choice
 config RTC_DS1302
 	bool "DS1302"
 	---help---
-		Enables support for the Maxim Integrated DS1307 serial RTC timer.
+		Enables support for the Maxim Integrated DS1302 serial RTC timer.
 
 config RTC_DS1307
 	bool "DS1307"
@@ -206,7 +211,7 @@ config RTC_PCF85263
 	select RTC_DATETIME
 	depends on RTC_EXTERNAL
 	---help---
-		Enables support for the Maxim Integrated DS3231 I2C RTC timer.
+		Enables support for the NXP PCF85263 I2C RTC timer.
 
 if RTC_PCF85263
 
@@ -216,6 +221,24 @@ config PCF85263_I2C_FREQUENCY
 	range 1 400000
 
 endif # RTC_PCF85263
+
+config RTC_MCP794XX
+	bool "MCP794XX RTC Driver"
+	default n
+	select I2C
+	select RTC_DATETIME
+	depends on RTC_EXTERNAL
+	---help---
+		Enables support for the Microchip MCP794XX I2C RTC timer.
+
+if RTC_MCP794XX
+
+config MCP794XX_I2C_FREQUENCY
+	int "MCP794XX I2C frequency"
+	default 400000
+	range 1 400000
+
+endif # RTC_MCP794XX
 endif # RTC
 
 menuconfig WATCHDOG

@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/serial/pty.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -112,9 +112,21 @@
 
 #undef CONFIG_PSEUDOTERM_FULLBLOCKS
 
+/* Maximum number of threads than can be waiting for POLL events */
+
+#ifndef CONFIG_DEV_PTY_NPOLLWAITERS
+#  define CONFIG_DEV_PTY_NPOLLWAITERS 2
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
+
+struct pty_poll_s
+{
+  FAR void *src;
+  FAR void *sink;
+};
 
 /* This device structure describes on memory of the PTY device pair */
 
@@ -131,6 +143,10 @@ struct pty_dev_s
 
   tcflag_t pd_iflag;            /* Terminal nput modes */
   tcflag_t pd_oflag;            /* Terminal output modes */
+#endif
+
+#ifndef CONFIG_DISABLE_POLL
+  struct pty_poll_s pd_poll[CONFIG_DEV_PTY_NPOLLWAITERS];
 #endif
 };
 
@@ -160,8 +176,10 @@ static void    pty_semtake(FAR struct pty_devpair_s *devpair);
 static void    pty_destroy(FAR struct pty_devpair_s *devpair);
 #endif
 
+#ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
 static int     pty_open(FAR struct file *filep);
 static int     pty_close(FAR struct file *filep);
+#endif
 static ssize_t pty_read(FAR struct file *filep, FAR char *buffer,
                  size_t buflen);
 static ssize_t pty_write(FAR struct file *filep, FAR const char *buffer,
@@ -210,17 +228,28 @@ static const struct file_operations g_pty_fops =
 
 static void pty_semtake(FAR struct pty_devpair_s *devpair)
 {
-  while (sem_wait(&devpair->pp_exclsem) < 0)
+  int ret;
+
+  do
     {
-      DEBUGASSERT(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&devpair->pp_exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
  * Name: pty_semgive
  ****************************************************************************/
 
-#define pty_semgive(c) sem_post(&(c)->pp_exclsem)
+#define pty_semgive(c) nxsem_post(&(c)->pp_exclsem)
 
 /****************************************************************************
  * Name: pty_destroy
@@ -249,10 +278,10 @@ static void pty_destroy(FAR struct pty_devpair_s *devpair)
 
   /* Close the contained file structures */
 
-  (void)file_close_detached(&devpair->pp_master.pd_src);
-  (void)file_close_detached(&devpair->pp_master.pd_sink);
-  (void)file_close_detached(&devpair->pp_slave.pd_src);
-  (void)file_close_detached(&devpair->pp_slave.pd_sink);
+  (void)file_close(&devpair->pp_master.pd_src);
+  (void)file_close(&devpair->pp_master.pd_sink);
+  (void)file_close(&devpair->pp_slave.pd_src);
+  (void)file_close(&devpair->pp_slave.pd_sink);
 
 #ifdef CONFIG_PSEUDOTERM_SUSV1
   /* Free this minor number so that it can be reused */
@@ -262,7 +291,7 @@ static void pty_destroy(FAR struct pty_devpair_s *devpair)
 
   /* And free the device structure */
 
-  sem_destroy(&devpair->pp_exclsem);
+  nxsem_destroy(&devpair->pp_exclsem);
   kmm_free(devpair);
 }
 #endif
@@ -301,7 +330,7 @@ static int pty_open(FAR struct file *filep)
         {
           /* Wait until unlocked.  We will also most certainly suspend here. */
 
-          sem_wait(&devpair->pp_slavesem);
+          (void)nxsem_wait(&devpair->pp_slavesem);
 
           /* Get exclusive access to the device structure.  This might also
            * cause suspension.
@@ -777,10 +806,10 @@ static int pty_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 
                do
                  {
-                   DEBUGVERIFY(sem_getvalue(&devpair->pp_slavesem, &sval));
+                   DEBUGVERIFY(nxsem_getvalue(&devpair->pp_slavesem, &sval));
                    if (sval < 0)
                      {
-                       sem_post(&devpair->pp_slavesem);
+                       nxsem_post(&devpair->pp_slavesem);
                      }
                  }
                while (sval < 0);
@@ -911,34 +940,81 @@ static int pty_poll(FAR struct file *filep, FAR struct pollfd *fds,
 {
   FAR struct inode *inode;
   FAR struct pty_dev_s *dev;
+  FAR struct pty_devpair_s *devpair;
+  FAR struct pty_poll_s *pollp = NULL;
   int ret = -ENOSYS;
+  int i;
 
   DEBUGASSERT(filep != NULL && filep->f_inode != NULL);
   inode   = filep->f_inode;
   dev     = inode->i_private;
+  devpair = dev->pd_devpair;
 
-  /* REVISIT: If both POLLIN and POLLOUT are set, might the following logic
-   * fail?  Could we not get POLLIN on the sink file and POLLOUT on the source
-   * file?
-   */
+  pty_semtake(devpair);
+
+  if (setup)
+    {
+      for (i = 0; i < CONFIG_DEV_PTY_NPOLLWAITERS; i++)
+        {
+          if (dev->pd_poll[i].src == NULL && dev->pd_poll[i].sink == NULL)
+            {
+              pollp = &dev->pd_poll[i];
+              break;
+            }
+        }
+
+      if (i >= CONFIG_DEV_PTY_NPOLLWAITERS)
+        {
+          ret = -EBUSY;
+          goto errout;
+        }
+    }
+  else
+    {
+      pollp = (FAR struct pty_poll_s *)fds->priv;
+    }
 
   /* POLLIN: Data other than high-priority data may be read without blocking. */
 
   if ((fds->events & POLLIN) != 0)
     {
+      fds->priv = pollp->src;
       ret = file_poll(&dev->pd_src, fds, setup);
-    }
-
-  if (ret >= OK || ret == -ENOTTY)
-    {
-      /* POLLOUT: Normal data may be written without blocking. */
-
-      if ((fds->events & POLLOUT) != 0)
+      if (ret < 0)
         {
-          ret = file_poll(&dev->pd_sink, fds, setup);
+          goto errout;
         }
+
+      pollp->src = fds->priv;
     }
 
+  /* POLLOUT: Normal data may be written without blocking. */
+
+  if ((fds->events & POLLOUT) != 0)
+    {
+      fds->priv = pollp->sink;
+      ret = file_poll(&dev->pd_sink, fds, setup);
+      if (ret < 0)
+        {
+          if (pollp->src)
+            {
+              fds->priv = pollp->src;
+              file_poll(&dev->pd_src, fds, false);
+              pollp->src = NULL;
+            }
+
+          goto errout;
+        }
+      pollp->sink = fds->priv;
+    }
+
+  if (setup)
+    {
+      fds->priv = pollp;
+    }
+
+errout:
+  pty_semgive(devpair);
   return ret;
 }
 #endif
@@ -1019,14 +1095,14 @@ int pty_register(int minor)
 
   /* Initialize semaphores */
 
-  sem_init(&devpair->pp_slavesem, 0, 0);
-  sem_init(&devpair->pp_exclsem, 0, 1);
+  nxsem_init(&devpair->pp_slavesem, 0, 0);
+  nxsem_init(&devpair->pp_exclsem, 0, 1);
 
   /* The pp_slavesem semaphore is used for signaling and, hence, should not
    * have priority inheritance enabled.
    */
 
-  sem_setprotocol(&devpair->pp_slavesem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&devpair->pp_slavesem, SEM_PRIO_NONE);
 
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
   devpair->pp_minor             = minor;
@@ -1145,7 +1221,7 @@ errout_with_pipeb:
     }
   else
     {
-      (void)file_close_detached(&devpair->pp_master.pd_src);
+      (void)file_close(&devpair->pp_master.pd_src);
     }
 
   if (pipe_b[1] >= 0)
@@ -1154,7 +1230,7 @@ errout_with_pipeb:
     }
   else
     {
-      (void)file_close_detached(&devpair->pp_slave.pd_sink);
+      (void)file_close(&devpair->pp_slave.pd_sink);
     }
 
 errout_with_pipea:
@@ -1164,7 +1240,7 @@ errout_with_pipea:
     }
   else
     {
-      (void)file_close_detached(&devpair->pp_slave.pd_src);
+      (void)file_close(&devpair->pp_slave.pd_src);
     }
 
   if (pipe_a[1] >= 0)
@@ -1173,12 +1249,12 @@ errout_with_pipea:
     }
   else
     {
-      (void)file_close_detached(&devpair->pp_master.pd_sink);
+      (void)file_close(&devpair->pp_master.pd_sink);
     }
 
 errout_with_devpair:
-   sem_destroy(&devpair->pp_exclsem);
-   sem_destroy(&devpair->pp_slavesem);
+   nxsem_destroy(&devpair->pp_exclsem);
+   nxsem_destroy(&devpair->pp_slavesem);
    kmm_free(devpair);
    return ret;
 }

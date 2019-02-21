@@ -52,6 +52,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/fs/dirent.h>
 
 #include "rpc.h"
@@ -127,16 +128,21 @@ static inline int nfs_pathsegment(FAR const char **path, FAR char *buffer,
 
 void nfs_semtake(struct nfsmount *nmp)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&nmp->nm_sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&nmp->nm_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      ASSERT(*get_errno_ptr() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -145,13 +151,13 @@ void nfs_semtake(struct nfsmount *nmp)
 
 void nfs_semgive(struct nfsmount *nmp)
 {
-  sem_post(&nmp->nm_sem);
+  nxsem_post(&nmp->nm_sem);
 }
 
 /****************************************************************************
  * Name: nfs_checkmount
  *
- * Desciption: Check if the mountpoint is still valid.
+ * Description: Check if the mountpoint is still valid.
  *
  *   The caller should hold the mountpoint semaphore
  *
@@ -184,11 +190,11 @@ int nfs_checkmount(struct nfsmount *nmp)
 /****************************************************************************
  * Name: nfs_request
  *
- * Desciption:
+ * Description:
  *   Perform the NFS request. On successful receipt, it verifies the NFS level of the
  *   returned values.
  *
- * Return Value:
+ * Returned Value:
  *   Zero on success; a positive errno value on failure.
  *
  ****************************************************************************/
@@ -249,7 +255,7 @@ tryagain:
 /****************************************************************************
  * Name: nfs_lookup
  *
- * Desciption:
+ * Description:
  *   Given a directory file handle, and the path to file in the directory,
  *   return the file handle of the path and attributes of both the file and
  *   the directory containing the file.
@@ -370,11 +376,11 @@ int nfs_lookup(struct nfsmount *nmp, FAR const char *filename,
 /****************************************************************************
  * Name: nfs_findnode
  *
- * Desciption:
+ * Description:
  *   Given a path to something that may or may not be in the file system,
  *   return the handle of the directory entry of the requested object.
  *
- * Return Value:
+ * Returned Value:
  *   Zero on success; a positive errno value on failure.
  *
  ****************************************************************************/
@@ -477,12 +483,12 @@ int nfs_findnode(struct nfsmount *nmp, FAR const char *relpath,
 /****************************************************************************
  * Name: nfs_finddir
  *
- * Desciption:
+ * Description:
  *   Given a path to something that may or may not be in the file system,
  *   return the handle of the entry of the directory containing the requested
  *   object.
  *
- * Return Value:
+ * Returned Value:
  *   Zero on success; a positive errno value on failure.
  *
  ****************************************************************************/
@@ -568,10 +574,10 @@ int nfs_finddir(struct nfsmount *nmp, FAR const char *relpath,
 /****************************************************************************
  * Name: nfs_attrupdate
  *
- * Desciption:
+ * Description:
  *   Update file attributes on write or after the file is modified.
  *
- * Return Value:
+ * Returned Value:
  *   None.
  *
  ****************************************************************************/

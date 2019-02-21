@@ -1,7 +1,7 @@
 ############################################################################
 # arch/arm/src/stm32l4/Make.defs
 #
-#   Copyright (C) 2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2017-2018 Gregory Nutt. All rights reserved.
 #   Copyright (C) 2015-2016 Sebastien Lorquet. All rights reserved.
 #   Author: Sebastien Lorquet <sebastien@lorquet.fr>
 #
@@ -45,16 +45,16 @@ CMN_UASRCS =
 CMN_UCSRCS =
 
 CMN_ASRCS  = up_saveusercontext.S up_fullcontextrestore.S up_switchcontext.S
-CMN_ASRCS += vfork.S
+CMN_ASRCS += up_testset.S up_fetchadd.S vfork.S
 
-CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c
-CMN_CSRCS += up_createstack.c up_mdelay.c up_udelay.c up_exit.c
-CMN_CSRCS += up_initialize.c up_initialstate.c up_interruptcontext.c
-CMN_CSRCS += up_memfault.c up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
+CMN_CSRCS  = up_assert.c up_blocktask.c up_copyfullstate.c up_createstack.c
+CMN_CSRCS += up_doirq.c up_exit.c up_hardfault.c up_initialize.c
+CMN_CSRCS += up_initialstate.c up_interruptcontext.c up_mdelay.c up_memfault.c
+CMN_CSRCS += up_modifyreg8.c up_modifyreg16.c up_modifyreg32.c
 CMN_CSRCS += up_releasepending.c up_releasestack.c up_reprioritizertr.c
 CMN_CSRCS += up_schedulesigaction.c up_sigdeliver.c up_stackframe.c
-CMN_CSRCS += up_systemreset.c up_unblocktask.c up_usestack.c up_doirq.c
-CMN_CSRCS += up_hardfault.c up_svcall.c up_vfork.c
+CMN_CSRCS += up_svcall.c up_systemreset.c up_trigger_irq.c up_udelay.c
+CMN_CSRCS += up_unblocktask.c up_usestack.c up_vfork.c
 
 # Configuration-dependent common files
 
@@ -62,22 +62,16 @@ ifeq ($(CONFIG_ARMV7M_STACKCHECK),y)
 CMN_CSRCS += up_stackcheck.c
 endif
 
-ifeq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
 CMN_ASRCS += up_lazyexception.S
 else
 CMN_ASRCS += up_exception.S
 endif
 CMN_CSRCS += up_vectors.c
-endif
 
 ifeq ($(CONFIG_ARCH_FPU),y)
 CMN_ASRCS += up_fpu.S
-ifneq ($(CONFIG_ARMV7M_CMNVECTOR),y)
 CMN_CSRCS += up_copyarmstate.c
-else ifeq ($(CONFIG_ARMV7M_LAZYFPU),y)
-CMN_CSRCS += up_copyarmstate.c
-endif
 endif
 
 ifeq ($(CONFIG_ARCH_RAMVECTORS),y)
@@ -100,10 +94,14 @@ endif
 
 CHIP_ASRCS  =
 CHIP_CSRCS  = stm32l4_allocateheap.c stm32l4_exti_gpio.c stm32l4_gpio.c
-CHIP_CSRCS += stm32l4_idle.c stm32l4_irq.c stm32l4_lowputc.c stm32l4_rcc.c
+CHIP_CSRCS += stm32l4_irq.c stm32l4_lowputc.c stm32l4_rcc.c
 CHIP_CSRCS += stm32l4_serial.c stm32l4_start.c stm32l4_waste.c stm32l4_uid.c
 CHIP_CSRCS += stm32l4_spi.c stm32l4_i2c.c stm32l4_lse.c stm32l4_lsi.c
 CHIP_CSRCS += stm32l4_pwr.c stm32l4_tim.c stm32l4_flash.c
+
+ifneq ($(CONFIG_ARCH_IDLE_CUSTOM),y)
+CHIP_CSRCS += stm32l4_idle.c
+endif
 
 ifeq ($(CONFIG_TIMER),y)
 CHIP_CSRCS += stm32l4_tim_lowerhalf.c
@@ -178,13 +176,16 @@ ifeq ($(CONFIG_STM32L4_PWR),y)
 CHIP_CSRCS += stm32l4_exti_pwr.c
 endif
 
-ifeq ($(CONFIG_RTC),y)
+ifeq ($(CONFIG_STM32L4_RTC),y)
 ifeq ($(CONFIG_RTC_ALARM),y)
 CHIP_CSRCS += stm32l4_exti_alarm.c
 endif
+ifeq ($(CONFIG_RTC_PERIODIC),y)
+CHIP_CSRCS += stm32l4_exti_wakeup.c
+endif
 ifeq ($(CONFIG_RTC_DRIVER),y)
 CHIP_CSRCS += stm32l4_rtc_lowerhalf.c
-CHIP_CSRCS += stm32l4_rtcc.c
+CHIP_CSRCS += stm32l4_rtc.c
 endif
 endif
 
@@ -234,4 +235,8 @@ endif
 
 ifeq ($(CONFIG_STM32L4_SDMMC1),y)
 CHIP_CSRCS += stm32l4_sdmmc.c
+endif
+
+ifeq ($(CONFIG_STM32L4_1WIREDRIVER),y)
+CHIP_CSRCS += stm32l4_1wire.c
 endif

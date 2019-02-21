@@ -1,7 +1,7 @@
 /****************************************************************************
  * graphics/vnc/server/vnc_fbdev.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -412,7 +412,7 @@ static int up_setcursor(FAR struct fb_vtable_s *vtable,
  * Description:
  *   Start the VNC server.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -443,8 +443,8 @@ static int vnc_start_server(int display)
   ginfo("Starting the VNC server for display %d\n", display);
 
   g_fbstartup[display].result = -EBUSY;
-  sem_reset(&g_fbstartup[display].fbinit, 0);
-  sem_reset(&g_fbstartup[display].fbconnect, 0);
+  nxsem_reset(&g_fbstartup[display].fbinit, 0);
+  nxsem_reset(&g_fbstartup[display].fbconnect, 0);
 
   /* Format the kernel thread arguments (ASCII.. yech) */
 
@@ -452,7 +452,7 @@ static int vnc_start_server(int display)
   argv[0] = str;
   argv[1] = NULL;
 
-  pid = kernel_thread("vnc_server", CONFIG_VNCSERVER_PRIO,
+  pid = kthread_create("vnc_server", CONFIG_VNCSERVER_PRIO,
                        CONFIG_VNCSERVER_STACKSIZE,
                        (main_t)vnc_server, argv);
   if (pid < 0)
@@ -470,7 +470,7 @@ static int vnc_start_server(int display)
  * Description:
  *   Wait for the server to be started.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -482,7 +482,7 @@ static int vnc_start_server(int display)
 
 static inline int vnc_wait_start(int display)
 {
-  int errcode;
+  int ret = OK;
 
   /* Check if there has been a session allocated yet.  This is one of the
    * first things that the VNC server will do with the kernel thread is
@@ -502,22 +502,20 @@ static inline int vnc_wait_start(int display)
        * conditions here, but I think none that are fatal.
        */
 
-      while (sem_wait(&g_fbstartup[display].fbinit) < 0)
+      do
         {
-          errcode = get_errno();
+          ret = nxsem_wait(&g_fbstartup[display].fbinit);
 
-          /* sem_wait() should fail only if it is interrupt by a signal. */
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
+           */
 
-          DEBUGASSERT(errcode == EINTR);
-          if (errcode != EINTR)
-            {
-              DEBUGASSERT(errcode > 0);
-              return -errcode;
-            }
+          DEBUGASSERT(ret == OK || ret == -EINTR);
         }
+      while (ret == -EINTR);
     }
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -527,7 +525,7 @@ static inline int vnc_wait_start(int display)
  *   Wait for the server to be connected to the VNC client.  We can do
  *   nothing until that connection is established.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -539,8 +537,7 @@ static inline int vnc_wait_start(int display)
 
 static inline int vnc_wait_connect(int display)
 {
-  int errcode;
-  int result;
+  int ret;
 
   /* Check if there has been a session allocated yet.  This is one of the
    * first things that the VNC server will do with the kernel thread is
@@ -563,33 +560,34 @@ static inline int vnc_wait_connect(int display)
        * conditions here, but I think none that are fatal.
        */
 
-      while (sem_wait(&g_fbstartup[display].fbconnect) < 0)
+      do
         {
-          errcode = get_errno();
+          ret = nxsem_wait(&g_fbstartup[display].fbconnect);
 
-          /* sem_wait() should fail only if it is interrupt by a signal. */
+          /* The only case that an error should occur here is if the wait
+           * was awakened by a signal.
+           */
 
-          DEBUGASSERT(errcode == EINTR);
-          if (errcode != EINTR)
+          if (ret < 0 && ret != -EINTR)
             {
-              DEBUGASSERT(errcode > 0);
-              return -errcode;
+              return ret;
             }
         }
+      while (ret == -EINTR);
 
       /* We were awakened.  A result of -EBUSY means that the negotiation
        * is not complete.  Why would we be awakened in that case?  Some
        * counting semaphore screw-up?
        */
 
-      result = g_fbstartup[display].result;
-      if (result != -EBUSY)
+      ret = g_fbstartup[display].result;
+      if (ret != -EBUSY)
         {
 #ifdef CONFIG_DEBUG_FEATURES
-          if (result < 0)
+          if (ret < 0)
             {
               DEBUGASSERT(g_vnc_sessions[display] == NULL);
-              gerr("ERROR: VNC server startup failed: %d\n", result);
+              gerr("ERROR: VNC server startup failed: %d\n", ret);
             }
           else
             {
@@ -597,7 +595,7 @@ static inline int vnc_wait_connect(int display)
                           g_vnc_sessions[display]->state == VNCSERVER_RUNNING);
             }
 #endif
-          return result;
+          return ret;
         }
     }
 
@@ -614,7 +612,7 @@ static inline int vnc_wait_connect(int display)
  * Description:
  *   Initialize the framebuffer video hardware associated with the display.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *
@@ -665,7 +663,7 @@ int up_fbinitialize(int display)
  *   are reported to the VNC framebuffer driver from the remote VNC client.
  *
  *   In the standard graphics architecture, the keyboard/mouse inputs are
- *   received by some appliation/board specific logic at the highest level
+ *   received by some application/board specific logic at the highest level
  *   in the architecture via input drivers.  The received keyboard/mouse
  *   input data must then be "injected" into NX where it can they can be
  *   assigned to the window that has focus.  They will eventually be
@@ -685,7 +683,7 @@ int up_fbinitialize(int display)
  *   higher level level callouts can then call nx_kbdin() or nx_mousein() on
  *   behalf of the VNC server.
  *
- * Parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *   kbdout - If non-NULL, then the pointed-to function will be called to
@@ -748,7 +746,7 @@ int vnc_fbinitialize(int display, vnc_kbdout_t kbdout,
  *   Return a a reference to the framebuffer object for the specified video
  *   plane of the specified plane.  Many OSDs support multiple planes of video.
  *
- * Input parameters:
+ * Input Parameters:
  *   display - In the case of hardware with multiple displays, this
  *     specifies the display.  Normally this is zero.
  *   vplane - Identifies the plane being queried.

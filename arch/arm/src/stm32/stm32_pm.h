@@ -102,7 +102,7 @@ int stm32_pmstop(bool lpds);
  * Input Parameters:
  *   None
  *
- * Returned Value.
+ * Returned Value:
  *   On success, this function will not return (STANDBY mode can only be
  *   terminated with a reset event).  Otherwise, STANDBY mode did not occur
  *   and a negated errno value is returned to indicate the cause of the
@@ -125,10 +125,7 @@ int stm32_pmstandby(void);
  *               - false: SLEEPONEXIT bit is cleared, the MCU enters Sleep mode
  *                        as soon as WFI or WFE instruction is executed.
  * Returned Value:
- *   Zero means that the STOP was successfully entered and the system has
- *   been re-awakened.  The internal voltage regulator is back to its
- *   original state.  Otherwise, STOP mode did not occur and a negated
- *   errno value is returned to indicate the cause of the failure.
+ *   None
  *
  ****************************************************************************/
 

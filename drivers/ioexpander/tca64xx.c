@@ -2,7 +2,7 @@
  * drivers/ioexpander/tca64xx.h
  * Supports the following parts: TCA6408, TCA6416, TCA6424
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * This header file derives, in part, from the Project Ara TCA64xx driver
@@ -197,15 +197,24 @@ static const struct tca64_part_s g_tca64_parts[TCA64_NPARTS] =
 
 static void tca64_lock(FAR struct tca64_dev_s *priv)
 {
-  while (sem_wait(&priv->exclsem) < 0)
-    {
-      /* EINTR is the only expected error from sem_wait() */
+  int ret;
 
-      DEBUGASSERT(errno == EINTR);
+  do
+    {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define tca64_unlock(p) sem_post(&(p)->exclsem)
+#define tca64_unlock(p) nxsem_post(&(p)->exclsem)
 
 /****************************************************************************
  * Name: tca64_getpart
@@ -1405,7 +1414,7 @@ FAR struct ioexpander_dev_s *tca64_initialize(FAR struct i2c_master_s *i2c,
   priv->config->enable(config, true);
 #endif
 
-  sem_init(&priv->exclsem, 0, 1);
+  nxsem_init(&priv->exclsem, 0, 1);
   return &priv->dev;
 }
 

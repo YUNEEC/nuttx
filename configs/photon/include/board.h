@@ -146,6 +146,20 @@
 #define STM32_APB2_TIM10_CLKIN  (2*STM32_PCLK2_FREQUENCY)
 #define STM32_APB2_TIM11_CLKIN  (2*STM32_PCLK2_FREQUENCY)
 
+/* Timer Frequencies, if APBx is set to 1, frequency is same to APBx
+ * otherwise frequency is 2xAPBx.
+ * Note: TIM1,8 are on APB2, others on APB1
+ */
+
+#define BOARD_TIM1_FREQUENCY    STM32_HCLK_FREQUENCY
+#define BOARD_TIM2_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM3_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM4_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM5_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM6_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM7_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
+#define BOARD_TIM8_FREQUENCY    STM32_HCLK_FREQUENCY
+
 /* USB OTG HS definitions ***********************************************************/
 /* Do not enable external PHY clock or OTG_HS module will not work */
 
@@ -190,6 +204,26 @@
  * 2Hz, then a fatal error has been detected and the system has halted.
  */
 
+/* TIM */
+
+#define GPIO_TIM2_CH2OUT GPIO_TIM2_CH2OUT_1
+#define GPIO_TIM2_CH3OUT GPIO_TIM2_CH3OUT_1
+#define GPIO_TIM2_CH4OUT GPIO_TIM2_CH4OUT_1
+
+/* RGB LED
+ *
+ * R = TIM2 CH2 on PA1 | G = TIM2 CH3 on PA2 | B = TIM4 CH4 on PA3
+ *
+ * Note: Pin configs: GPIO_TIM2_CH2OUT ; GPIO_TIM2_CH3OUT ; GPIO_TIM2_CH4OUT
+ */
+
+#define RGBLED_RPWMTIMER   2
+#define RGBLED_RPWMCHANNEL 2
+#define RGBLED_GPWMTIMER   2
+#define RGBLED_GPWMCHANNEL 3
+#define RGBLED_BPWMTIMER   2
+#define RGBLED_BPWMCHANNEL 4
+
 /* Button definitions ***************************************************************/
 
 #define BOARD_BUTTON1     0
@@ -203,6 +237,18 @@
 #  define GPIO_USART1_RX GPIO_USART1_RX_1
 #  define GPIO_USART1_TX GPIO_USART1_TX_1
 #endif
+
+/* SPI1 */
+
+#define GPIO_SPI1_MISO   GPIO_SPI1_MISO_1  /* PA6 */
+#define GPIO_SPI1_MOSI   GPIO_SPI1_MOSI_1  /* PA7 */
+#define GPIO_SPI1_SCK    GPIO_SPI1_SCK_1   /* PA5 */
+
+/* SPI3 */
+
+#define GPIO_SPI3_MISO   GPIO_SPI3_MISO_1  /* PB4 */
+#define GPIO_SPI3_MOSI   GPIO_SPI3_MOSI_1  /* PB5 */
+#define GPIO_SPI3_SCK    GPIO_SPI3_SCK_1   /* PB3 */
 
 /* SDIO definitions *****************************************************************/
 
@@ -248,41 +294,4 @@
 
 #define DMAMAP_SDIO DMAMAP_SDIO_1
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-/************************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void stm32_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif  /* __CONFIG_PHOTON_INCLUDE_BOARD_H */

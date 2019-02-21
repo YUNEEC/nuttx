@@ -55,25 +55,25 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mq_close_group
+ * Name: nxmq_close_group
  *
  * Description:
  *   This function is used to indicate that all threads in the group are
- *   finished with the specified message queue mqdes.  The mq_close_group()
+ *   finished with the specified message queue mqdes.  The nxmq_close_group()
  *   deallocates any system resources allocated by the system for use by
  *   this task for its message queue.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor.
  *   group - Group that has the open descriptor.
  *
- * Return Value:
- *   0 (OK) if the message queue is closed successfully,
- *   otherwise, -1 (ERROR).
+ * Returned Value:
+ *   Zero (OK) if the message queue is closed successfully.  Otherwise, a
+ *   negated errno value is returned.
  *
  ****************************************************************************/
 
-int mq_close_group(mqd_t mqdes, FAR struct task_group_s *group)
+int nxmq_close_group(mqd_t mqdes, FAR struct task_group_s *group)
 {
   FAR struct mqueue_inode_s *msgq;
   FAR struct inode *inode;
@@ -93,7 +93,7 @@ int mq_close_group(mqd_t mqdes, FAR struct task_group_s *group)
 
        /* Close/free the message descriptor */
 
-       mq_desclose_group(mqdes, group);
+       nxmq_desclose_group(mqdes, group);
 
        /* Get the inode from the message queue structure */
 
@@ -122,16 +122,16 @@ int mq_close_group(mqd_t mqdes, FAR struct task_group_s *group)
  *   via this mqdes, this attachment will be removed and the message queue
  *   is available for another process to attach a notification.
  *
- * Parameters:
+ * Input Parameters:
  *   mqdes - Message queue descriptor.
  *
- * Return Value:
+ * Returned Value:
  *   0 (OK) if the message queue is closed successfully,
  *   otherwise, -1 (ERROR).
  *
  * Assumptions:
- * - The behavior of a task that is blocked on either a mq_send() or
- *   mq_receive() is undefined when mq_close() is called.
+ * - The behavior of a task that is blocked on either a [nx]mq_send() or
+ *   [nx]mq_receive() is undefined when mq_close() is called.
  * - The results of using this message queue descriptor after a successful
  *   return from mq_close() is undefined.
  *
@@ -151,7 +151,17 @@ int mq_close(mqd_t mqdes)
   rtcb = (FAR struct tcb_s *)sched_self();
   DEBUGASSERT(mqdes != NULL && rtcb != NULL && rtcb->group != NULL);
 
-  ret = mq_close_group(mqdes, rtcb->group);
+  /* Then perform the close operation */
+
+  ret = nxmq_close_group(mqdes, rtcb->group);
+#if 0
+  if (ret < 0)  /* Currently, nxmq_close_group() only returns OK */
+    {
+      set_errno(-ret);
+      ret = ERROR;
+    }
+#endif
+
   sched_unlock();
   return ret;
 }
@@ -163,10 +173,10 @@ int mq_close(mqd_t mqdes)
  * Description:
  *   Release a reference count on a message queue inode.
  *
- * Parameters:
+ * Input Parameters:
  *   inode - The message queue inode
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -193,7 +203,7 @@ void mq_inode_release(FAR struct inode *inode)
 
       /* Free the message queue (and any messages left in it) */
 
-      mq_msgqfree(msgq);
+      nxmq_free_msgq(msgq);
       inode->u.i_mqueue = NULL;
 
       /* Release and free the inode container.  If it has been properly

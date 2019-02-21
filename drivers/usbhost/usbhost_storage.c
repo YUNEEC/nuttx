@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/usbhost/usbhost_storage.c
  *
- *   Copyright (C) 2010-2013, 2015-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010-2013, 2015-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,10 +50,11 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
-#include <nuttx/fs/fs.h>
+#include <nuttx/signal.h>
 #include <nuttx/arch.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/scsi.h>
+#include <nuttx/fs/fs.h>
 
 #include <nuttx/usb/usb.h>
 #include <nuttx/usb/usbhost.h>
@@ -152,7 +153,7 @@ struct usbhost_freestate_s
 /* Semaphores */
 
 static void usbhost_takesem(sem_t *sem);
-#define usbhost_givesem(s) sem_post(s);
+#define usbhost_givesem(s) nxsem_post(s);
 
 /* Memory allocation services */
 
@@ -328,16 +329,21 @@ static uint32_t g_devinuse;
 
 static void usbhost_takesem(sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
       /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -351,7 +357,7 @@ static void usbhost_takesem(sem_t *sem)
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s.  NULL is returned on failure; this function will
  *   will fail only if there are insufficient resources to create another
@@ -405,7 +411,7 @@ static inline FAR struct usbhost_state_s *usbhost_allocclass(void)
  * Input Parameters:
  *   usbclass - A reference to the class instance to be freed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -496,7 +502,7 @@ static inline void usbhost_mkdevname(FAR struct usbhost_state_s *priv, char *dev
  * Input Parameters:
  *   cbw/csw - A reference to the CBW/CSW to dump.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -542,7 +548,7 @@ static void usbhost_dumpcsw(FAR struct usbmsc_csw_s *csw)
  * Input Parameters:
  *   cbw - A reference to allocated and initialized CBW to be built.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -668,7 +674,7 @@ usbhost_writecbw(size_t startsector, uint16_t blocksize,
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -906,7 +912,7 @@ static inline int usbhost_inquiry(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   arg - A reference to the class instance to be destroyed.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -949,7 +955,7 @@ static void usbhost_destroy(FAR void *arg)
 
   /* Destroy the semaphores */
 
-  sem_destroy(&priv->exclsem);
+  nxsem_destroy(&priv->exclsem);
 
   /* Disconnect the USB host device */
 
@@ -980,7 +986,7 @@ static void usbhost_destroy(FAR void *arg)
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1203,7 +1209,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1243,7 +1249,7 @@ static inline int usbhost_initvolume(FAR struct usbhost_state_s *priv)
 
       /* Wait just a bit */
 
-      usleep(USBHOST_RETRY_USEC);
+      nxsig_usleep(USBHOST_RETRY_USEC);
 
       /* Send TESTUNITREADY to see if the unit is ready.  The most likely error
        * error that can occur here is a a stall which simply means that the
@@ -1394,7 +1400,7 @@ static inline int usbhost_initvolume(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   val - A pointer to the first byte of the little endian value.
  *
- * Returned Values:
+ * Returned Value:
  *   A uint16_t representing the whole 16-bit integer value
  *
  ****************************************************************************/
@@ -1413,7 +1419,7 @@ static inline uint16_t usbhost_getle16(const uint8_t *val)
  * Input Parameters:
  *   val - A pointer to the first byte of the big endian value.
  *
- * Returned Values:
+ * Returned Value:
  *   A uint16_t representing the whole 16-bit integer value
  *
  ****************************************************************************/
@@ -1433,7 +1439,7 @@ static inline uint16_t usbhost_getbe16(const uint8_t *val)
  *   dest - A pointer to the first byte to save the little endian value.
  *   val - The 16-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1454,7 +1460,7 @@ static void usbhost_putle16(uint8_t *dest, uint16_t val)
  *   dest - A pointer to the first byte to save the big endian value.
  *   val - The 16-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1475,7 +1481,7 @@ static void usbhost_putbe16(uint8_t *dest, uint16_t val)
  *   dest - A pointer to the first byte to save the big endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1497,7 +1503,7 @@ static inline uint32_t usbhost_getle32(const uint8_t *val)
  *   dest - A pointer to the first byte to save the big endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1519,7 +1525,7 @@ static inline uint32_t usbhost_getbe32(const uint8_t *val)
  *   dest - A pointer to the first byte to save the little endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1542,7 +1548,7 @@ static void usbhost_putle32(uint8_t *dest, uint32_t val)
  *   dest - A pointer to the first byte to save the big endian value.
  *   val - The 32-bit value to be saved.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1564,8 +1570,8 @@ static void usbhost_putbe32(uint8_t *dest, uint32_t val)
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
- *   On sucess, zero (OK) is returned.  On failure, an negated errno value
+ * Returned Value:
+ *   On success, zero (OK) is returned.  On failure, an negated errno value
  *   is returned to indicate the nature of the failure.
  *
  ****************************************************************************/
@@ -1590,8 +1596,8 @@ static inline int usbhost_talloc(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
- *   On sucess, zero (OK) is returned.  On failure, an negated errno value
+ * Returned Value:
+ *   On success, zero (OK) is returned.  On failure, an negated errno value
  *   is returned to indicate the nature of the failure.
  *
  ****************************************************************************/
@@ -1624,7 +1630,7 @@ static inline int usbhost_tfree(FAR struct usbhost_state_s *priv)
  * Input Parameters:
  *   priv - A reference to the class instance.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -1663,7 +1669,7 @@ static FAR struct usbmsc_cbw_s *usbhost_cbwalloc(FAR struct usbhost_state_s *pri
  *   id - In the case where the device supports multiple base classes,
  *     subclasses, or protocols, this specifies which to configure for.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, this function will return a non-NULL instance of struct
  *   usbhost_class_s that can be used by the USB host driver to communicate
  *   with the USB host class.  NULL is returned on failure; this function
@@ -1703,7 +1709,7 @@ usbhost_create(FAR struct usbhost_hubport_s *hport,
 
           /* Initialize semaphores (this works okay in the interrupt context) */
 
-          sem_init(&priv->exclsem, 0, 1);
+          nxsem_init(&priv->exclsem, 0, 1);
 
           /* NOTE: We do not yet know the geometry of the USB mass storage device */
 
@@ -1742,7 +1748,7 @@ usbhost_create(FAR struct usbhost_hubport_s *hport,
  *     descriptor.
  *   desclen - The length in bytes of the configuration descriptor.
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value is
  *   returned indicating the nature of the failure
  *
@@ -1801,7 +1807,7 @@ static int usbhost_connect(FAR struct usbhost_class_s *usbclass,
  *   usbclass - The USB host class entry previously obtained from a call to
  *     create().
  *
- * Returned Values:
+ * Returned Value:
  *   On success, zero (OK) is returned. On a failure, a negated errno value
  *   is returned indicating the nature of the failure
  *
@@ -2280,7 +2286,7 @@ static int usbhost_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   On success this function will return zero (OK);  A negated errno value
  *   will be returned on failure.
  *

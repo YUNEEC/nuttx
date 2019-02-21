@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/arp/arp.h
  *
- *   Copyright (C) 2014-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,7 @@
 
 #include <stdint.h>
 #include <semaphore.h>
+#include <errno.h>
 
 #include <netinet/in.h>
 
@@ -176,49 +177,6 @@ struct arp_notify_s
 
 #ifdef CONFIG_NET_ARP
 /****************************************************************************
- * Name: arp_reset
- *
- * Description:
- *   Re-initialize the ARP table.
- *
- ****************************************************************************/
-
-void arp_reset(void);
-
-/****************************************************************************
- * Name: arp_timer_initialize
- *
- * Description:
- *   Initialized the 10 second timer that is need by the ARP logic in order
- *   to age ARP address associations
- *
- * Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
- * Assumptions:
- *   Called once at system initialization time
- *
- ****************************************************************************/
-
-void arp_timer_initialize(void);
-
-/****************************************************************************
- * Name: arp_timer
- *
- * Description:
- *   This function performs periodic timer processing in the ARP module
- *   and should be called at regular intervals.  The recommended interval
- *   is 10 seconds between the calls.  It is responsible for flushing old
- *   entries in the ARP table.
- *
- ****************************************************************************/
-
-void arp_timer(void);
-
-/****************************************************************************
  * Name: arp_format
  *
  * Description:
@@ -250,7 +208,7 @@ void arp_format(FAR struct net_driver_s *dev, in_addr_t ipaddr);
  *   address mapping is now in the ARP table, or (2) a configurable number
  *   of timeouts occur without receiving the ARP replay.
  *
- * Parameters:
+ * Input Parameters:
  *   ipaddr   The IP address to be queried.
  *
  * Returned Value:
@@ -369,21 +327,43 @@ void arp_notify(in_addr_t ipaddr);
 #endif
 
 /****************************************************************************
- * Name: arp_find
+ * Name: arp_lookup
  *
  * Description:
- *   Find the ARP entry corresponding to this IP address.
+ *   Find the ARP entry corresponding to this IP address in the ARP table.
  *
- * Input parameters:
+ * Input Parameters:
  *   ipaddr - Refers to an IP address in network order
  *
- * Assumptions
- *   The network is locked; Returned value will become unstable when the
- *   network is unlocked or if any other network APIs are called.
+ * Assumptions:
+ *   The network is locked to assure exclusive access to the ARP table.
+ *   The return value will become unstable when the network is unlocked.
  *
  ****************************************************************************/
 
-FAR struct arp_entry *arp_find(in_addr_t ipaddr);
+FAR struct arp_entry_s *arp_lookup(in_addr_t ipaddr);
+
+/****************************************************************************
+ * Name: arp_find
+ *
+ * Description:
+ *   Find the ARP entry corresponding to this IP address which may or may
+ *   not be in the ARP table (it may, instead, be a local network device).
+ *
+ * Input Parameters:
+ *   ipaddr -  Refers to an IP address in network order
+ *   ethaddr - Location to return the corresponding Ethernet MAN address.
+ *             This address may be NULL.  In that case, this function may be
+ *             used simply to determine if the Ethernet MAC address is
+ *             available.
+ *
+ * Assumptions
+ *   The network is locked to assure exclusive access to the ARP table.
+ *
+ ****************************************************************************/
+
+struct ether_addr;  /* Forward reference */
+int arp_find(in_addr_t ipaddr, FAR struct ether_addr *ethaddr);
 
 /****************************************************************************
  * Name: arp_delete
@@ -391,23 +371,15 @@ FAR struct arp_entry *arp_find(in_addr_t ipaddr);
  * Description:
  *   Remove an IP association from the ARP table
  *
- * Input parameters:
+ * Input Parameters:
  *   ipaddr - Refers to an IP address in network order
  *
  * Assumptions
- *   Interrupts are disabled to assure exclusive access to the ARP table
- *   (and because arp_find() is called).
+ *   The network is locked to assure exclusive access to the ARP table.
  *
  ****************************************************************************/
 
-#define arp_delete(ipaddr) \
-{ \
-  struct arp_entry *tabptr = arp_find(ipaddr); \
-  if (tabptr) \
-    { \
-      tabptr->at_ipaddr = 0; \
-    } \
-}
+void arp_delete(in_addr_t ipaddr);
 
 /****************************************************************************
  * Name: arp_update
@@ -416,7 +388,7 @@ FAR struct arp_entry *arp_find(in_addr_t ipaddr);
  *   Add the IP/HW address mapping to the ARP table -OR- change the IP
  *   address of an existing association.
  *
- * Input parameters:
+ * Input Parameters:
  *   ipaddr  - The IP address as an inaddr_t
  *   ethaddr - Refers to a HW address uint8_t[IFHWADDRLEN]
  *
@@ -438,7 +410,7 @@ int arp_update(in_addr_t ipaddr, FAR uint8_t *ethaddr);
  *   Add the IP/HW address mapping to the ARP table -OR- change the IP
  *   address of an existing association.
  *
- * Input parameters:
+ * Input Parameters:
  *   pipaddr - Refers to an IP address uint16_t[2] in network order
  *   ethaddr - Refers to a HW address uint8_t[IFHWADDRLEN]
  *
@@ -477,9 +449,6 @@ void arp_dump(FAR struct arp_hdr_s *arp);
 
 /* If ARP is disabled, stub out all ARP interfaces */
 
-#  define arp_reset()
-#  define arp_timer_initialize()
-#  define arp_timer()
 #  define arp_format(d,i);
 #  define arp_send(i) (0)
 #  define arp_poll(d,c) (0)
@@ -487,7 +456,7 @@ void arp_dump(FAR struct arp_hdr_s *arp);
 #  define arp_wait_cancel(n) (0)
 #  define arp_wait(n,t) (0)
 #  define arp_notify(i)
-#  define arp_find(i) (NULL)
+#  define arp_find(i,e) (-ENOSYS)
 #  define arp_delete(i)
 #  define arp_update(i,m);
 #  define arp_hdr_update(i,m);

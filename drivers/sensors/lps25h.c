@@ -290,7 +290,7 @@ static int lps25h_write_reg8(struct lps25h_dev_s *dev, uint8_t reg_addr,
     {
       .frequency = CONFIG_LPS25H_I2C_FREQUENCY,
       .addr      = dev->addr,
-      .flags     = I2C_M_NORESTART,
+      .flags     = I2C_M_NOSTART,
       .buffer    = (void *)&value,
       .length    = 1
     }
@@ -342,10 +342,19 @@ static int lps25h_open(FAR struct file *filep)
   uint8_t addr = LPS25H_WHO_AM_I;
   int32_t ret;
 
-  while (sem_wait(&dev->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&dev->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   dev->config->set_power(dev->config, true);
   ret = lps25h_read_reg8(dev, &addr, &value);
@@ -362,7 +371,7 @@ static int lps25h_open(FAR struct file *filep)
   dev->irqenabled = true;
 
 out:
-  sem_post(&dev->devsem);
+  nxsem_post(&dev->devsem);
   return ret;
 }
 
@@ -372,10 +381,19 @@ static int lps25h_close(FAR struct file *filep)
   FAR struct lps25h_dev_s *dev = inode->i_private;
   int ret;
 
-  while (sem_wait(&dev->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&dev->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   dev->config->irq_enable(dev->config, false);
   dev->irqenabled = false;
@@ -383,7 +401,7 @@ static int lps25h_close(FAR struct file *filep)
   dev->config->set_power(dev->config, false);
   lps25h_dbg("CLOSED\n");
 
-  sem_post(&dev->devsem);
+  nxsem_post(&dev->devsem);
   return ret;
 }
 
@@ -392,14 +410,23 @@ static ssize_t lps25h_read(FAR struct file *filep, FAR char *buffer,
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct lps25h_dev_s *dev = inode->i_private;
-  int ret;
-  ssize_t length = 0;
   lps25h_pressure_data_t data;
+  ssize_t length = 0;
+  int ret;
 
-  while (sem_wait(&dev->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&dev->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   ret = lps25h_configure_dev(dev);
   if (ret < 0)
@@ -425,7 +452,7 @@ static ssize_t lps25h_read(FAR struct file *filep, FAR char *buffer,
     }
 
 out:
-  sem_post(&dev->devsem);
+  nxsem_post(&dev->devsem);
   return length;
 }
 
@@ -442,7 +469,7 @@ static void lps25h_notify(FAR struct lps25h_dev_s *dev)
   DEBUGASSERT(dev != NULL);
 
   dev->int_pending = true;
-  sem_post(&dev->waitsem);
+  nxsem_post(&dev->waitsem);
 }
 
 static int lps25h_int_handler(int irq, FAR void *context, FAR void *arg)
@@ -543,14 +570,13 @@ static int lps25h_one_shot(FAR struct lps25h_dev_s *dev)
           abstime.tv_nsec -= 1000 * 1000 * 1000;
         }
 
-      while ((ret = sem_timedwait(&dev->waitsem, &abstime)) != 0)
+      while ((ret = nxsem_timedwait(&dev->waitsem, &abstime)) < 0)
         {
-          int err = errno;
-          if (err == EINTR)
+          if (ret == -EINTR)
             {
               continue;
             }
-          else if (err == ETIMEDOUT)
+          else if (ret == -ETIMEDOUT)
             {
               uint8_t reg = LPS25H_CTRL_REG2;
               uint8_t value;
@@ -582,7 +608,7 @@ static int lps25h_one_shot(FAR struct lps25h_dev_s *dev)
               /* Some unknown mystery error */
 
               DEBUGASSERT(false);
-              return -err;
+              return ret;
             }
         }
 
@@ -716,12 +742,21 @@ static int lps25h_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct lps25h_dev_s *dev = inode->i_private;
-  int ret = OK;
+  int ret;
 
-  while (sem_wait(&dev->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&dev->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   switch (cmd)
     {
@@ -754,7 +789,7 @@ static int lps25h_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       break;
     }
 
-  sem_post(&dev->devsem);
+  nxsem_post(&dev->devsem);
   return ret;
 }
 
@@ -771,8 +806,8 @@ int lps25h_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
       return -ENOMEM;
     }
 
-  sem_init(&dev->devsem, 0, 1);
-  sem_init(&dev->waitsem, 0, 0);
+  nxsem_init(&dev->devsem, 0, 1);
+  nxsem_init(&dev->waitsem, 0, 0);
 
   dev->addr = addr;
   dev->i2c = i2c;

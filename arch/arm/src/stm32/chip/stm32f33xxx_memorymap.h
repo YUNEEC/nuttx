@@ -93,8 +93,7 @@
 #define STM32_TIM3_BASE      0x40000400     /* 0x40000400-0x400007ff TIM3 */
 #define STM32_TIM6_BASE      0x40001000     /* 0x40001000-0x400013ff TIM6 */
 #define STM32_TIM7_BASE      0x40001400     /* 0x40001400-0x400017ff TIM7 */
-#define STM32_RTC_BASE       0x40002800     /* 0x40002800-0x40002bff RTC */
-#define STM32_BKP_BASE       0x40002850     /* 0x40002850-0x400028cc BKP */
+#define STM32_RTC_BASE       0x40002800     /* 0x40002800-0x40002bff RTC and BKP */
 #define STM32_WWDG_BASE      0x40002c00     /* 0x40002c00-0x40002fff WWDG */
 #define STM32_IWDG_BASE      0x40003000     /* 0x40003000-0x400033ff IWDG */
 #define STM32_USART2_BASE    0x40004400     /* 0x40004400-0x400047ff USART2 */
@@ -138,7 +137,7 @@
 
 /* AHB3 Base Addresses **************************************************************/
 
-#define STM32_ADC12_BASE      0x50000000     /* 0x50000000-0x500003ff: ADC12 */
+#define STM32_ADC12_BASE      0x50000000     /* 0x50000000-0x500003ff: ADC12 Base */
 
 /* Cortex-M4 Base Addresses *********************************************************/
 /* Other registers -- see armv7-m/nvic.h for standard Cortex-M4 registers in this

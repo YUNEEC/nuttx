@@ -1,7 +1,7 @@
 /****************************************************************************
  * configs/ea3152/src/lpc31_fillpage.c
  *
- *   Copyright (C) 2011, 2013 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2013, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #  include <stdbool.h>
 #  include <unistd.h>
 #  include <fcntl.h>
+#  include <nuttx/fs/fs.h>
 #  ifdef CONFIG_EA3152_PAGING_SDSLOT
 #    include <stdio.h>
 #    include <sys/mount.h>
@@ -276,7 +277,7 @@ static inline void lpc31_initsrc(void)
 
       /* Open the selected path for read-only access */
 
-      g_pgsrc.fd = open(CONFIG_PAGING_BINPATH, O_RDONLY);
+      g_pgsrc.fd = nx_open(CONFIG_PAGING_BINPATH, O_RDONLY);
       DEBUGASSERT(g_pgsrc.fd >= 0);
 
       /* Then we are initialized */
@@ -439,7 +440,7 @@ int up_fillpage(FAR struct tcb_s *tcb, FAR void *vpage)
 
   /* And read the page data from that offset */
 
-  nbytes = read(g_pgsrc.fd, vpage, PAGESIZE);
+  nbytes = nx_read(g_pgsrc.fd, vpage, PAGESIZE);
   DEBUGASSERT(nbytes == PAGESIZE);
   return OK;
 

@@ -60,13 +60,13 @@
  * Description:
  *   Send a local packet as a stream.
  *
- * Parameters:
+ * Input Parameters:
  *   psock    An instance of the internal socket structure.
  *   buf      Data to send
  *   len      Length of data to send
  *   flags    Send flags (ignored for now)
  *
- * Return:
+ * Returned Value:
  *   On success, returns the number of characters sent.  On  error,
  *   -1 is returned, and errno is set appropriately (see send() for the
  *   list of errno numbers).
@@ -87,7 +87,7 @@ ssize_t psock_local_send(FAR struct socket *psock, FAR const void *buf,
    */
 
   if (peer->lc_state != LOCAL_STATE_CONNECTED ||
-      peer->lc_outfd < 0)
+      peer->lc_outfile.f_inode == NULL)
     {
       nerr("ERROR: not connected\n");
       return -ENOTCONN;
@@ -95,7 +95,7 @@ ssize_t psock_local_send(FAR struct socket *psock, FAR const void *buf,
 
   /* Send the packet */
 
-  ret = local_send_packet(peer->lc_outfd, (FAR uint8_t *)buf, len);
+  ret = local_send_packet(&peer->lc_outfile, (FAR uint8_t *)buf, len);
 
   /* If the send was successful, then the full packet will have been sent */
 

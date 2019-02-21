@@ -256,6 +256,13 @@
 #define GPIO_USART2_CTS   GPIO_USART2_CTS_1
 #define GPIO_USART2_RTS   GPIO_USART2_RTS_1
 
+/* USART6: (UEXT connector) */
+
+#define GPIO_USART6_RX    GPIO_USART6_RX_1
+#define GPIO_USART6_TX    GPIO_USART6_TX_1
+
+/* GPIO_USART6_CTS and GPIO_USART6_RTS aren't used for UEXT */
+
 /* CAN: */
 
 #define GPIO_CAN1_RX      GPIO_CAN1_RX_2    /* PB8 */
@@ -274,41 +281,4 @@
 
 #define DMAMAP_SDIO DMAMAP_SDIO_1
 
-/************************************************************************************
- * Public Data
- ************************************************************************************/
-
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
-/************************************************************************************
- * Public Function Prototypes
- ************************************************************************************/
-
-/************************************************************************************
- * Name: stm32_boardinitialize
- *
- * Description:
- *   All STM32 architectures must provide the following entry point.  This entry point
- *   is called early in the initialization -- after all memory has been configured
- *   and mapped but before any devices have been initialized.
- *
- ************************************************************************************/
-
-void stm32_boardinitialize(void);
-
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
-
-#endif /* __ASSEMBLY__ */
 #endif /* __CONFIGS_OLIMEX_STM32_H407_INCLUDE_BOARD_H */

@@ -86,7 +86,7 @@
 /* NAND locking */
 
 static int      nand_lock(FAR struct nand_dev_s *nand);
-#define         nand_unlock(n) sem_post(&(n)->exclsem)
+#define         nand_unlock(n) nxsem_post(&(n)->exclsem)
 
 /* Bad block checking */
 
@@ -138,7 +138,7 @@ static int     nand_ioctl(struct mtd_dev_s *dev, int cmd,
  *   block - Number of block to check.
  *
  * Returned Value:
- *   OK on success; a negater errno value on failure.
+ *   OK on success; a negated errno value on failure.
  *
  ****************************************************************************/
 
@@ -147,17 +147,9 @@ static int nand_lock(FAR struct nand_dev_s *nand)
   int errcode;
   int ret;
 
-  ret = sem_wait(&nand->exclsem);
-  if (ret < 0)
-    {
-      errcode = errno;
-      DEBUGASSERT(errcode != OK);
-
-      ferr("ERROR: sem_wait failed: %d\n", errcode);
-      return -errcode;
-    }
-
-  return OK;
+  ret = nxsem_wait(&nand->exclsem);
+  DEBUGASSERT(ret == OK || ret == -EINTR);
+  return ret;
 }
 
 /****************************************************************************
@@ -380,7 +372,7 @@ static uint32_t nand_chipid(struct nand_raw_s *raw)
  *   block  Number of block to erase
  *   scrub  True: Erase bad blocks
  *
- * Returned Value
+ * Returned Value:
  *   OK on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -446,13 +438,13 @@ static int nand_eraseblock(FAR struct nand_dev_s *nand, off_t block,
  *   Reads the data area (only) of a page of a NAND FLASH into the
  *   provided buffer.
  *
- * Input parameters:
+ * Input Parameters:
  *   nand  - Upper-half, NAND FLASH interface
  *   block - Number of the block where the page to read resides.
  *   page  - Number of the page to read inside the given block.
  *   data  - Buffer where the data area will be stored.
  *
- * Returned value.
+ * Returned Value:
  *   OK is returned in success; a negated errno value is returned on failure.
  *
  ****************************************************************************/
@@ -501,13 +493,13 @@ static int nand_readpage(FAR struct nand_dev_s *nand, off_t block,
  *   Writes the data area (only) of a page into NAND FLASH from the
  *   provided buffer.
  *
- * Input parameters:
+ * Input Parameters:
  *   nand  - Upper-half, NAND FLASH interface
  *   block - Number of the block where the page to read resides.
  *   page  - Number of the page to read inside the given block.
  *   data  - Buffer where the data area will be stored.
  *
- * Returned value.
+ * Returned Value:
  *   OK is returned in success; a negated errno value is returned on failure.
  *
  ****************************************************************************/
@@ -844,7 +836,7 @@ static int nand_ioctl(struct mtd_dev_s *dev, int cmd, unsigned long arg)
  * Description:
  *   Probe and initialize NAND.
  *
- * Input parameters:
+ * Input Parameters:
  *   raw      - Lower-half, raw NAND FLASH interface
  *   cmdaddr  - NAND command address base
  *   addraddr - NAND address address base
@@ -852,7 +844,7 @@ static int nand_ioctl(struct mtd_dev_s *dev, int cmd, unsigned long arg)
  *   model    - A pointer to the model data (probably in the raw MTD
  *              driver instance.
  *
- * Returned value.
+ * Returned Value:
  *   A non-NULL MTD driver intstance is returned on success.  NULL is
  *   returned on any failaure.
  *
@@ -967,7 +959,7 @@ FAR struct mtd_dev_s *nand_initialize(FAR struct nand_raw_s *raw)
   nand->mtd.ioctl  = nand_ioctl;
   nand->raw        = raw;
 
-  sem_init(&nand->exclsem, 0, 1);
+  nxsem_init(&nand->exclsem, 0, 1);
 
   /* Scan the device for bad blocks */
 

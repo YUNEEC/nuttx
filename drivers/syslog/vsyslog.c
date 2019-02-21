@@ -54,10 +54,10 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: _vsyslog
+ * Name: nx_vsyslog
  *
  * Description:
- *   _vsyslog() handles the system logging system calls. It is functionally
+ *   nx_vsyslog() handles the system logging system calls. It is functionally
  *   equivalent to vsyslog() except that (1) the per-process priority
  *   filtering has already been performed and the va_list parameter is
  *   passed by reference.  That is because the va_list is a structure in
@@ -66,7 +66,7 @@
  *
  ****************************************************************************/
 
-int _vsyslog(int priority, FAR const IPTR char *fmt, FAR va_list *ap)
+int nx_vsyslog(int priority, FAR const IPTR char *fmt, FAR va_list *ap)
 {
   struct lib_syslogstream_s stream;
   int ret;
@@ -131,13 +131,21 @@ int _vsyslog(int priority, FAR const IPTR char *fmt, FAR va_list *ap)
 #if defined(CONFIG_SYSLOG_TIMESTAMP)
   /* Pre-pend the message with the current time, if available */
 
-  (void)lib_sprintf(&stream.public, "[%6d.%06d]",
+  ret = lib_sprintf(&stream.public, "[%5d.%06d] ",
                     ts.tv_sec, ts.tv_nsec/1000);
+#else
+  ret = 0;
+#endif
+
+#if defined(CONFIG_SYSLOG_PREFIX)
+  /* Pre-pend the prefix, if available */
+
+  ret += lib_sprintf(&stream.public, "%s", CONFIG_SYSLOG_PREFIX_STRING);
 #endif
 
   /* Generate the output */
 
-  ret = lib_vsprintf(&stream.public, fmt, *ap);
+  ret += lib_vsprintf(&stream.public, fmt, *ap);
 
 #ifdef CONFIG_SYSLOG_BUFFER
   /* Flush and destroy the syslog stream buffer */

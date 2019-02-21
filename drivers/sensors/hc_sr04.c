@@ -43,11 +43,12 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <errno.h>
+
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/random.h>
-
 #include <nuttx/sensors/hc_sr04.h>
 
 /****************************************************************************
@@ -121,7 +122,7 @@ static int hcsr04_read_distance(FAR struct hcsr04_dev_s *priv)
 {
   int done;
 
-  sem_getvalue(&priv->conv_donesem, &done);
+  nxsem_getvalue(&priv->conv_donesem, &done);
 
   if (done == 0)
     {
@@ -144,7 +145,7 @@ static int hcsr04_start_measuring(FAR struct hcsr04_dev_s *priv)
   /* Send to 10uS trigger pulse */
 
   priv->config->set_trigger(priv->config, true);
-  usleep(10);
+  nxsig_usleep(10);
   priv->config->set_trigger(priv->config, false);
 
   return 0;
@@ -154,13 +155,23 @@ static int hcsr04_open(FAR struct file *filep)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hcsr04_dev_s *priv = inode->i_private;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
-    }
+      ret = nxsem_wait(&priv->devsem);
 
-  sem_post(&priv->devsem);
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
+    }
+  while (ret == -EINTR);
+
+  nxsem_post(&priv->devsem);
   hcsr04_dbg("OPENED\n");
   return OK;
 }
@@ -169,14 +180,23 @@ static int hcsr04_close(FAR struct file *filep)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hcsr04_dev_s *priv = inode->i_private;
-  int ret = OK;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
-    }
+      ret = nxsem_wait(&priv->devsem);
 
-  sem_post(&priv->devsem);
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
+    }
+  while (ret == -EINTR);
+
+  nxsem_post(&priv->devsem);
   hcsr04_dbg("CLOSED\n");
   return ret;
 }
@@ -188,11 +208,21 @@ static ssize_t hcsr04_read(FAR struct file *filep, FAR char *buffer,
   FAR struct hcsr04_dev_s *priv = inode->i_private;
   int distance = 0;
   ssize_t length = 0;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   /* Setup and send a pulse to start measuring */
 
@@ -200,10 +230,19 @@ static ssize_t hcsr04_read(FAR struct file *filep, FAR char *buffer,
 
   /* Wait the convertion to finish */
 
-  while (sem_wait(&priv->conv_donesem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->conv_donesem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   distance = hcsr04_read_distance(priv);
   if (distance < 0)
@@ -221,7 +260,7 @@ static ssize_t hcsr04_read(FAR struct file *filep, FAR char *buffer,
         }
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return length;
 }
 
@@ -236,12 +275,21 @@ static int hcsr04_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
 {
   FAR struct inode *inode = filep->f_inode;
   FAR struct hcsr04_dev_s *priv = inode->i_private;
-  int ret = OK;
+  int ret;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   switch (cmd)
     {
@@ -264,7 +312,7 @@ static int hcsr04_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
       break;
     }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -273,7 +321,7 @@ static bool hcsr04_sample(FAR struct hcsr04_dev_s *priv)
 {
   int done;
 
-  sem_getvalue(&priv->conv_donesem, &done);
+  nxsem_getvalue(&priv->conv_donesem, &done);
 
   return (done == 0);
 }
@@ -297,7 +345,7 @@ static void hcsr04_notify(FAR struct hcsr04_dev_s *priv)
         {
           fds->revents |= POLLIN;
           hcsr04_dbg("Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 }
@@ -307,9 +355,9 @@ static int hcsr04_poll(FAR struct file *filep, FAR struct pollfd *fds,
 {
   FAR struct inode *inode;
   FAR struct hcsr04_dev_s *priv;
-  int ret = OK;
-  int i;
   uint32_t flags;
+  int ret;
+  int i;
 
   DEBUGASSERT(filep && fds);
   inode = filep->f_inode;
@@ -317,10 +365,19 @@ static int hcsr04_poll(FAR struct file *filep, FAR struct pollfd *fds,
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct hcsr04_dev_s *)inode->i_private;
 
-  while (sem_wait(&priv->devsem) != 0)
+  /* Get exclusive access */
+
+  do
     {
-      assert(errno == EINTR);
+      ret = nxsem_wait(&priv->devsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   if (setup)
     {
@@ -379,7 +436,7 @@ static int hcsr04_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 out:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 #endif /* !CONFIG_DISABLE_POLL */
@@ -416,7 +473,7 @@ static int hcsr04_int_handler(int irq, FAR void *context, FAR void *arg)
 
       /* Convertion is done */
 
-      sem_post(&priv->conv_donesem);
+      nxsem_post(&priv->conv_donesem);
     }
 
   hcsr04_dbg("HC-SR04 interrupt\n");
@@ -446,8 +503,8 @@ int hcsr04_register(FAR const char *devpath,
     }
 
   priv->config = config;
-  sem_init(&priv->devsem, 0, 1);
-  sem_init(&priv->conv_donesem, 0, 0);
+  nxsem_init(&priv->devsem, 0, 1);
+  nxsem_init(&priv->conv_donesem, 0, 0);
 
   ret = register_driver(devpath, &g_hcsr04ops, 0666, priv);
   if (ret < 0)

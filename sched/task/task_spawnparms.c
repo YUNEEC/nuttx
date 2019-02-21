@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/task/task_spawnparms.c
  *
- *   Copyright (C) 2013, 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2013, 2015, 2017-2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,9 @@
 #include <spawn.h>
 #include <debug.h>
 
+#include <nuttx/signal.h>
 #include <nuttx/spawn.h>
+#include <nuttx/fs/fs.h>
 
 #include "task/spawn.h"
 #include "task/task.h"
@@ -119,10 +121,10 @@ static inline int spawn_open(FAR struct spawn_open_file_action_s *action)
   sinfo("Open'ing path=%s oflags=%04x mode=%04x\n",
         action->path, action->oflags, action->mode);
 
-  fd = open(action->path, action->oflags, action->mode);
+  fd = nx_open(action->path, action->oflags, action->mode);
   if (fd < 0)
     {
-      ret = get_errno();
+      ret = fd;
       serr("ERROR: open failed: %d\n", ret);
     }
 
@@ -175,10 +177,10 @@ void spawn_semtake(FAR sem_t *sem)
 
   do
     {
-      ret = sem_wait(sem);
-      ASSERT(ret == 0 || get_errno() == EINTR);
+      ret = nxsem_wait(sem);
+      DEBUGASSERT(ret == 0 || ret == -EINTR);
     }
-  while (ret != 0);
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -193,7 +195,7 @@ void spawn_semtake(FAR sem_t *sem)
  *   attr - The attributes to use
  *
  * Returned Value:
- *   Errors are not reported by this function.  This is because errors
+ *   Errors are not reported by this function.  This is not because errors
  *   cannot occur, but rather that the new task has already been started
  *   so there is no graceful way to handle errors detected in this context
  *   (unless we delete the new task and recover).
@@ -207,6 +209,7 @@ void spawn_semtake(FAR sem_t *sem)
 int spawn_execattrs(pid_t pid, FAR const posix_spawnattr_t *attr)
 {
   struct sched_param param;
+  int ret;
 
   DEBUGASSERT(attr);
 
@@ -222,17 +225,14 @@ int spawn_execattrs(pid_t pid, FAR const posix_spawnattr_t *attr)
   if ((attr->flags & POSIX_SPAWN_SETSCHEDPARAM) != 0)
     {
 #ifdef CONFIG_SCHED_SPORADIC
-      int ret;
-
       /* Get the current sporadic scheduling parameters.  Those will not be
        * modified.
        */
 
-      ret = sched_getparam(pid, &param);
+      ret = nxsched_getparam(pid, &param);
       if (ret < 0)
         {
-          int errcode = get_errno();
-          return -errcode;
+          return ret;
         }
 #endif
 
@@ -241,7 +241,7 @@ int spawn_execattrs(pid_t pid, FAR const posix_spawnattr_t *attr)
       param.sched_priority = attr->priority;
 
       /* If we are setting *both* the priority and the scheduler,
-       * then we will call sched_setscheduler() below.
+       * then we will call nxsched_setscheduler() below.
        */
 
       if ((attr->flags & POSIX_SPAWN_SETSCHEDULER) == 0)
@@ -249,18 +249,26 @@ int spawn_execattrs(pid_t pid, FAR const posix_spawnattr_t *attr)
           sinfo("Setting priority=%d for pid=%d\n",
                 param.sched_priority, pid);
 
-          (void)sched_setparam(pid, &param);
+          ret = nxsched_setparam(pid, &param);
+          if (ret < 0)
+            {
+             return ret;
+            }
         }
     }
 
   /* If we are only changing the scheduling policy, then reset
    * the priority to the default value (the same as this thread) in
-   * preparation for the sched_setscheduler() call below.
+   * preparation for the nxsched_setscheduler() call below.
    */
 
   else if ((attr->flags & POSIX_SPAWN_SETSCHEDULER) != 0)
     {
-      (void)sched_getparam(0, &param);
+      ret = nxsched_getparam(0, &param);
+      if (ret < 0)
+        {
+          return ret;
+        }
     }
 
   /* Are we setting the scheduling policy?  If so, use the priority
@@ -282,7 +290,7 @@ int spawn_execattrs(pid_t pid, FAR const posix_spawnattr_t *attr)
       param.sched_ss_init_budget.tv_sec  = attr->budget.tv_sec;
       param.sched_ss_init_budget.tv_nsec = attr->budget.tv_nsec;
 #endif
-      (void)sched_setscheduler(pid, attr->policy, &param);
+      (void)nxsched_setscheduler(pid, attr->policy, &param);
     }
 
   return OK;
@@ -317,7 +325,7 @@ int spawn_proxyattrs(FAR const posix_spawnattr_t *attr,
 #ifndef CONFIG_DISABLE_SIGNALS
   if (attr && (attr->flags & POSIX_SPAWN_SETSIGMASK) != 0)
     {
-      (void)sigprocmask(SIG_SETMASK, &attr->sigmask, NULL);
+      (void)nxsig_procmask(SIG_SETMASK, &attr->sigmask, NULL);
     }
 
   /* Were we also requested to perform file actions? */

@@ -38,7 +38,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#if defined(CONFIG_NET) && defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_PING)
+#if defined(CONFIG_NET) && defined(CONFIG_NET_ICMP) && defined(CONFIG_NET_ICMP_SOCKET)
 
 #include <debug.h>
 
@@ -57,12 +57,12 @@
  * Name: icmp_poll
  *
  * Description:
- *   Poll a UDP "connection" structure for availability of TX data
+ *   Poll a device "connection" structure for availability of ICMP TX data
  *
- * Parameters:
+ * Input Parameters:
  *   dev - The device driver structure to use in the send operation
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -83,4 +83,4 @@ void icmp_poll(FAR struct net_driver_s *dev)
   (void)devif_conn_event(dev, NULL, ICMP_POLL, dev->d_conncb);
 }
 
-#endif /* CONFIG_NET && CONFIG_NET_ICMP && CONFIG_NET_ICMP_PING */
+#endif /* CONFIG_NET && CONFIG_NET_ICMP && CONFIG_NET_ICMP_SOCKET */

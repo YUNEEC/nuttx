@@ -243,8 +243,10 @@
 
 /* Power management definitions */
 
-#if defined(CONFIG_PM) && !defined(CONFIG_PM_SERIAL_ACTIVITY)
-#  define CONFIG_PM_SERIAL_ACTIVITY 10
+#if defined(CONFIG_PM) && !defined(CONFIG_STM32_PM_SERIAL_ACTIVITY)
+#  define CONFIG_STM32_PM_SERIAL_ACTIVITY 10
+#endif
+#if defined(CONFIG_PM)
 #  define PM_IDLE_DOMAIN             0 /* Revisit */
 #endif
 
@@ -276,6 +278,10 @@ struct up_dev_s
   struct uart_dev_s dev;       /* Generic UART device */
   uint16_t          ie;        /* Saved interrupt mask bits value */
   uint16_t          sr;        /* Saved status bits */
+
+  /* Has been initialized and HW is setup. */
+
+  bool              initialized;
 
   /* If termios are supported, then the following fields may vary at
    * runtime.
@@ -1043,7 +1049,7 @@ static struct up_dev_s g_uart8priv =
 
 /* This table lets us iterate over the configured USARTs */
 
-static struct up_dev_s * const uart_devs[STM32_NUSART] =
+static struct up_dev_s * const g_uart_devs[STM32_NUSART] =
 {
 #ifdef CONFIG_STM32_USART1_SERIALDRIVER
   [0] = &g_usart1priv,
@@ -1096,7 +1102,8 @@ static inline uint32_t up_serialin(struct up_dev_s *priv, int offset)
  * Name: up_serialout
  ****************************************************************************/
 
-static inline void up_serialout(struct up_dev_s *priv, int offset, uint32_t value)
+static inline void up_serialout(struct up_dev_s *priv, int offset,
+                                uint32_t value)
 {
   putreg32(value, priv->usartbase + offset);
 }
@@ -1115,12 +1122,12 @@ static inline void up_setusartint(struct up_dev_s *priv, uint16_t ie)
 
   /* And restore the interrupt state (see the interrupt enable/usage table above) */
 
-  cr = up_serialin(priv, STM32_USART_CR1_OFFSET);
+  cr  = up_serialin(priv, STM32_USART_CR1_OFFSET);
   cr &= ~(USART_CR1_USED_INTS);
   cr |= (ie & (USART_CR1_USED_INTS));
   up_serialout(priv, STM32_USART_CR1_OFFSET, cr);
 
-  cr = up_serialin(priv, STM32_USART_CR3_OFFSET);
+  cr  = up_serialin(priv, STM32_USART_CR3_OFFSET);
   cr &= ~USART_CR3_EIE;
   cr |= (ie & USART_CR3_EIE);
   up_serialout(priv, STM32_USART_CR3_OFFSET, cr);
@@ -1426,7 +1433,7 @@ static void up_set_format(struct uart_dev_s *dev)
  * Description:
  *   Enable or disable APB clock for the USART peripheral
  *
- * Input parameters:
+ * Input Parameters:
  *   dev - A reference to the UART driver state structure
  *   on  - Enable clock if 'on' is 'true' and disable if 'false'
  *
@@ -1611,6 +1618,11 @@ static int up_setup(struct uart_dev_s *dev)
   /* Set up the cached interrupt enables value */
 
   priv->ie    = 0;
+
+  /* Mark device as initialized. */
+
+  priv->initialized = true;
+
   return OK;
 }
 
@@ -1689,6 +1701,10 @@ static void up_shutdown(struct uart_dev_s *dev)
 {
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   uint32_t regval;
+
+  /* Mark device as uninitialized. */
+
+  priv->initialized = false;
 
   /* Disable all interrupts */
 
@@ -1844,8 +1860,8 @@ static int up_interrupt(int irq, void *context, void *arg)
 
   /* Report serial activity to the power management logic */
 
-#if defined(CONFIG_PM) && CONFIG_PM_SERIAL_ACTIVITY > 0
-  pm_activity(PM_IDLE_DOMAIN, CONFIG_PM_SERIAL_ACTIVITY);
+#if defined(CONFIG_PM) && CONFIG_STM32_PM_SERIAL_ACTIVITY > 0
+  pm_activity(PM_IDLE_DOMAIN, CONFIG_STM32_PM_SERIAL_ACTIVITY);
 #endif
 
   /* Loop until there are no characters to be transferred or,
@@ -2314,7 +2330,7 @@ static bool up_rxavailable(struct uart_dev_s *dev)
  *   Return true if UART activated RX flow control to block more incoming
  *   data
  *
- * Input parameters:
+ * Input Parameters:
  *   dev       - UART device instance
  *   nbuffered - the number of characters currently buffered
  *               (if CONFIG_SERIAL_IFLOWCONTROL_WATERMARKS is
@@ -2343,6 +2359,22 @@ static bool up_rxflowcontrol(struct uart_dev_s *dev,
       /* Assert/de-assert nRTS set it high resume/stop sending */
 
       stm32_gpiowrite(priv->rts_gpio, upper);
+
+      if (upper)
+        {
+          /* With heavy Rx traffic, RXNE might be set and data pending.
+           * Returning 'true' in such case would cause RXNE left unhandled
+           * and causing interrupt storm. Sending end might be also be slow
+           * to react on nRTS, and returning 'true' here would prevent
+           * processing that data.
+           *
+           * Therefore, return 'false' so input data is still being processed
+           * until sending end reacts on nRTS signal and stops sending more.
+           */
+
+          return false;
+        }
+
       return upper;
     }
 
@@ -2768,6 +2800,33 @@ static int up_pm_prepare(struct pm_callback_s *cb, int domain,
 #ifdef USE_SERIALDRIVER
 
 /****************************************************************************
+ * Name: stm32_serial_get_uart
+ *
+ * Description:
+ *   Get serial driver structure for STM32 USART
+ *
+ ****************************************************************************/
+
+#ifdef HAVE_SERIALDRIVER
+FAR uart_dev_t *stm32_serial_get_uart(int uart_num)
+{
+  int uart_idx = uart_num - 1;
+
+  if (uart_idx < 0 || uart_idx >= STM32_NUSART || !g_uart_devs[uart_idx])
+    {
+      return NULL;
+    }
+
+  if (!g_uart_devs[uart_idx]->initialized)
+    {
+      return NULL;
+    }
+
+  return &g_uart_devs[uart_idx]->dev;
+}
+#endif /* HAVE_SERIALDRIVER */
+
+/****************************************************************************
  * Name: up_earlyserialinit
  *
  * Description:
@@ -2787,16 +2846,16 @@ void up_earlyserialinit(void)
 
   for (i = 0; i < STM32_NUSART; i++)
     {
-      if (uart_devs[i])
+      if (g_uart_devs[i])
         {
-          up_disableusartint(uart_devs[i], NULL);
+          up_disableusartint(g_uart_devs[i], NULL);
         }
     }
 
   /* Configure whichever one is the console */
 
 #if CONSOLE_UART > 0
-  up_setup(&uart_devs[CONSOLE_UART - 1]->dev);
+  up_setup(&g_uart_devs[CONSOLE_UART - 1]->dev);
 #endif
 #endif /* HAVE UART */
 }
@@ -2832,21 +2891,21 @@ void up_serialinit(void)
   /* Register the console */
 
 #if CONSOLE_UART > 0
-  (void)uart_register("/dev/console", &uart_devs[CONSOLE_UART - 1]->dev);
+  (void)uart_register("/dev/console", &g_uart_devs[CONSOLE_UART - 1]->dev);
 
-#ifndef CONFIG_SERIAL_DISABLE_REORDERING
+#ifndef CONFIG_STM32_SERIAL_DISABLE_REORDERING
   /* If not disabled, register the console UART to ttyS0 and exclude
    * it from initializing it further down
    */
 
-  (void)uart_register("/dev/ttyS0", &uart_devs[CONSOLE_UART - 1]->dev);
+  (void)uart_register("/dev/ttyS0", &g_uart_devs[CONSOLE_UART - 1]->dev);
   minor = 1;
 #endif
 
 #ifdef SERIAL_HAVE_CONSOLE_DMA
   /* If we need to re-initialise the console to enable DMA do that here. */
 
-  up_dma_setup(&uart_devs[CONSOLE_UART - 1]->dev);
+  up_dma_setup(&g_uart_devs[CONSOLE_UART - 1]->dev);
 #endif
 #endif /* CONSOLE_UART > 0 */
 
@@ -2858,15 +2917,15 @@ void up_serialinit(void)
     {
       /* Don't create a device for non-configured ports. */
 
-      if (uart_devs[i] == 0)
+      if (g_uart_devs[i] == 0)
         {
           continue;
         }
 
-#ifndef CONFIG_SERIAL_DISABLE_REORDERING
+#ifndef CONFIG_STM32_SERIAL_DISABLE_REORDERING
       /* Don't create a device for the console - we did that above */
 
-      if (uart_devs[i]->dev.isconsole)
+      if (g_uart_devs[i]->dev.isconsole)
         {
           continue;
         }
@@ -2875,7 +2934,7 @@ void up_serialinit(void)
       /* Register USARTs as devices in increasing order */
 
       devname[9] = '0' + minor++;
-      (void)uart_register(devname, &uart_devs[i]->dev);
+      (void)uart_register(devname, &g_uart_devs[i]->dev);
     }
 #endif /* HAVE UART */
 }
@@ -2969,7 +3028,7 @@ void stm32_serial_dma_poll(void)
 int up_putc(int ch)
 {
 #if CONSOLE_UART > 0
-  struct up_dev_s *priv = uart_devs[CONSOLE_UART - 1];
+  struct up_dev_s *priv = g_uart_devs[CONSOLE_UART - 1];
   uint16_t ie;
 
   up_disableusartint(priv, &ie);

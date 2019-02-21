@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/power/pm_update.c
  *
- *   Copyright (C) 2011-2012, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2012, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,30 +50,11 @@
 #ifdef CONFIG_PM
 
 /****************************************************************************
- * Private Types
- ****************************************************************************/
-
-struct pm_worker_param_s
-{
-  uint8_t domndx;
-  int16_t accum;
-};
-
-union pm_worker_param_u
-{
-  struct pm_worker_param_s s;
-  uintptr_t i;
-};
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
  * Private Data
  ****************************************************************************/
+
 /* CONFIG_PM_MEMORY is the total number of time slices (including the current
- * time slice.  The histor or previous values is then CONFIG_PM_MEMORY-1.
+ * time slice).  The history of previous values is then CONFIG_PM_MEMORY-1.
  */
 
 #if CONFIG_PM_MEMORY > 1
@@ -132,38 +113,35 @@ static const uint16_t g_pmcount[3] =
 };
 
 /****************************************************************************
- * Public Data
+ * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
- * Name: pm_worker
+ * Name: pm_update
  *
  * Description:
- *   This worker function is queued at the end of a time slice in order to
+ *   This internal function is called at the end of a time slice in order to
  *   update driver activity metrics and recommended states.
  *
  * Input Parameters:
- *   arg - The value of the activity accumulator at the end of the time
- *     slice.
+ *   domain - The PM domain associated with the accumulator
+ *   accum  - The value of the activity accumulator at the end of the time
+ *            slice.
  *
  * Returned Value:
  *   None.
  *
  * Assumptions:
- *   This function runs on the worker thread.
+ *   This function may be called from a driver, perhaps even at the interrupt
+ *   level.  It may also be called from the IDLE loop at the lowest possible
+ *   priority level.
  *
  ****************************************************************************/
 
-void pm_worker(FAR void *arg)
+void pm_update(int domain, int16_t accum)
 {
-  union pm_worker_param_u parameter;
   FAR struct pm_domain_s *pdom;
   int32_t Y;
-  int16_t accum;
   int index;
 #if CONFIG_PM_MEMORY > 1
   int32_t denom;
@@ -171,21 +149,10 @@ void pm_worker(FAR void *arg)
   int j;
 #endif
 
-  /* Decode the domain and accumulator as a scaler value.
-   *
-   * REVISIT: domain will fit in a uint8_t and accum is int16_t.  Assuming
-   * that sizeof(FAR void *) >=3, the following will work.  It will not work
-   * for 16-bit addresses!
-   */
-
-  parameter.i = (uintptr_t)arg;
-  index       = parameter.s.domndx;
-  accum       = parameter.s.accum;
-
   /* Get a convenience pointer to minimize all of the indexing */
 
-  DEBUGASSERT(index >= 0 && index < CONFIG_PM_NDOMAINS);
-  pdom        = &g_pmglobals.domain[index];
+  DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
+  pdom        = &g_pmglobals.domain[domain];
 
 #if CONFIG_PM_MEMORY > 1
   /* We won't bother to do anything until we have accumulated
@@ -194,7 +161,7 @@ void pm_worker(FAR void *arg)
 
   if (pdom->mcnt < CONFIG_PM_MEMORY-1)
     {
-      index = pdom->mcnt++;
+      index               = pdom->mcnt++;
       pdom->memory[index] = accum;
       return;
     }
@@ -206,7 +173,7 @@ void pm_worker(FAR void *arg)
    * CONFIG_PM_MEMORY provides the memory for the algorithm.  Default: 2
    * CONFIG_PM_COEFn provides weight for each sample.  Default: 1
    *
-   * First, calclate Y = An*X
+   * First, calculate Y = An*X
    */
 
   Y     = CONFIG_PM_COEFN * accum;
@@ -240,13 +207,11 @@ void pm_worker(FAR void *arg)
     {
       pdom->mndx = 0;
     }
-
 #else
 
   /* No smoothing */
 
   Y = accum;
-
 #endif
 
   /* First check if increased activity should cause us to return to the
@@ -271,7 +236,7 @@ void pm_worker(FAR void *arg)
         {
           /* Yes... reset the count and recommend the normal state. */
 
-          pdom->thrcnt      = 0;
+          pdom->btime       = clock_systimer();
           pdom->recommended = PM_NORMAL;
           return;
         }
@@ -302,7 +267,7 @@ void pm_worker(FAR void *arg)
         {
           /* No... reset the count and recommend the current state */
 
-          pdom->thrcnt      = 0;
+          pdom->btime       = clock_systimer();
           pdom->recommended = pdom->state;
         }
 
@@ -310,72 +275,22 @@ void pm_worker(FAR void *arg)
 
       else if (pdom->recommended < nextstate)
         {
-          /* No.. increment the count.  Has it passed the count required
+          /* No.. calculate the count.  Has it passed the count required
            * for a state transition?
            */
 
-          if (++pdom->thrcnt >= g_pmcount[index])
+          if (clock_systimer() - pdom->btime >=
+                  g_pmcount[index] * TIME_SLICE_TICKS)
             {
               /* Yes, recommend the new state and set up for the next
                * transition.
                */
 
-              pdom->thrcnt      = 0;
+              pdom->btime       = clock_systimer();
               pdom->recommended = nextstate;
             }
         }
     }
-}
-
-/****************************************************************************
- * Public Functions
- ****************************************************************************/
-
-/****************************************************************************
- * Name: pm_update
- *
- * Description:
- *   This internal function is called at the end of a time slice in order to
- *   update driver activity metrics and recommended states.
- *
- * Input Parameters:
- *   domain - The PM domain associated with the accumulator
- *   accum - The value of the activity accumulator at the end of the time
- *     slice.
- *
- * Returned Value:
- *   None.
- *
- * Assumptions:
- *   This function may be called from a driver, perhaps even at the interrupt
- *   level.  It may also be called from the IDLE loop at the lowest possible
- *   priority level.  To reconcile these various conditions, all work is
- *   performed on the worker thread at a user-selectable priority.  This will
- *   also serialize all of the updates and eliminate any need for additional
- *   protection.
- *
- ****************************************************************************/
-
-void pm_update(int domain, int16_t accum)
-{
-  union pm_worker_param_u parameter;
-
-  /* Encode the domain and accumulator as a scaler value.
-   *
-   * REVISIT: domain will fit in a uint8_t and accum is int16_t.  Assuming
-   * that sizeof(FAR void *) >=3, the following will work.  It will not work
-   * for 16-bit addresses!
-   */
-
-  DEBUGASSERT(domain >= 0 && domain < CONFIG_PM_NDOMAINS);
-  parameter.s.domndx = (uint8_t)domain;
-  parameter.s.accum  = accum;
-
-  /* The work will be performed on the worker thread */
-
-  DEBUGASSERT(g_pmglobals.work.worker == NULL);
-  (void)work_queue(HPWORK, &g_pmglobals.work, pm_worker,
-                   (FAR void *)parameter.i, 0);
 }
 
 #endif /* CONFIG_PM */

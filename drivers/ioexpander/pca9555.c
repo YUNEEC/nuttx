@@ -1,7 +1,7 @@
 /****************************************************************************
  * drivers/ioexpander/pca9555.c
  *
- *   Copyright (C) 2015, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Sebastien Lorquet <sebastien@lorquet.fr>
  *
  * References:
@@ -150,15 +150,24 @@ static const struct ioexpander_ops_s g_pca9555_ops =
 
 static void pca9555_lock(FAR struct pca9555_dev_s *pca)
 {
-  while (sem_wait(&pca->exclsem) < 0)
-    {
-      /* EINTR is the only expected error from sem_wait() */
+  int ret;
 
-      DEBUGASSERT(errno == EINTR);
+  do
+    {
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&pca->exclsem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
-#define pca9555_unlock(p) sem_post(&(p)->exclsem)
+#define pca9555_unlock(p) nxsem_post(&(p)->exclsem)
 
 /****************************************************************************
  * Name: pca9555_write
@@ -859,18 +868,9 @@ static void pca9555_irqworker(void *arg)
  *
  ****************************************************************************/
 
-static int pca9555_interrupt(int irq, FAR void *context)
+static int pca9555_interrupt(int irq, FAR void *context, FAR void *arg)
 {
-#ifdef CONFIG_PCA9555_MULTIPLE
-  /* To support multiple devices,
-   * retrieve the pca structure using the irq number.
-   */
-
-#  warning Missing logic
-
-#else
-  register FAR struct pca9555_dev_s *pca = &g_pca9555;
-#endif
+  register FAR struct pca9555_dev_s *pca = (FAR struct pca9555_dev_s*)arg;
 
   /* In complex environments, we cannot do I2C transfers from the interrupt
    * handler because semaphores are probably used to lock the I2C bus.  In
@@ -947,11 +947,11 @@ FAR struct ioexpander_dev_s *pca9555_initialize(FAR struct i2c_master_s *i2cdev,
   pcadev->config  = config;
 
 #ifdef CONFIG_PCA9555_INT_ENABLE
-  pcadev->config->attach(pcadev->config, pca9555_interrupt);
+  pcadev->config->attach(pcadev->config, pca9555_interrupt, pcadev);
   pcadev->config->enable(pcadev->config, TRUE);
 #endif
 
-  sem_init(&pcadev->exclsem, 0, 1);
+  nxsem_init(&pcadev->exclsem, 0, 1);
   return &pcadev->dev;
 }
 

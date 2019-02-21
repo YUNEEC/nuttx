@@ -121,8 +121,7 @@ NuttX Buildroot Toolchain
 
   1. You must have already configured Nuttx in <some-dir>/nuttx.
 
-     cd tools
-     ./configure.sh demo9s12nec64/<sub-dir>
+     tools/configure.sh demo9s12nec64/<sub-dir>
 
   2. Download the latest buildroot package into <some-dir>
 
@@ -306,13 +305,6 @@ HCS12/DEMO9S12NEC64-specific Configuration Options
 
 	CONFIG_ARCH_STACKDUMP - Do stack dumps after assertions
 
-	CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-	   cause a 100 second delay during boot-up.  This 100 second delay
-	   serves no purpose other than it allows you to calibratre
-	   CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-	   the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-	   the delay actually is 100 seconds.
-
   GPIO Interrupts
 
     CONFIG_HCS12_GPIOIRQ - Enable general support for GPIO IRQs
@@ -364,9 +356,7 @@ Common Configuration Notes
   1. Each Freescale HCS12 configuration is maintained in a sub-directory and
      can be selected as follow:
 
-       cd tools
-       ./configure.sh demo9s12nec64/<subdir>
-       cd -
+       tools/configure.sh demo9s12nec64/<subdir>
 
      Where <subdir> is one of the configuration sub-directories described in
      the following paragraph.

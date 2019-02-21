@@ -44,7 +44,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <unistd.h>
-#include <semaphore.h>
 #include <string.h>
 #include <poll.h>
 #include <errno.h>
@@ -55,6 +54,7 @@
 
 #include <nuttx/random.h>
 #include <nuttx/fs/fs.h>
+#include <nuttx/semaphore.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/usrsock.h>
 
@@ -88,7 +88,7 @@ struct usrsockdev_s
     sem_t   acksem;              /* Request acknowledgment notification */
     uint8_t ack_xid;             /* Exchange id for which waiting ack */
     uint16_t nbusy;              /* Number of requests blocked from different
-                                    threads */
+                                  * threads */
   } req;
 
   FAR struct usrsock_conn_s *datain_conn; /* Connection instance to receive
@@ -274,8 +274,8 @@ static uint8_t usrsockdev_get_xid(FAR struct usrsock_conn_s *conn)
 {
   int conn_idx;
 
-#if CONFIG_NET_USRSOCK_CONNS > 255
-#  error "CONFIG_NET_USRSOCK_CONNS too large (over 255)"
+#if CONFIG_NET_USRSOCK_CONNS > 254
+#  error "CONFIG_NET_USRSOCK_CONNS too large (over 254)"
 #endif
 
   /* Each connection can one only one request/response pending. So map
@@ -299,21 +299,26 @@ static uint8_t usrsockdev_get_xid(FAR struct usrsock_conn_s *conn)
 
 static void usrsockdev_semtake(FAR sem_t *sem)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(sem) != 0)
+  do
     {
-      /* The only case that an error should occur here is if
-       * the wait was awakened by a signal.
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
        */
 
-      DEBUGASSERT(*get_errno_ptr() == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 static void usrsockdev_semgive(FAR sem_t *sem)
 {
-  (void)sem_post(sem);
+  (void)nxsem_post(sem);
 }
 
 /****************************************************************************
@@ -349,7 +354,7 @@ static void usrsockdev_pollnotify(FAR struct usrsockdev_s *dev, pollevent_t even
           if (fds->revents != 0)
             {
               ninfo("Report events: %02x\n", fds->revents);
-              sem_post(fds->sem);
+              nxsem_post(fds->sem);
             }
         }
     }
@@ -728,9 +733,9 @@ static ssize_t usrsockdev_handle_req_response(FAR struct usrsockdev_s *dev,
   FAR struct usrsock_conn_s *conn;
   unsigned int hdrlen;
   ssize_t ret;
-  ssize_t (* handle_response)(FAR struct usrsockdev_s *dev,
-                              FAR struct usrsock_conn_s *conn,
-                              FAR const void *buffer);
+  ssize_t (*handle_response)(FAR struct usrsockdev_s *dev,
+                             FAR struct usrsock_conn_s *conn,
+                             FAR const void *buffer);
 
   switch (hdr->head.msgid)
     {
@@ -788,7 +793,7 @@ static ssize_t usrsockdev_handle_req_response(FAR struct usrsockdev_s *dev,
 
       dev->req.iov = NULL;
 
-      sem_post(&dev->req.acksem);
+      nxsem_post(&dev->req.acksem);
     }
 
   ret = handle_response(dev, conn, buffer);
@@ -1045,7 +1050,7 @@ static int usrsockdev_close(FAR struct file *filep)
         }
 
       dev->req.iov = NULL;
-      sem_post(&dev->req.acksem);
+      nxsem_post(&dev->req.acksem);
     }
   while (true);
 
@@ -1210,7 +1215,7 @@ int usrsockdev_do_request(FAR struct usrsock_conn_s *conn,
 
   while ((ret = net_lockedwait(&dev->req.sem)) < 0)
     {
-      DEBUGASSERT(ret == -EINTR);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
     }
 
   if (usrsockdev_is_opened(dev))
@@ -1229,12 +1234,13 @@ int usrsockdev_do_request(FAR struct usrsock_conn_s *conn,
 
       while ((ret = net_lockedwait(&dev->req.acksem)) < 0)
         {
-          DEBUGASSERT(ret == -EINTR);
+          DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
         }
     }
   else
     {
       ninfo("usockid=%d; daemon abruptly closed /usr/usrsock.\n", conn->usockid);
+      ret = -ESHUTDOWN;
     }
 
   /* Free request line for next command. */
@@ -1243,7 +1249,7 @@ int usrsockdev_do_request(FAR struct usrsock_conn_s *conn,
 
   --dev->req.nbusy; /* net_lock held. */
 
-  return OK;
+  return ret;
 }
 
 /****************************************************************************
@@ -1260,9 +1266,10 @@ void usrsockdev_register(void)
 
   g_usrsockdev.ocount = 0;
   g_usrsockdev.req.nbusy = 0;
-  sem_init(&g_usrsockdev.devsem, 0, 1);
-  sem_init(&g_usrsockdev.req.sem, 0, 1);
-  sem_init(&g_usrsockdev.req.acksem, 0, 0);
+  nxsem_init(&g_usrsockdev.devsem, 0, 1);
+  nxsem_init(&g_usrsockdev.req.sem, 0, 1);
+  nxsem_init(&g_usrsockdev.req.acksem, 0, 0);
+  nxsem_setprotocol(&g_usrsockdev.req.acksem, SEM_PRIO_NONE);
 
   (void)register_driver("/dev/usrsock", &g_usrsockdevops, 0666, &g_usrsockdev);
 }

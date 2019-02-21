@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/vfs/fs_dupfd.c
  *
- *   Copyright (C) 2007-2009, 2011-2014 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2011-2014, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,10 +56,6 @@
 #define DUP_ISOPEN(filep) (filep->f_inode != NULL)
 
 /****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -68,8 +64,12 @@
  *
  * Description:
  *   Equivalent to the non-standard fs_dupfd() function except that it
- *   accepts a struct file instance instead of a file descriptor.  Currently
- *   used only by file_vfcntl();
+ *   accepts a struct file instance instead of a file descriptor and does
+ *   not set the errno variable.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
  *
  ****************************************************************************/
 
@@ -81,8 +81,7 @@ int file_dup(FAR struct file *filep, int minfd)
 
   if (!DUP_ISOPEN(filep))
     {
-      set_errno(EBADF);
-      return ERROR;
+      return -EBADF;
     }
 
   /* Increment the reference count on the contained inode */
@@ -94,9 +93,8 @@ int file_dup(FAR struct file *filep, int minfd)
   fd2 = files_allocate(filep->f_inode, filep->f_oflags, filep->f_pos, minfd);
   if (fd2 < 0)
     {
-      set_errno(EMFILE);
       inode_release(filep->f_inode);
-      return ERROR;
+      return -EMFILE;
     }
 
   return fd2;
@@ -112,25 +110,41 @@ int file_dup(FAR struct file *filep, int minfd)
  *   descriptors.  If socket descriptors are not implemented, then this
  *   function IS dup().
  *
+ * Returned Value:
+ *   fs_dupfd is sometimes an OS internal function and sometimes is a direct
+ *   substitute for dup().  So it must return an errno value as though it
+ *   were dup().
+ *
  ****************************************************************************/
 
 int fs_dupfd(int fd, int minfd)
 {
   FAR struct file *filep;
+  int ret;
 
   /* Get the file structure corresponding to the file descriptor. */
 
-  filep = fs_getfilep(fd);
-  if (!filep)
+  ret = fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* The errno value has already been set */
-
-      return ERROR;
+      goto errout;
     }
+
+  DEBUGASSERT(filep != NULL);
 
   /* Let file_dup() do the real work */
 
-  return file_dup(filep, minfd);
+  ret = file_dup(filep, minfd);
+  if (ret < 0)
+    {
+      goto errout;
+    }
+
+  return ret;
+
+errout:
+  set_errno(-ret);
+  return ERROR;
 }
 
 #endif /* CONFIG_NFILE_DESCRIPTORS > 0 */

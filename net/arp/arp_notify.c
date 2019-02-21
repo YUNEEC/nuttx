@@ -94,8 +94,8 @@ void arp_wait_setup(in_addr_t ipaddr, FAR struct arp_notify_s *notify)
    * priority inheritance enabled.
    */
 
-  (void)sem_init(&notify->nt_sem, 0, 0);
-  sem_setprotocol(&notify->nt_sem, SEM_PRIO_NONE);
+  (void)nxsem_init(&notify->nt_sem, 0, 0);
+  nxsem_setprotocol(&notify->nt_sem, SEM_PRIO_NONE);
 
   /* Add the wait structure to the list with interrupts disabled */
 
@@ -113,7 +113,7 @@ void arp_wait_setup(in_addr_t ipaddr, FAR struct arp_notify_s *notify)
  *   is called (arp_wait() will automatically cancel the wait).
  *
  * Assumptions:
- *   This function may execute in the interrupt context when called from
+ *   This function may execute with interrupts disabled when called from
  *   arp_wait().
  *
  ****************************************************************************/
@@ -150,7 +150,7 @@ int arp_wait_cancel(FAR struct arp_notify_s *notify)
     }
 
   leave_critical_section(flags);
-  (void)sem_destroy(&notify->nt_sem);
+  (void)nxsem_destroy(&notify->nt_sem);
   return ret;
 }
 
@@ -250,7 +250,7 @@ void arp_notify(in_addr_t ipaddr)
           /* Yes.. Signal the waiting, returning success */
 
           curr->nt_result = OK;
-          sem_post(&curr->nt_sem);
+          nxsem_post(&curr->nt_sem);
           break;
         }
     }

@@ -53,11 +53,11 @@
  * Description:
  *   This function adds a region of contiguous memory to the kernel heap.
  *
- * Parameters:
+ * Input Parameters:
  *   heap_start - Address of the beginning of the memory region
  *   heap_size  - The size (in bytes) if the memory region.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

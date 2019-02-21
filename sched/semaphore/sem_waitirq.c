@@ -52,32 +52,32 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: sem_waitirq
+ * Name: nxsem_wait_irq
  *
  * Description:
  *   This function is called when either:
  *
  *   1. A signal is received by a task that is waiting on a semaphore.
  *      According to the POSIX spec, "...the calling thread shall not return
- *      from the call to [sem_wait] until it either locks the semaphore or
+ *      from the call to [nxsem_wait] until it either locks the semaphore or
  *      the call is interrupted by a signal."
  *   2. From logic associated with sem_timedwait().  This function is called
  *      when the timeout elapses without receiving the semaphore.
  *
- * Parameters:
+ * Input Parameters:
  *   wtcb    - A pointer to the TCB of the task that is waiting on a
  *             semphaphore, but has received a signal or timeout instead.
  *   errcode - EINTR if the semaphore wait was awakened by a signal;
  *             ETIMEDOUT if awakened by a timeout
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
  *
  ****************************************************************************/
 
-void sem_waitirq(FAR struct tcb_s *wtcb, int errcode)
+void nxsem_wait_irq(FAR struct tcb_s *wtcb, int errcode)
 {
   irqstate_t flags;
 
@@ -101,7 +101,7 @@ void sem_waitirq(FAR struct tcb_s *wtcb, int errcode)
        * to this semaphore.
        */
 
-      sem_canceled(wtcb, sem);
+      nxsem_canceled(wtcb, sem);
 
       /* And increment the count on the semaphore.  This releases the count
        * that was taken by sem_post().  This count decremented the semaphore

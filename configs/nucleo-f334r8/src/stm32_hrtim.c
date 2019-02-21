@@ -45,9 +45,9 @@
 
 #include <nuttx/board.h>
 
-#include "stm32.h"
+#include "stm32_hrtim.h"
 
-#if defined(CONFIG_HRTIM) && defined(CONFIG_STM32_HRTIM1)
+#ifndef CONFIG_STM32_HRTIM_DISABLE_CHARDRV
 
 /****************************************************************************
  * Public Functions
@@ -96,4 +96,4 @@ int stm32_hrtim_setup(void)
   return OK;
 }
 
-#endif /* CONFIG_HRTIM && CONFIG_STM32_HRTIM1 */
+#endif /* CONFIG_STM32_HRTIM && CONFIG_STM32_HRTIM1 */

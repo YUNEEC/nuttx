@@ -94,8 +94,6 @@
  *   CONFIG_SDMMC1/2_WIDTH_D1_ONLY - This may be selected to force the driver
  *     operate with only a single data line (the default is to use all
  *     4 SD data lines).
- *   CONFIG_SDMMC_PRI - SDMMC interrupt priority.  This setting is not very
- *     important since interrupt nesting is not currently supported.
  *   CONFIG_SDMMMC_DMAPRIO - SDMMC DMA priority.  This can be selecte if
  *     CONFIG_STM32L4_SDMMC_DMA is enabled.
  *   CONFIG_CONFIG_STM32L4_SDMMC_XFRDEBUG - Enables some very low-level debug output
@@ -118,10 +116,6 @@
 #endif
 
 #ifdef CONFIG_STM32L4_SDMMC1
-#  if defined(CONFIG_ARCH_IRQPRIO) && !defined(CONFIG_SDMMC1_PRI)
-#    define CONFIG_SDMMC1_PRI        NVIC_SYSH_PRIORITY_DEFAULT
-#  endif
-
 #  ifdef CONFIG_STM32L4_SDMMC_DMA
 #    ifndef CONFIG_STM32L4_SDMMC1_DMAPRIO
 #        define CONFIG_STM32L4_SDMMC1_DMAPRIO DMA_SCR_PRIVERYHI
@@ -135,10 +129,6 @@
 #endif
 
 #ifdef CONFIG_STM32L4_SDMMC2
-#  if defined(CONFIG_ARCH_IRQPRIO) && !defined(CONFIG_SDMMC2_PRI)
-#    define CONFIG_SDMMC2_PRI        NVIC_SYSH_PRIORITY_DEFAULT
-#  endif
-
 #  ifdef CONFIG_STM32L4_SDMMC_DMA
 #    ifndef CONFIG_STM32L4_SDMMC2_DMAPRIO
 #        define CONFIG_STM32L4_SDMMC2_DMAPRIO DMA_SCR_PRIVERYHI
@@ -342,9 +332,6 @@ struct stm32_dev_s
   /* STM32-specific extensions */
   uint32_t          base;
   int               nirq;
-#ifdef CONFIG_ARCH_IRQPRIO
-  int               irqprio;
-#endif
 #ifdef CONFIG_MMCSD_SDIOWAIT_WRCOMPLETE
   uint32_t          d0_gpio;
 #endif
@@ -420,7 +407,7 @@ static inline void sdmmc_putreg32(struct stm32_dev_s *priv, uint32_t value,\
                                   int offset);
 static inline uint32_t sdmmc_getreg32(struct stm32_dev_s *priv, int offset);
 static void stm32_takesem(struct stm32_dev_s *priv);
-#define     stm32_givesem(priv) (sem_post(&priv->waitsem))
+#define     stm32_givesem(priv) (nxsem_post(&priv->waitsem))
 static inline void stm32_setclkcr(struct stm32_dev_s *priv, uint32_t clkcr);
 static void stm32_configwaitints(struct stm32_dev_s *priv, uint32_t waitmask,
               sdio_eventset_t waitevents, sdio_eventset_t wkupevents);
@@ -522,7 +509,7 @@ static int  stm32_registercallback(FAR struct sdio_dev_s *dev,
 /* DMA */
 
 #ifdef CONFIG_STM32L4_SDMMC_DMA
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
 static int  stm32_dmapreflight(FAR struct sdio_dev_s *dev,
               FAR const uint8_t *buffer, size_t buflen);
 #endif
@@ -578,13 +565,13 @@ struct stm32_dev_s g_sdmmcdev1 =
 #endif
 #ifdef CONFIG_SDIO_DMA
 #ifdef CONFIG_STM32L4_SDMMC_DMA
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
     .dmapreflight     = stm32_dmapreflight,
 #endif
     .dmarecvsetup     = stm32_dmarecvsetup,
     .dmasendsetup     = stm32_dmasendsetup,
 #else
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
     .dmapreflight     = NULL,
 #endif
     .dmarecvsetup     = stm32_recvsetup,
@@ -594,9 +581,6 @@ struct stm32_dev_s g_sdmmcdev1 =
   },
   .base              = STM32L4_SDMMC1_BASE,
   .nirq              = STM32L4_IRQ_SDMMC1,
-#ifdef CONFIG_SDMMC1_PRI
-  .irqprio           = CONFIG_SDMMC1_PRI,
-#endif
 #ifdef CONFIG_MMCSD_SDIOWAIT_WRCOMPLETE
   .d0_gpio           = GPIO_SDMMC1_D0,
 #endif
@@ -641,7 +625,7 @@ struct stm32_dev_s g_sdmmcdev2 =
     .registercallback = stm32_registercallback,
 #endif
 #ifdef CONFIG_SDIO_DMA
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
     .dmapreflight     = stm32_dmapreflight,
 #endif
     .dmarecvsetup     = stm32_dmarecvsetup,
@@ -650,9 +634,6 @@ struct stm32_dev_s g_sdmmcdev2 =
   },
   .base              = STM32_SDMMC2_BASE,
   .nirq              = STM32_IRQ_SDMMC2,
-#ifdef CONFIG_SDMMC2_PRI
-  .irqprio           = CONFIG_SDMMC2_PRI,
-#endif
 #ifdef CONFIG_MMCSD_SDIOWAIT_WRCOMPLETE
   .d0_gpio           = GPIO_SDMMC2_D0,
 #endif
@@ -726,16 +707,21 @@ static inline void sdmmc_modifyreg32(struct stm32_dev_s *priv, int offset,
 
 static void stm32_takesem(struct stm32_dev_s *priv)
 {
-  /* Take the semaphore (perhaps waiting) */
+  int ret;
 
-  while (sem_wait(&priv->waitsem) != 0)
+  do
     {
-      /* The only case that an error should occr here is if the wait was
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&priv->waitsem);
+
+      /* The only case that an error should occur here is if the wait was
        * awakened by a signal.
        */
 
-      ASSERT(errno == EINTR);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 }
 
 /****************************************************************************
@@ -1954,13 +1940,6 @@ static int stm32_attach(FAR struct sdio_dev_s *dev)
        */
 
       up_enable_irq(priv->nirq);
-
-#if defined(CONFIG_ARCH_IRQPRIO) && (defined(CONFIG_STM32L4_SDMMC1_DMAPRIO) || \
-                                     defined(CONFIG_STM32L4_SDMMC2_DMAPRIO))
-      /* Set the interrupt priority */
-
-      up_prioritize_irq(priv->nirq, priv->irqprio);
-#endif
     }
 
   return ret;
@@ -2632,7 +2611,7 @@ static sdio_eventset_t stm32_eventwait(FAR struct sdio_dev_s *dev,
       delay = MSEC2TICK(timeout);
       ret   = wd_start(priv->waitwdog, delay, (wdentry_t)stm32_eventtimeout,
                        1, (uint32_t)priv);
-      if (ret != OK)
+      if (ret < 0)
         {
           mcerr("ERROR: wd_start failed: %d\n", ret);
         }
@@ -2782,7 +2761,7 @@ static int stm32_registercallback(FAR struct sdio_dev_s *dev,
  *   OK on success; a negated errno on failure
  ****************************************************************************/
 
-#if defined(CONFIG_STM32L4_SDMMC_DMA) && defined(CONFIG_SDIO_PREFLIGHT)
+#if defined(CONFIG_STM32L4_SDMMC_DMA) && defined(CONFIG_ARCH_HAVE_SDIO_PREFLIGHT)
 static int stm32_dmapreflight(FAR struct sdio_dev_s *dev,
                               FAR const uint8_t *buffer, size_t buflen)
 {
@@ -2829,7 +2808,7 @@ static int stm32_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
   uint32_t dblocksize;
 
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
   DEBUGASSERT(stm32_dmapreflight(dev, buffer, buflen) == 0);
 #else
 #  if defined(CONFIG_ARMV7M_DCACHE) && !defined(CONFIG_ARMV7M_DCACHE_WRITETHROUGH)
@@ -2919,7 +2898,7 @@ static int stm32_dmasendsetup(FAR struct sdio_dev_s *dev,
   uint32_t dblocksize;
 
   DEBUGASSERT(priv != NULL && buffer != NULL && buflen > 0);
-#ifdef CONFIG_SDIO_PREFLIGHT
+#ifdef CONFIG_ARCH_HAVE_SDIO_PREFLIGHT
   DEBUGASSERT(stm32_dmapreflight(dev, buffer, buflen) == 0);
 #else
 #  if defined(CONFIG_ARMV7M_DCACHE) && !defined(CONFIG_ARMV7M_DCACHE_WRITETHROUGH)
@@ -3094,7 +3073,7 @@ static void stm32_default(struct stm32_dev_s *priv)
  * Input Parameters:
  *   slotno - Not used.
  *
- * Returned Values:
+ * Returned Value:
  *   A reference to an SDIO interface structure.  NULL is returned on failures.
  *
  ****************************************************************************/
@@ -3187,13 +3166,13 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
   /* Initialize the SDIO slot structure */
   /* Initialize semaphores */
 
-  sem_init(&priv->waitsem, 0, 0);
+  nxsem_init(&priv->waitsem, 0, 0);
 
   /* The waitsem semaphore is used for signaling and, hence, should not have
    * priority inheritance enabled.
    */
 
-  sem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
+  nxsem_setprotocol(&priv->waitsem, SEM_PRIO_NONE);
 
   /* Create a watchdog timer */
 
@@ -3229,7 +3208,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
  *                card has been removed from the slot.  Only transitions
  *                (inserted->removed or removed->inserted should be reported)
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -3276,7 +3255,7 @@ void sdio_mediachange(FAR struct sdio_dev_s *dev, bool cardinslot)
  *   dev       - An instance of the SDIO driver device state structure.
  *   wrprotect - true is a card is writeprotected.
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

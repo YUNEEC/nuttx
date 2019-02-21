@@ -68,10 +68,10 @@
  *   named semaphore has been fully unlinked, the semaphore will vanish when
  *   the last task closes it.
  *
- * Parameters:
+ * Input Parameters:
  *  sem - semaphore descriptor
  *
- * Return Value:
+ * Returned Value:
  *  0 (OK), or -1 (ERROR) if unsuccessful.
  *
  * Assumptions:
@@ -111,7 +111,7 @@ int sem_close(FAR sem_t *sem)
     {
       /* Destroy the semaphore and free the container */
 
-      sem_destroy(&nsem->ns_sem);
+      nxsem_destroy(&nsem->ns_sem);
       group_free(NULL, nsem);
 
       /* Release and free the inode container.  If it has been properly

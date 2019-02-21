@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/init/os_start.c
  *
- *   Copyright (C) 2007-2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2014, 2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,7 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/sched_note.h>
 #include <nuttx/syslog/syslog.h>
+#include <nuttx/binfmt/binfmt.h>
 #include <nuttx/init.h>
 
 #include "sched/sched.h"
@@ -115,7 +116,7 @@ volatile dq_queue_t g_readytorun;
  *    and
  *  - Tasks/threads that have not been assigned to a CPU.
  *
- * Otherwise, the TCB will be reatined in an assigned task list,
+ * Otherwise, the TCB will be retained in an assigned task list,
  * g_assignedtasks.  As its name suggests, on 'g_assignedtasks queue for CPU
  * 'n' would contain only tasks/threads that are assigned to CPU 'n'.  Tasks/
  * threads would be assigned a particular CPU by one of two mechanisms:
@@ -139,6 +140,17 @@ volatile dq_queue_t g_readytorun;
  */
 
 volatile dq_queue_t g_assignedtasks[CONFIG_SMP_NCPUS];
+
+/* g_running_tasks[] holds a references to the running task for each cpu.
+ * It is valid only when up_interrupt_context() returns true.
+ */
+
+FAR struct tcb_s *g_running_tasks[CONFIG_SMP_NCPUS];
+
+#else
+
+FAR struct tcb_s *g_running_tasks[1];
+
 #endif
 
 /* This is the list of all tasks that are ready-to-run, but cannot be placed
@@ -153,32 +165,38 @@ volatile dq_queue_t g_pendingtasks;
 
 volatile dq_queue_t g_waitingforsemaphore;
 
+#ifndef CONFIG_DISABLE_SIGNALS
 /* This is the list of all tasks that are blocked waiting for a signal */
 
-#ifndef CONFIG_DISABLE_SIGNALS
 volatile dq_queue_t g_waitingforsignal;
 #endif
 
+#ifndef CONFIG_DISABLE_MQUEUE
 /* This is the list of all tasks that are blocked waiting for a message
  * queue to become non-empty.
  */
 
-#ifndef CONFIG_DISABLE_MQUEUE
 volatile dq_queue_t g_waitingformqnotempty;
 #endif
 
+#ifndef CONFIG_DISABLE_MQUEUE
 /* This is the list of all tasks that are blocked waiting for a message
  * queue to become non-full.
  */
 
-#ifndef CONFIG_DISABLE_MQUEUE
 volatile dq_queue_t g_waitingformqnotfull;
 #endif
 
+#ifdef CONFIG_PAGING
 /* This is the list of all tasks that are blocking waiting for a page fill */
 
-#ifdef CONFIG_PAGING
 volatile dq_queue_t g_waitingforfill;
+#endif
+
+#ifdef CONFIG_SIG_SIGSTOP_ACTION
+/* This is the list of all tasks that have been stopped via SIGSTOP or SIGSTP */
+
+volatile dq_queue_t g_stoppedtasks;
 #endif
 
 /* This the list of all tasks that have been initialized, but not yet
@@ -187,14 +205,14 @@ volatile dq_queue_t g_waitingforfill;
 
 volatile dq_queue_t g_inactivetasks;
 
-/* These are lists of dayed memory deallocations that need to be handled
+#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
+     defined(CONFIG_MM_KERNEL_HEAP)
+/* These are lists of delayed memory deallocations that need to be handled
  * within the IDLE loop or worker thread.  These deallocations get queued
  * by sched_kufree and sched_kfree() if the OS needs to deallocate memory
  * while it is within an interrupt handler.
  */
 
-#if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
-     defined(CONFIG_MM_KERNEL_HEAP)
 volatile sq_queue_t g_delayed_kfree;
 #endif
 
@@ -229,7 +247,7 @@ struct pidhash_s g_pidhash[CONFIG_MAX_TASKS];
 /* This is a table of task lists.  This table is indexed by the task stat
  * enumeration type (tstate_t) and provides a pointer to the associated
  * static task list (if there is one) as well as a a set of attribute flags
- * indicating properities of the list, for example, if the list is an
+ * indicating properties of the list, for example, if the list is an
  * ordered list or not.
  */
 
@@ -299,6 +317,13 @@ const struct tasklist_s g_tasklisttable[NUM_TASK_STATES] =
     TLIST_ATTR_PRIORITIZED
   }
 #endif
+#ifdef CONFIG_SIG_SIGSTOP_ACTION
+  ,
+  {                                              /* TSTATE_TASK_STOPPED */
+    &g_stoppedtasks,
+    0                                            /* See tcb->prev_state */
+  },
+#endif
 };
 
 /* This is the current initialization state.  The level of initialization
@@ -311,7 +336,7 @@ uint8_t g_os_initstate;  /* See enum os_initstate_e */
 /****************************************************************************
  * Private Data
  ****************************************************************************/
-/* This is an arry of task control block (TCB) for the IDLE thread of each
+/* This is an array of task control block (TCB) for the IDLE thread of each
  * CPU.  For the non-SMP case, this is a a single TCB; For the SMP case,
  * there is one TCB per CPU.  NOTE: The system boots on CPU0 into the IDLE
  * task.  The IDLE task later starts the other CPUs and spawns the user
@@ -361,7 +386,7 @@ static FAR char *g_idleargv[1][2];
  * Input Parameters:
  *   None
  *
- * Returned value:
+ * Returned Value:
  *   Does not return.
  *
  ****************************************************************************/
@@ -396,6 +421,9 @@ void os_start(void)
 #endif
 #ifdef CONFIG_PAGING
   dq_init(&g_waitingforfill);
+#endif
+#ifdef CONFIG_SIG_SIGSTOP_ACTION
+  dq_init(&g_stoppedtasks);
 #endif
   dq_init(&g_inactivetasks);
 #if (defined(CONFIG_BUILD_PROTECTED) || defined(CONFIG_BUILD_KERNEL)) && \
@@ -529,6 +557,10 @@ void os_start(void)
 #endif
       dq_addfirst((FAR dq_entry_t *)&g_idletcb[cpu], tasklist);
 
+      /* Mark the idle task as the running task */
+
+      g_running_tasks[cpu] = &g_idletcb[cpu].cmn;
+
       /* Initialize the processor-specific portion of the TCB */
 
       up_initial_state(&g_idletcb[cpu].cmn);
@@ -543,7 +575,7 @@ void os_start(void)
    * because many subsystems depend upon fully functional semaphores.
    */
 
-  sem_initialize();
+  nxsem_initialize();
 
 #if defined(MM_KERNEL_USRHEAP_INIT) || defined(CONFIG_MM_KERNEL_HEAP) || \
     defined(CONFIG_MM_PGALLOC)
@@ -638,10 +670,10 @@ void os_start(void)
   /* Initialize the signal facility (if in link) */
 
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
-  if (sig_initialize != NULL)
+  if (nxsig_initialize != NULL)
 #endif
     {
-      sig_initialize();
+      nxsig_initialize();
     }
 #endif
 
@@ -649,10 +681,10 @@ void os_start(void)
   /* Initialize the named message queue facility (if in link) */
 
 #ifdef CONFIG_HAVE_WEAKFUNCTIONS
-  if (mq_initialize != NULL)
+  if (nxmq_initialize != NULL)
 #endif
     {
-      mq_initialize();
+      nxmq_initialize();
     }
 #endif
 
@@ -674,15 +706,9 @@ void os_start(void)
 #endif
 
 #ifdef CONFIG_NET
-  /* Initialize the networking system.  Network initialization is
-   * performed in two steps:  (1) net_setup() initializes static
-   * configuration of the network support.  This must be done prior
-   * to registering network drivers by up_initialize().  This step
-   * cannot require upon any hardware-depending features such as
-   * timers or interrupts.
-   */
+  /* Initialize the networking system */
 
-  net_setup();
+  net_initialize();
 #endif
 
   /* The processor specific details of running the operating system
@@ -697,14 +723,6 @@ void os_start(void)
 
   g_os_initstate = OSINIT_HARDWARE;
 
-#ifdef CONFIG_NET
-  /* Complete initialization the networking system now that interrupts
-   * and timers have been configured by up_initialize().
-   */
-
-  net_initialize();
-#endif
-
 #ifdef CONFIG_MM_SHM
   /* Initialize shared memory support */
 
@@ -716,6 +734,12 @@ void os_start(void)
    */
 
   lib_initialize();
+
+#ifndef CONFIG_BINFMT_DISABLE
+  /* Initialize the binfmt system */
+
+  binfmt_initialize();
+#endif
 
   /* IDLE Group Initialization **********************************************/
   /* Announce that the CPU0 IDLE task has started */

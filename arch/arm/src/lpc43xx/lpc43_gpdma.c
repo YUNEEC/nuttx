@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lpc43xx/lpc43_gpdma.c
  *
- *   Copyright (C) 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -269,17 +269,18 @@ static int gpdma_interrupt(int irq, FAR void *context, FAR void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: lpc43_dmainitialize
+ * Name: up_dma_initialize
  *
  * Description:
- *   Initialize the GPDMA subsystem.
+ *   Initialize the GPDMA subsystem.  Called from up_initialize() early in the
+ *   boot-up sequence.  Prototyped in up_internal.h.
  *
  * Returned Value:
- *   Zero on success; A negated errno value on failure.
+ *   None
  *
  ****************************************************************************/
 
-void weak_function up_dmainitialize(void)
+void weak_function up_dma_initialize(void)
 {
   uint32_t regval;
   int ret;
@@ -305,7 +306,7 @@ void weak_function up_dmainitialize(void)
 
   /* Initialize the DMA state structure */
 
-  sem_init(&g_gpdma.exclsem, 0, 1);
+  nxsem_init(&g_gpdma.exclsem, 0, 1);
 
   for (i = 0; i < LPC43_NDMACH; i++)
     {
@@ -396,8 +397,8 @@ DMA_HANDLE lpc43_dmachannel(void)
 
   do
     {
-      ret = sem_wait(&g_gpdma.exclsem);
-      DEBUGASSERT(ret == 0 || errno == EINTR);
+      ret = nxsem_wait(&g_gpdma.exclsem);
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
   while (ret < 0);
 
@@ -417,7 +418,7 @@ DMA_HANDLE lpc43_dmachannel(void)
 
   /* Return what we found (or not) */
 
-  sem_post(&g_gpdma.exclsem);
+  nxsem_post(&g_gpdma.exclsem);
   return (DMA_HANDLE)dmach;
 }
 
@@ -459,8 +460,8 @@ void lpc43_dmafree(DMA_HANDLE handle)
  *
  ****************************************************************************/
 
-int lpc43_dmarxsetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
-                     uint32_t srcaddr, uint32_t destaddr, size_t nbytes)
+int lpc43_dmasetup(DMA_HANDLE handle, uint32_t control, uint32_t config,
+                   uint32_t srcaddr, uint32_t destaddr, size_t nbytes)
 {
   struct lpc43_dmach_s *dmach = (DMA_HANDLE)handle;
   uint32_t chbit;
@@ -628,7 +629,7 @@ void lpc43_dmastop(DMA_HANDLE handle)
   DEBUGASSERT(dmach && dmach->inuse);
 
   /* Disable this channel and mask any further interrupts from the channel.
-   * this channel.  The channel is disabled by clearning the channel
+   * this channel.  The channel is disabled by clearing the channel
    * enable bit. Any outstanding data in the FIFOs is lost.
    */
 

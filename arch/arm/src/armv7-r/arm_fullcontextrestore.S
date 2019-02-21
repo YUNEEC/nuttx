@@ -55,9 +55,9 @@
 	.globl	up_fullcontextrestore
 
 #ifdef CONFIG_ARCH_FPU
-	.cpu	cortex-r4
-#else
 	.cpu	cortex-r4f
+#else
+	.cpu	cortex-r4
 #endif
 	.syntax	unified
 
@@ -75,7 +75,7 @@
  *
  *     void up_fullcontextrestore(uint32_t *restoreregs) noreturn_function;
  *
- * Return:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/

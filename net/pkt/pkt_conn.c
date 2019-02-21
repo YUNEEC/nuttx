@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/pkt/pkt_conn.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Large parts of this file were leveraged from uIP logic:
@@ -43,17 +43,17 @@
 #include <nuttx/config.h>
 #if defined(CONFIG_NET) && defined(CONFIG_NET_PKT)
 
-#include <semaphore.h>
 #include <assert.h>
 #include <errno.h>
 #include <debug.h>
 
 #include <arch/irq.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/netconfig.h>
 #include <nuttx/net/net.h>
 #include <nuttx/net/netdev.h>
-#include <nuttx/net/arp.h>
+#include <nuttx/net/ethernet.h>
 
 #include "devif/devif.h"
 #include "pkt/pkt.h"
@@ -99,13 +99,13 @@ static inline void _pkt_semtake(sem_t *sem)
        * the wait was awakened by a signal.
        */
 
-      DEBUGASSERT(ret == -EINTR);
+      DEBUGASSERT(ret == -EINTR || ret == -ECANCELED);
     }
 
   UNUSED(ret);
 }
 
-#define _pkt_semgive(sem) sem_post(sem)
+#define _pkt_semgive(sem) nxsem_post(sem)
 
 /****************************************************************************
  * Public Functions
@@ -116,7 +116,7 @@ static inline void _pkt_semtake(sem_t *sem)
  *
  * Description:
  *   Initialize the packet socket connection structures.  Called once and
- *   only from the UIP layer.
+ *   only from the network initialization layer.
  *
  ****************************************************************************/
 
@@ -128,7 +128,7 @@ void pkt_initialize(void)
 
   dq_init(&g_free_pkt_connections);
   dq_init(&g_active_pkt_connections);
-  sem_init(&g_free_sem, 0, 1);
+  nxsem_init(&g_free_sem, 0, 1);
 
   for (i = 0; i < CONFIG_NET_PKT_CONNS; i++)
     {
@@ -152,9 +152,7 @@ FAR struct pkt_conn_s *pkt_alloc(void)
 {
   FAR struct pkt_conn_s *conn;
 
-  /* The free list is only accessed from user, non-interrupt level and
-   * is protected by a semaphore (that behaves like a mutex).
-   */
+  /* The free list is protected by a semaphore (that behaves like a mutex). */
 
   _pkt_semtake(&g_free_sem);
   conn = (FAR struct pkt_conn_s *)dq_remfirst(&g_free_pkt_connections);
@@ -184,9 +182,7 @@ FAR struct pkt_conn_s *pkt_alloc(void)
 
 void pkt_free(FAR struct pkt_conn_s *conn)
 {
-  /* The free list is only accessed from user, non-interrupt level and
-   * is protected by a semaphore (that behaves like a mutex).
-   */
+  /* The free list is protected by a semaphore (that behaves like a mutex). */
 
   DEBUGASSERT(conn->crefs == 0);
 
@@ -206,15 +202,15 @@ void pkt_free(FAR struct pkt_conn_s *conn)
  * Name: pkt_active()
  *
  * Description:
- *   Find a connection structure that is the appropriate
- *   connection to be used with the provided Ethernet header
+ *   Find a connection structure that is the appropriate connection to be
+ *   used with the provided Ethernet header
  *
  * Assumptions:
- *   This function is called from network logic at interrupt level
+ *   This function is called from network logic at with the network locked.
  *
  ****************************************************************************/
 
-FAR struct pkt_conn_s *pkt_active(struct eth_hdr_s *buf)
+FAR struct pkt_conn_s *pkt_active(FAR struct eth_hdr_s *buf)
 {
   #define eth_addr_cmp(addr1, addr2) \
   ((addr1[0] == addr2[0]) && (addr1[1] == addr2[1]) && \
@@ -250,8 +246,7 @@ FAR struct pkt_conn_s *pkt_active(struct eth_hdr_s *buf)
  *   Traverse the list of allocated packet connections
  *
  * Assumptions:
- *   This function is called from network logic at interrupt level (or with
- *   interrupts disabled).
+ *   This function is called from network logic at with the network locked.
  *
  ****************************************************************************/
 

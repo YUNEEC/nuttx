@@ -54,6 +54,8 @@
 #include <queue.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
+#include <nuttx/mqueue.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/audio/audio.h>
@@ -342,7 +344,7 @@ static void vs1053_writereg(FAR struct vs1053_struct_s *dev, uint8_t reg, uint16
 
   /* Short delay after a write for VS1053 processing time */
 
-  usleep(10);
+  nxsig_usleep(10);
 }
 
 /****************************************************************************
@@ -417,7 +419,7 @@ static int vs1053_setfrequency(FAR struct vs1053_struct_s *dev, uint32_t freq)
   timeout = 200;
   while (!dev->hw_lower->read_dreq(dev->hw_lower) && timeout)
     {
-      usleep(1000);
+      nxsig_usleep(1000);
       timeout--;
     }
 
@@ -896,9 +898,9 @@ static int vs1053_hardreset(FAR struct vs1053_struct_s *dev)
 {
   dev->hw_lower->disable(dev->hw_lower);   /* Disable the DREQ interrupt */
   dev->hw_lower->reset(dev->hw_lower, false);
-  usleep(10);
+  nxsig_usleep(10);
   dev->hw_lower->reset(dev->hw_lower, true);
-  usleep(VS1053_RST_USECS);
+  nxsig_usleep(VS1053_RST_USECS);
   vs1053_setfrequency(dev, CONFIG_VS1053_XTALI);  /* Slow speed at first */
 
   return OK;
@@ -1159,7 +1161,7 @@ static void vs1053_feeddata(FAR struct vs1053_struct_s *dev)
 
               /* Lock the buffer queue to pop the next buffer */
 
-              if ((ret = sem_wait(&dev->apbq_sem)) != OK)
+              if ((ret = nxsem_wait(&dev->apbq_sem)) < 0)
                 {
 #ifdef CONFIG_AUDIO_MULTI_SESSION
                   dev->lower.upper(dev->lower.priv,
@@ -1181,18 +1183,19 @@ static void vs1053_feeddata(FAR struct vs1053_struct_s *dev)
               //audinfo("Next Buffer = %p, bytes = %d\n", apb, apb ? apb->nbytes : 0);
               if (apb == NULL)
                 {
-                  sem_post(&dev->apbq_sem);
+                  nxsem_post(&dev->apbq_sem);
                   break;
                 }
 
               pSamp = &apb->samp[apb->curbyte];
               apb_reference(apb);                /* Add our buffer reference */
-              sem_post(&dev->apbq_sem);
+              nxsem_post(&dev->apbq_sem);
             }
         }
     }
 
   /* Deselect the SPI bus and unlock it */
+
 err_out:
   SPI_SELECT(spi, SPIDEV_AUDIO_DATA(0), false);
   vs1053_spi_unlock(spi);
@@ -1220,8 +1223,8 @@ static int vs1053_dreq_isr(int irq, FAR void *context, FAR void *arg)
   if (dev->running)
     {
       msg.msgId = AUDIO_MSG_DATA_REQUEST;
-      mq_send(dev->mq, (FAR const char *)&msg, sizeof(msg),
-              CONFIG_VS1053_MSG_PRIO);
+      (void)nxmq_send(dev->mq, (FAR const char *)&msg, sizeof(msg),
+                      CONFIG_VS1053_MSG_PRIO);
     }
   else
     {
@@ -1268,7 +1271,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
   timeout = 200;
   while (!dev->hw_lower->read_dreq(dev->hw_lower) && timeout)
     {
-      usleep(100);
+      nxsig_usleep(100);
       timeout--;
     }
 
@@ -1285,7 +1288,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
 
       /* Wait for messages from our message queue */
 
-      size = mq_receive(dev->mq, (FAR char *)&msg, sizeof(msg), &prio);
+      size = nxmq_receive(dev->mq, (FAR char *)&msg, sizeof(msg), &prio);
 
       /* Handle the case when we return with no message */
 
@@ -1304,7 +1307,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
           /* The ISR has requested more data */
 
           case AUDIO_MSG_DATA_REQUEST:
-            usleep(500);
+            nxsig_usleep(500);
             vs1053_feeddata(dev);   /* Feed more data to the VS1053 FIFO */
             break;
 
@@ -1314,7 +1317,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
           case AUDIO_MSG_STOP:
             if (!dev->hw_lower->read_dreq(dev->hw_lower))
               {
-                usleep(300);
+                nxsig_usleep(300);
               }
 
             /* Send CANCEL message to VS1053 */
@@ -1349,7 +1352,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
 
   /* Cancel any leftover buffer in our queue */
 
-  if (sem_wait(&dev->apbq_sem) == OK)
+  if (nxsem_wait(&dev->apbq_sem) == OK)
     {
       /* Get the next buffer from the queue */
 
@@ -1357,7 +1360,7 @@ static void *vs1053_workerthread(pthread_addr_t pvarg)
         ;
     }
 
-  sem_post(&dev->apbq_sem);
+  nxsem_post(&dev->apbq_sem);
 
   /* Free the active buffer */
 
@@ -1445,11 +1448,11 @@ static int vs1053_start(FAR struct audio_lowerhalf_s *lower)
 
   /* Pop the first enqueued buffer */
 
-  if ((ret = sem_wait(&dev->apbq_sem)) == OK)
+  if ((ret = nxsem_wait(&dev->apbq_sem)) == OK)
     {
       dev->apb = (FAR struct ap_buffer_s *) dq_remfirst(&dev->apbq);
       apb_reference(dev->apb);               /* Add our buffer reference */
-      sem_post(&dev->apbq_sem);
+      nxsem_post(&dev->apbq_sem);
     }
   else
     {
@@ -1511,8 +1514,8 @@ static int vs1053_stop(FAR struct audio_lowerhalf_s *lower)
 
   term_msg.msgId = AUDIO_MSG_STOP;
   term_msg.u.data = 0;
-  mq_send(dev->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-          CONFIG_VS1053_MSG_PRIO);
+  (void)nxmq_send(dev->mq, (FAR const char *)&term_msg, sizeof(term_msg),
+                  CONFIG_VS1053_MSG_PRIO);
 
   /* Join the worker thread */
 
@@ -1610,14 +1613,14 @@ static int vs1053_enqueuebuffer(FAR struct audio_lowerhalf_s *lower,
 
   /* Lock access to the apbq */
 
-  if ((ret = sem_wait(&dev->apbq_sem)) == OK)
+  if ((ret = nxsem_wait(&dev->apbq_sem)) == OK)
     {
       /* We can now safely add the buffer to the queue */
 
       apb->curbyte = 0;
       apb->flags  |= AUDIO_APB_OUTPUT_ENQUEUED;
       dq_addlast(&apb->dq_entry, &dev->apbq);
-      sem_post(&dev->apbq_sem);
+      nxsem_post(&dev->apbq_sem);
 
       /* Send a message indicating a new buffer enqueued */
 
@@ -1625,8 +1628,8 @@ static int vs1053_enqueuebuffer(FAR struct audio_lowerhalf_s *lower,
         {
           term_msg.msgId = AUDIO_MSG_ENQUEUE;
           term_msg.u.data = 0;
-          mq_send(dev->mq, (FAR const char *)&term_msg, sizeof(term_msg),
-                  CONFIG_VS1053_MSG_PRIO);
+          (void)nxmq_send(dev->mq, (FAR const char *)&term_msg,
+                          sizeof(term_msg), CONFIG_VS1053_MSG_PRIO);
         }
     }
 
@@ -1705,13 +1708,14 @@ static int vs1053_reserve(FAR struct audio_lowerhalf_s *lower)
 #endif
 {
   FAR struct vs1053_struct_s *dev = (struct vs1053_struct_s *) lower;
-  int   ret = OK;
+  int   ret;
 
   /* Borrow the APBQ semaphore for thread sync */
 
-  if (sem_wait(&dev->apbq_sem) != OK)
+  ret = nxsem_wait(&dev->apbq_sem);
+  if (ret < 0)
     {
-      return -EBUSY;
+      return ret;
     }
 
   if (dev->busy)
@@ -1730,7 +1734,7 @@ static int vs1053_reserve(FAR struct audio_lowerhalf_s *lower)
       dev->paused  = false;
     }
 
-  sem_post(&dev->apbq_sem);
+  nxsem_post(&dev->apbq_sem);
 
   return ret;
 }
@@ -1751,6 +1755,7 @@ static int vs1053_release(FAR struct audio_lowerhalf_s *lower)
 {
   FAR struct vs1053_struct_s *dev = (struct vs1053_struct_s *) lower;
   void  *value;
+  int ret;
 
   /* Join any old worker thread we had created to prevent a memory leak */
 
@@ -1762,15 +1767,16 @@ static int vs1053_release(FAR struct audio_lowerhalf_s *lower)
 
   /* Borrow the APBQ semaphore for thread sync */
 
-  if (sem_wait(&dev->apbq_sem) != OK)
+  ret = nxsem_wait(&dev->apbq_sem);
+  if (ret < 0)
     {
-      return -EBUSY;
+      return ret;
     }
 
   /* Really we should free any queued buffers here */
 
   dev->busy = false;
-  sem_post(&dev->apbq_sem);
+  nxsem_post(&dev->apbq_sem);
 
   return OK;
 }
@@ -1835,7 +1841,7 @@ struct audio_lowerhalf_s *vs1053_initialize(FAR struct spi_dev_s *spi,
       dev->bass        = 0;
       dev->treble      = 0;
 #endif
-      sem_init(&dev->apbq_sem, 0, 1);
+      nxsem_init(&dev->apbq_sem, 0, 1);
       dq_init(&dev->apbq);
 
       /* Reset the VS1053 chip */

@@ -48,7 +48,6 @@
 #include <debug.h>
 
 #include <nuttx/net/netdev.h>
-#include <nuttx/net/arp.h>
 #include <nuttx/net/pkt.h>
 
 #include "devif/devif.h"
@@ -70,10 +69,10 @@
  * Description:
  *   Handle incoming packet input
  *
- * Parameters:
+ * Input Parameters:
  *   dev - The device driver structure containing the received packet
  *
- * Return:
+ * Returned Value:
  *   OK    The packet has been processed  and can be deleted
  *   ERROR There is a matching connection, but could not dispatch the packet
  *         yet.  Useful when a packet arrives before a recv call is in
@@ -117,13 +116,12 @@ int pkt_input(struct net_driver_s *dev)
            */
 
            nwarn("WARNING: Packet not processed\n");
-           //dev->d_len = 0; REVISIT
            ret = ERROR;
         }
     }
   else
     {
-      nerr("ERROR: No listener\n");
+      ninfo("No PKT listener\n");
     }
 
   return ret;

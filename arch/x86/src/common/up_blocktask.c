@@ -62,7 +62,7 @@
  *   be stopped.  Save its context and move it to the inactive list specified
  *   by task_state.
  *
- * Inputs:
+ * Input Parameters:
  *   tcb: Refers to a task in the ready-to-run list (normally the task at the
  *     head of the list).  It most be stopped, its context saved and moved
  *     into one of the waiting task lists.  It it was the task at the head
@@ -80,8 +80,8 @@ void up_block_task(struct tcb_s *tcb, tstate_t task_state)
 
   /* Verify that the context switch can be performed */
 
-  ASSERT((tcb->task_state >= FIRST_READY_TO_RUN_STATE) &&
-         (tcb->task_state <= LAST_READY_TO_RUN_STATE));
+  DEBUGASSERT((tcb->task_state >= FIRST_READY_TO_RUN_STATE) &&
+              (tcb->task_state <= LAST_READY_TO_RUN_STATE));
 
   /* Remove the tcb task from the ready-to-run list.  If we
    * are blocking the task at the head of the task list (the

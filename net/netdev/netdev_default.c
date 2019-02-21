@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/netdev/netdev_default.c
  *
- *   Copyright (C) 2014-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014-2015, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,19 +62,17 @@
  *   if a socket is connected with INADDY_ANY.  In this case, I suppose we
  *   should use the IP address associated with some default device???
  *
- * Parameters:
+ * Input Parameters:
  *   NULL
  *
  * Returned Value:
  *  Pointer to default network driver on success; null on failure
  *
- * Assumptions:
- *  Called from normal user mode
- *
  ****************************************************************************/
 
 FAR struct net_driver_s *netdev_default(void)
 {
+  FAR struct net_driver_s *ret = NULL;
   FAR struct net_driver_s *dev;
 
   /* Examine each registered network device */
@@ -86,17 +84,21 @@ FAR struct net_driver_s *netdev_default(void)
 
       if ((dev->d_flags & IFF_UP) != 0)
         {
-          /* Return a reference to the first device we find that is in the UP
-           * state.
+          /* Return a reference to the first device that we find in the UP
+           * state (but not the loopback device unless it is the only
+           * device).
            */
 
-          net_unlock();
-          return dev;
+          ret = dev;
+          if (dev->d_lltype != NET_LL_LOOPBACK)
+            {
+              break;
+            }
         }
     }
 
   net_unlock();
-  return NULL;
+  return ret;
 }
 
 #endif /* CONFIG_NET  */

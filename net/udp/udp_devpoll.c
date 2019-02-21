@@ -64,11 +64,11 @@
  * Description:
  *   Poll a UDP "connection" structure for availability of TX data
  *
- * Parameters:
+ * Input Parameters:
  *   dev  - The device driver structure to use in the send operation
  *   conn - The UDP "connection" to poll for TX data
  *
- * Return:
+ * Returned Value:
  *   None
  *
  * Assumptions:

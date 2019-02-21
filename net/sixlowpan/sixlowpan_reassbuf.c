@@ -121,10 +121,10 @@ static bool sixlowpan_compare_fragsrc(FAR struct sixlowpan_reassbuf_s *reass,
  * Description:
  *   Free all expired or inactive reassembly buffers.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -136,7 +136,7 @@ static void sixlowpan_reass_expire(void)
 {
   FAR struct sixlowpan_reassbuf_s *reass;
   FAR struct sixlowpan_reassbuf_s *next;
-  systime_t elapsed;
+  clock_t elapsed;
 
   /* If reassembly timed out, cancel it */
 
@@ -177,10 +177,10 @@ static void sixlowpan_reass_expire(void)
  * Description:
  *   Remove a reassembly buffer from the active reassembly buffer list.
  *
- * Inputs:
+ * Input Parameters:
  *   reass - The reassembly buffer to be removed.
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -234,10 +234,10 @@ static void sixlowpan_remove_active(FAR struct sixlowpan_reassbuf_s *reass)
  *
  *   Called only once during network initialization.
  *
- * Inputs:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -276,11 +276,11 @@ void sixlowpan_reass_initialize(void)
  *   list.  If that the list is empty, then the reassembly buffer structure
  *   will be allocated from the dynamic memory pool.
  *
- * Inputs:
+ * Input Parameters:
  *   reasstag - The reassembly tag for subsequent lookup.
  *   fragsrc  - The source address of the fragment.
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the allocated reass structure.  All fields used by the
  *   reasembly logic have been zeroed.  On a failure to allocate, NULL is
  *   returned.
@@ -355,11 +355,11 @@ FAR struct sixlowpan_reassbuf_s *
  *   Find a previously allocated, active reassembly buffer with the specified
  *   reassembly tag.
  *
- * Inputs:
+ * Input Parameters:
  *   reasstag - The reassembly tag to match.
  *   fragsrc  - The source address of the fragment.
  *
- * Return Value:
+ * Returned Value:
  *   A reference to the matching reass structure.
  *
  * Assumptions:
@@ -411,10 +411,10 @@ FAR struct sixlowpan_reassbuf_s *
  *   structure. If the reass structure was allocated dynamically it will
  *   be deallocated.
  *
- * Inputs:
+ * Input Parameters:
  *   reass - reass structure to free
  *
- * Return Value:
+ * Returned Value:
  *   None
  *
  * Assumptions:
@@ -439,7 +439,7 @@ void sixlowpan_reass_free(FAR struct sixlowpan_reassbuf_s *reass)
       reass->rb_flink = g_free_reass;
       g_free_reass    = reass;
     }
-  else
+  else if (reass->rb_pool == REASS_POOL_DYNAMIC)
     {
 #ifdef CONFIG_NET_6LOWPAN_REASS_STATIC
       DEBUGPANIC();
@@ -451,4 +451,8 @@ void sixlowpan_reass_free(FAR struct sixlowpan_reassbuf_s *reass)
       sched_kfree(reass);
 #endif
     }
+
+  /* If the reassembly buffer structure was provided by the driver, nothing
+   * needs to be freed.
+   */
 }

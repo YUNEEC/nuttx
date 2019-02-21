@@ -125,6 +125,19 @@ config SYSLOG_TIMESTAMP_REALTIME
 		CLOCK_MONOTONIC, if enabled, will be used or the system timer
 		is not.
 
+config SYSLOG_PREFIX
+	bool "Prepend prefix to syslog message"
+	default n
+	---help---
+		Prepend prefix to syslog message.
+
+config SYSLOG_PREFIX_STRING
+	string "Prefix string"
+	depends on SYSLOG_PREFIX
+	default ""
+	---help---
+		The prefix string to be prepend.
+
 config SYSLOG_SERIAL_CONSOLE
 	bool
 	default n
@@ -169,11 +182,11 @@ config SYSLOG_NONE
 endchoice
 
 config SYSLOG_FILE
-	bool "Sylog file output"
+	bool "Syslog file output"
 	default n
 	select SYSLOG_WRITE
 	---help---
-		Build in support to use a file to collect SYSOG output.  File SYSLOG
+		Build in support to use a file to collect SYSLOG output.  File SYSLOG
 		channels differ from other SYSLOG channels in that they cannot be
 		established until after fully booting and mounting the target file
 		system.  The function syslog_file_channel() would need to be called

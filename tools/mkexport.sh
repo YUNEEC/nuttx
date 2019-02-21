@@ -216,6 +216,7 @@ if [ "X${USRONLY}" == "Xy" ]; then
 	echo "LD               = ${LD}" >>"${EXPORTDIR}/build/Make.defs"
 	echo "AR               = ${AR}" >>"${EXPORTDIR}/build/Make.defs"
 	echo "NM               = ${NM}" >>"${EXPORTDIR}/build/Make.defs"
+	echo "STRIP            = ${STRIP}" >>"${EXPORTDIR}/build/Make.defs"
 	echo "OBJCOPY          = ${OBJCOPY}" >>"${EXPORTDIR}/build/Make.defs"
 	echo "OBJDUMP          = ${OBJDUMP}" >>"${EXPORTDIR}/build/Make.defs"
 	echo "NXFLATLDFLAGS1   = ${NXFLATLDFLAGS1}" >>"${EXPORTDIR}/build/Make.defs"
@@ -233,6 +234,16 @@ if [ "X${USRONLY}" == "Xy" ]; then
 else
 	echo "ARCHCFLAGS   = ${ARCHCFLAGS}" >"${EXPORTDIR}/build/Make.defs"
 	echo "ARCHCXXFLAGS = ${ARCHCXXFLAGS}" >>"${EXPORTDIR}/build/Make.defs"
+fi
+
+# Copy the system map file(s)
+
+if [ -r ${TOPDIR}/System.map ]; then
+	cp -a "${TOPDIR}/System.map" "${EXPORTDIR}/."
+fi
+
+if [ -r ${TOPDIR}/User.map ]; then
+        cp -a "${TOPDIR}/User.map" "${EXPORTDIR}/."
 fi
 
 # Copy the NuttX include directory (retaining attributes and following symbolic links)

@@ -145,7 +145,7 @@ static const uint32_t pool_twist[8] =
  *
  * Code is inspired by add_entropy_words() function of OpenBSD kernel.
  *
- * Parameters:
+ * Input Parameters:
  *   buf     -   Buffer of integers to be added
  *   n       -   Number of elements in buf
  *   inc_new -   Count element as new entry
@@ -215,7 +215,7 @@ static void addentropy(FAR const uint32_t *buf, size_t n, bool inc_new)
  *   exported to userspace. This interface MUST NOT be used as a
  *   general-purpose random bit generator!
  *
- * Parameters:
+ * Input Parameters:
  *   S  - BLAKE2s instance that will absorb entropy pool
  *
  * Returned Value:
@@ -370,7 +370,7 @@ static void rng_init(void)
   cryptinfo("Initializing RNG\n");
 
   memset(&g_rng, 0, sizeof(struct rng_s));
-  sem_init(&g_rng.rd_sem, 0, 1);
+  nxsem_init(&g_rng.rd_sem, 0, 1);
 
   /* We do not initialize output here because this is called
    * quite early in boot and there may not be enough entropy.
@@ -391,7 +391,7 @@ static void rng_init(void)
  *   Add one integer to entropy pool, contributing a specific kind
  *   of entropy to pool.
  *
- * Parameters:
+ * Input Parameters:
  *   kindof  - Enumeration constant telling where val came from
  *   val     - Integer to be added
  *
@@ -415,7 +415,7 @@ void up_rngaddint(enum rnd_source_t kindof, int val)
  * Description:
  *   Add buffer of integers to entropy pool.
  *
- * Parameters:
+ * Input Parameters:
  *   kindof  - Enumeration constant telling where val came from
  *   buf     - Buffer of integers to be added
  *   n       - Number of elements in buf
@@ -499,17 +499,28 @@ void up_rngaddentropy(enum rnd_source_t kindof, FAR const uint32_t *buf,
 
 void up_rngreseed(void)
 {
-  while (sem_wait(&g_rng.rd_sem) != 0)
+  int ret;
+
+  do
     {
-      assert(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_rng.rd_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   if (g_rng.rd_newentr >= MIN_SEED_NEW_ENTROPY_WORDS)
     {
       rng_reseed();
     }
 
-  sem_post(&g_rng.rd_sem);
+  nxsem_post(&g_rng.rd_sem);
 }
 
 /****************************************************************************
@@ -540,7 +551,7 @@ void up_randompool_initialize(void)
  *
  *   Note that this function cannot fail, other than by asserting.
  *
- * Parameters:
+ * Input Parameters:
  *   bytes  - Buffer for returned random bytes
  *   nbytes - Number of bytes requested.
  *
@@ -551,11 +562,22 @@ void up_randompool_initialize(void)
 
 void getrandom(FAR void *bytes, size_t nbytes)
 {
-  while (sem_wait(&g_rng.rd_sem) != 0)
+  int ret;
+
+  do
     {
-      assert(errno == EINTR);
+      /* Take the semaphore (perhaps waiting) */
+
+      ret = nxsem_wait(&g_rng.rd_sem);
+
+      /* The only case that an error should occur here is if the wait was
+       * awakened by a signal.
+       */
+
+      DEBUGASSERT(ret == OK || ret == -EINTR);
     }
+  while (ret == -EINTR);
 
   rng_buf_internal(bytes, nbytes);
-  sem_post(&g_rng.rd_sem);
+  nxsem_post(&g_rng.rd_sem);
 }

@@ -84,7 +84,7 @@
  *   is more wasteful of resources and poll() is the recommended API to be
  *   used.
  *
- * Input parameters:
+ * Input Parameters:
  *   nfds - the maximum fd number (+1) of any descriptor in any of the
  *     three sets.
  *   readfds - the set of descriptions to monitor for read-ready events
@@ -93,7 +93,7 @@
  *   timeout - Return at this time if none of these events of interest
  *     occur.
  *
- *  Return:
+ *  Returned Value:
  *   0: Timer expired
  *  >0: The number of bits set in the three sets of descriptors
  *  -1: An error occurred (errno will be set appropriately)
@@ -103,7 +103,7 @@
 int select(int nfds, FAR fd_set *readfds, FAR fd_set *writefds,
            FAR fd_set *exceptfds, FAR struct timeval *timeout)
 {
-  struct pollfd *pollset;
+  struct pollfd *pollset = NULL;
   int errcode = OK;
   int fd;
   int npfds;
@@ -133,19 +133,18 @@ int select(int nfds, FAR fd_set *readfds, FAR fd_set *writefds,
         }
     }
 
-  if (npfds <= 0)
-    {
-      errcode = EINVAL;
-      goto errout;
-    }
-
   /* Allocate the descriptor list for poll() */
 
-  pollset = (struct pollfd *)kmm_zalloc(npfds * sizeof(struct pollfd));
-  if (!pollset)
+  if (npfds > 0)
     {
-      errcode = ENOMEM;
-      goto errout;
+      pollset = (FAR struct pollfd *)
+        kmm_zalloc(npfds * sizeof(struct pollfd));
+
+      if (pollset == NULL)
+        {
+          errcode = ENOMEM;
+          goto errout;
+        }
     }
 
   /* Initialize the descriptor list for poll() */

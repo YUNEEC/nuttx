@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_serial.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2016,2017,2018 Sony Video & Sound Products Inc.
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *
@@ -176,13 +176,13 @@ struct up_dev_s
   uint8_t  irq;      /* IRQ associated with this UART */
   uint8_t  parity;   /* 0=none, 1=odd, 2=even */
   uint8_t  bits;     /* Number of bits (7 or 8) */
-  uint8_t  cts;
-  uint8_t  rts;
   bool    stopbits2; /* true: Configure with 2 stop bits instead of 1 */
   uint32_t rowe;     /* receive register over write error */
   uint32_t pe;       /* parity error */
   uint32_t fe;       /* framing error */
   uint32_t rxowe;    /* RX FIFO over write error */
+  bool iflow;        /* input flow control (RTS) enabled */
+  bool oflow;        /* output flow control (CTS) enabled */
 #ifdef CONFIG_HSUART
   DMA_HANDLE       hrxdma;
   DMA_HANDLE       htxdma;
@@ -280,7 +280,7 @@ static uart_dev_t g_uart0port =
     .size   = CONFIG_UART0_RXBUFSIZE,
     .buffer = g_uart0rxbuffer,
   },
-  .xmit     = 
+  .xmit     =
   {
     .size   = CONFIG_UART0_TXBUFSIZE,
     .buffer = g_uart0txbuffer,
@@ -538,7 +538,7 @@ static int up_setup(struct uart_dev_s *dev)
       ctl |= UART_UMD_STL;
     }
 
-  if (priv->cts)
+  if (priv->oflow)
     {
       ctl |= UART_UMD_CTSEN;
     }
@@ -547,7 +547,7 @@ static int up_setup(struct uart_dev_s *dev)
       ctl &= ~UART_UMD_CTSEN;
     }
 
-  if (priv->rts)
+  if (priv->iflow)
     {
       ctl |= UART_UMD_RTSEN;
     }
@@ -782,7 +782,6 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 #endif
                               CS8;
 
-          /* TODO: CCTS_IFLOW, CCTS_OFLOW */
         }
         break;
 
@@ -809,10 +808,10 @@ static int up_ioctl(struct file *filep, int cmd, unsigned long arg)
 
           priv->stopbits2 = (termiosp->c_cflag & CSTOPB) != 0;
 #ifdef CONFIG_SERIAL_OFLOWCONTROL
-          priv->cts = (termiosp->c_cflag & CCTS_OFLOW) != 0;
+          priv->oflow = (termiosp->c_cflag & CCTS_OFLOW) != 0;
 #endif
 #ifdef CONFIG_SERIAL_IFLOWCONTROL
-          priv->rts = (termiosp->c_cflag & CRTS_IFLOW) != 0;
+          priv->iflow = (termiosp->c_cflag & CRTS_IFLOW) != 0;
 #endif
 
           /* Note that since there is no way to request 9-bit mode
@@ -1007,7 +1006,11 @@ static bool up_txready(struct uart_dev_s *dev)
     }
 #endif /* CONFIG_DEV_CONSOLE_SWITCH */
 
+#ifndef CONFIG_SMP
   return ((up_serialin(priv, UART_USR) & UART_USR_TXFULL) == 0);
+#else
+  return (UART_USFS_TXFF_LV(up_serialin(priv, UART_USFS)) <= 1);
+#endif
 }
 
 /****************************************************************************
@@ -1078,7 +1081,7 @@ static void uart_dma_callback(DMA_HANDLE hdma, void *arg, int result)
   struct uart_dev_s *dev = (struct uart_dev_s *)arg;
   struct up_dev_s *priv = (struct up_dev_s *)dev->priv;
   sem_t *waitsem = &priv->txdma_wait;
-  sem_post(waitsem);
+  nxsem_post(waitsem);
   uart_datasent(dev);
 }
 
@@ -1204,7 +1207,7 @@ static int up_hs_send(struct uart_dev_s *dev, const char *buf, int buflen)
 
 retry:
 
-  sem_wait(&priv->txdma_wait);
+  nxsem_wait(&priv->txdma_wait);
 
   /* If buflen <= FIFO space, write it by PIO. */
 
@@ -1214,7 +1217,7 @@ retry:
       int i;
       for (i = 0; i < buflen; i++)
         up_serialout(priv, UART_USTF, buf[i]);
-      sem_post(&priv->txdma_wait);
+      nxsem_post(&priv->txdma_wait);
       return buflen;
     }
 
@@ -1317,12 +1320,12 @@ void up_serialinit(void)
 #ifdef TTYS1_DEV
   (void)uart_register("/dev/ttyS1", &TTYS1_DEV);
 #ifdef CONFIG_HSUART
-  sem_init(&g_uart1priv.txdma_wait, 0, 1);
+  nxsem_init(&g_uart1priv.txdma_wait, 0, 1);
   g_uart1priv.htxdma = lc823450_dmachannel(DMA_CHANNEL_UART1TX);
   lc823450_dmarequest(g_uart1priv.htxdma, DMA_REQUEST_UART1TX);
 
 
-  sem_init(&g_uart1priv.rxdma_wait, 0, 0);
+  nxsem_init(&g_uart1priv.rxdma_wait, 0, 0);
   g_uart1priv.hrxdma = lc823450_dmachannel(DMA_CHANNEL_UART1RX);
   lc823450_dmarequest(g_uart1priv.hrxdma, DMA_REQUEST_UART1RX);
 

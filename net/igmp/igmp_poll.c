@@ -1,7 +1,7 @@
 /****************************************************************************
  * net/igmp/igmp_poll.c
  *
- *   Copyright (C) 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2010, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * The NuttX implementation of IGMP was inspired by the IGMP add-on for the
@@ -46,6 +46,7 @@
 #include <assert.h>
 #include <debug.h>
 
+#include <nuttx/semaphore.h>
 #include <nuttx/net/netconfig.h>
 #include <nuttx/net/netdev.h>
 #include <nuttx/net/netstats.h>
@@ -79,6 +80,7 @@ static inline void igmp_sched_send(FAR struct net_driver_s *dev,
 {
   in_addr_t *dest;
 
+  /* REVISIT:  This should be deferred to a work queue */
   /* Check what kind of message we need to send.  There are only two
    * possibilities:
    */
@@ -88,7 +90,6 @@ static inline void igmp_sched_send(FAR struct net_driver_s *dev,
       dest = &group->grpaddr;
       ninfo("Send IGMPv2_MEMBERSHIP_REPORT, dest=%08x flags=%02x\n",
              *dest, group->flags);
-      IGMP_STATINCR(g_netstats.igmp.report_sched);
       SET_LASTREPORT(group->flags); /* Remember we were the last to report */
     }
   else
@@ -97,12 +98,11 @@ static inline void igmp_sched_send(FAR struct net_driver_s *dev,
       dest = &g_ipv4_allrouters;
       ninfo("Send IGMP_LEAVE_GROUP, dest=%08x flags=%02x\n",
              *dest, group->flags);
-      IGMP_STATINCR(g_netstats.igmp.leave_sched);
     }
 
   /* Send the message */
 
-  igmp_send(dev, group, dest);
+  igmp_send(dev, group, dest, group->msgid);
 
   /* Indicate that the message has been sent */
 
@@ -114,7 +114,7 @@ static inline void igmp_sched_send(FAR struct net_driver_s *dev,
   if (IS_WAITMSG(group->flags))
     {
       ninfo("Awakening waiter\n");
-      sem_post(&group->sem);
+      nxsem_post(&group->sem);
     }
 }
 
@@ -141,8 +141,6 @@ void igmp_poll(FAR struct net_driver_s *dev)
 {
   FAR struct igmp_group_s *group;
 
-  ninfo("Entry\n");
-
   /* Setup the poll operation */
 
   dev->d_appdata = &dev->d_buf[NET_LL_HDRLEN(dev) + IPIGMP_HDRLEN];
@@ -151,7 +149,7 @@ void igmp_poll(FAR struct net_driver_s *dev)
 
   /* Check each member of the group */
 
-  for (group = (FAR struct igmp_group_s *)dev->grplist.head;
+  for (group = (FAR struct igmp_group_s *)dev->d_igmp_grplist.head;
        group;
        group = group->next)
     {
@@ -162,10 +160,6 @@ void igmp_poll(FAR struct net_driver_s *dev)
           /* Yes, create the IGMP message in the driver buffer */
 
           igmp_sched_send(dev, group);
-
-          /* Mark the message as sent and break out */
-
-          CLR_SCHEDMSG(group->flags);
           break;
         }
     }

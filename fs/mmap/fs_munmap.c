@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/mmap/fs_munmap.c
  *
- *   Copyright (C) 2011 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,7 +95,7 @@
  *      into RAM.  munmap() is required in this case to free the allocated
  *      memory holding the shared copy of the file.
  *
- * Parameters:
+ * Input Parameters:
  *   start   The start address of the mapping to delete.  For this
  *           simplified munmap() implementation, the *must* be the start
  *           address of the memory region (the same address returned by
@@ -120,10 +120,11 @@ int munmap(FAR void *start, size_t length)
   /* Find a region containing this start and length in the list of regions */
 
   rammap_initialize();
-  ret = sem_wait(&g_rammaps.exclsem);
+  ret = nxsem_wait(&g_rammaps.exclsem);
   if (ret < 0)
     {
-      return ERROR;
+      errcode = ret;
+      goto errout;
     }
 
   /* Seach the list of regions */
@@ -200,11 +201,13 @@ int munmap(FAR void *start, size_t length)
       curr->length = length;
     }
 
-  sem_post(&g_rammaps.exclsem);
+  nxsem_post(&g_rammaps.exclsem);
   return OK;
 
 errout_with_semaphore:
-  sem_post(&g_rammaps.exclsem);
+  nxsem_post(&g_rammaps.exclsem);
+
+errout:
   set_errno(errcode);
   return ERROR;
 }

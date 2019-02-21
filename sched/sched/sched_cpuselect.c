@@ -65,10 +65,10 @@
  *   Return the index to the CPU with the lowest priority running task,
  *   possbily its IDLE task.
  *
- * Inputs:
+ * Input Parameters:
  *   affinity - The set of CPUs on which the thread is permitted to run.
  *
- * Return Value:
+ * Returned Value:
  *   Index of the CPU with the lowest priority running task
  *
  * Assumptions:
@@ -113,6 +113,7 @@ int sched_cpu_select(cpu_set_t affinity)
           else if (rtcb->sched_priority < minprio)
             {
               DEBUGASSERT(rtcb->sched_priority > 0);
+              minprio = rtcb->sched_priority;
               cpu = i;
             }
         }

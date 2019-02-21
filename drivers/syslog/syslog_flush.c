@@ -60,6 +60,14 @@
  *   Interrupts are disabled at the time of the crash and this logic must
  *   perform the flush using low-level, non-interrupt driven logic.
  *
+ *   REVISIT:  There is an implementation problem in that if a character
+ *   driver is the underlying device, then there is no mechanism to flush
+ *   the data buffered in the driver with interrupts disabled.
+ *
+ *   Currently, this function on (a) dumps the interrupt buffer (if the
+ *   SYSLOG interrupt buffer is enabled), and (b) only the SYSLOG interface
+ *   supports supports the 'sc_force()' method.
+ *
  * Input Parameters:
  *   ch - The character to add to the SYSLOG (must be positive).
  *
@@ -69,16 +77,9 @@
  *
  ****************************************************************************/
 
-#if 0
-/* REVISIT: (1) Not yet integrated into assertion handlers and (2) there is
- * an implementation problem in that if a character driver is the underlying
- * device, then there is no mechanism to flush the data buffered in the
- * driver with interrupts disabled.
- */
-
 int syslog_flush(void)
 {
-  DEBUGASSERT(g_syslog_channel != NULL && g_syslog_channel->sc_flush != NULL);
+  DEBUGASSERT(g_syslog_channel != NULL);
 
 #ifdef CONFIG_SYSLOG_INTBUFFER
   /* Flush any characters that may have been added to the interrupt
@@ -90,6 +91,6 @@ int syslog_flush(void)
 
   /* Then flush all of the buffered output to the SYSLOG device */
 
+  DEBUGASSERT(g_syslog_channel->sc_flush != NULL);
   return g_syslog_channel->sc_flush();
 }
-#endif

@@ -1,7 +1,8 @@
 /****************************************************************************
  * include/nuttx/wdog.h
  *
- *   Copyright (C) 2007-2009, 2014-2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2009, 2014-2015, 2018 Gregory Nutt. All rights
+ *     reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -172,10 +173,10 @@ extern "C"
  *   The wd_create function will create a watchdog timer by allocating one
  *   from the list of free watchdog timers.
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
- * Return Value:
+ * Returned Value:
  *   Pointer to watchdog (i.e., the watchdog ID), or NULL if insufficient
  *   watchdogs are available.
  *
@@ -191,12 +192,13 @@ WDOG_ID wd_create(void);
  *   it to the free pool of watchdog timers.  The watchdog timer will be
  *   removed from the active timer queue if had been started.
  *
- * Parameters:
+ * Input Parameters:
  *   wdog - The watchdog ID to delete.  This is actually a pointer to a
  *          watchdog structure.
  *
- * Return Value:
- *   Returns OK or ERROR
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is return to
+ *   indicate the nature of any failure.
  *
  * Assumptions:
  *   The caller has assured that the watchdog is no longer in use.
@@ -223,14 +225,15 @@ int wd_delete(WDOG_ID wdog);
  *   call wd_start again with the same wdog; only the most recent wdStart()
  *   on a given watchdog ID has any effect.
  *
- * Parameters:
+ * Input Parameters:
  *   wdog     - watchdog ID
  *   delay    - Delay count in clock ticks
  *   wdentry  - function to call on timeout
  *   parm1..4 - parameters to pass to wdentry
  *
- * Return Value:
- *   OK or ERROR
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is return to
+ *   indicate the nature of any failure.
  *
  * Assumptions:
  *   The watchdog routine runs in the context of the timer interrupt handler
@@ -247,10 +250,10 @@ int wd_start(WDOG_ID wdog, int32_t delay, wdentry_t wdentry, int argc, ...);
  *   This function cancels a currently running watchdog timer. Watchdog
  *   timers may be cancelled from the interrupt level.
  *
- * Parameters:
+ * Input Parameters:
  *   wdog - ID of the watchdog to cancel.
  *
- * Return Value:
+ * Returned Value:
  *   Zero (OK) is returned on success;  A negated errno value is returned to
  *   indicate the nature of any failure.
  *
@@ -265,10 +268,10 @@ int wd_cancel(WDOG_ID wdog);
  *   This function returns the time remaining before the specified watchdog
  *   timer expires.
  *
- * Parameters:
+ * Input Parameters:
  *   wdog - watchdog ID
  *
- * Return Value:
+ * Returned Value:
  *   The time in system ticks remaining until the watchdog time expires.
  *   Zero means either that wdog is not valid or that the wdog has already
  *   expired.

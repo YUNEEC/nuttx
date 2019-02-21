@@ -388,9 +388,7 @@ Toolchains
   Another option is the mips-elf toolchain used with the Pinguino project.  This
   is a relatively current mips-elf GCC and should provide free C++ support as
   well. This toolchain can be downloded from the Pinguino website:
-  http://wiki.pinguino.cc/index.php/Main_Page#Download . There is some general
-  information about using the Pinguino mips-elf toolchain in this thread:
-  https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1821
+  http://wiki.pinguino.cc/index.php/Main_Page#Download .
 
   Support for the Pinguino mips-elf toolchain has been included in the Mirtoo
   configurations.  Use one of these configuration options to select the Pinguino
@@ -426,10 +424,9 @@ Toolchains
      Rename:  kseg1_datamem to kseg1_data_mem
 
   Even then, there are more warnings from the linker and some undefined symbols
-  for non-NuttX code that resides in the unused Microchip libraries.  See this
-  email thread at https://groups.yahoo.com/neo/groups/nuttx/conversations/messages/1458 for more
-  information.  You will have to solve at least this undefined symbol problem if
-  you want to used the XC32 toolchain.
+  for non-NuttX code that resides in the unused Microchip libraries.  You will
+  have to solve at least this undefined symbol problem if you want to used thei
+  XC32 toolchain.
 
   Windows Native Toolchains
   -------------------------
@@ -705,13 +702,6 @@ PIC32MX Configuration Options
 
     CONFIG_ARCH_LEDS -  Use LEDs to show state. Unique to board architecture.
 
-    CONFIG_ARCH_CALIBRATION - Enables some build in instrumentation that
-       cause a 100 second delay during boot-up.  This 100 second delay
-       serves no purpose other than it allows you to calibratre
-       CONFIG_ARCH_LOOPSPERMSEC.  You simply use a stop watch to measure
-       the 100 second delay then adjust CONFIG_ARCH_LOOPSPERMSEC until
-       the delay actually is 100 seconds.
-
     PIC32MX Configuration
 
       CONFIG_PIC32MX_MVEC - Select muli- vs. single-vectored interrupts
@@ -841,9 +831,7 @@ Configurations
 Each PIC32MX configuration is maintained in a sub-directory and can be
 selected as follow:
 
-    cd tools
-    ./configure.sh mirtoo/<subdir>
-    cd -
+    tools/configure.sh mirtoo/<subdir>
 
 Where <subdir> is one of the following:
 
@@ -957,7 +945,7 @@ Where <subdir> is one of the following:
 
       NOTES:
 
-      a) It takes many seconds to boot the sytem using the NXFFS
+      a) It takes many seconds to boot the system using the NXFFS
          file system because the entire FLASH must be verified on power up
          (and longer the first time that NXFFS comes up and has to format the
          entire FLASH).

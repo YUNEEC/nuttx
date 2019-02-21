@@ -1,7 +1,7 @@
 ############################################################################
 # drivers/sensors/Make.defs
 #
-#   Copyright (C) 2011-2012, 2015-2017 Gregory Nutt. All rights reserved.
+#   Copyright (C) 2011-2012, 2015-2018 Gregory Nutt. All rights reserved.
 #   Author: Gregory Nutt <gnutt@nuttx.org>
 #
 # Redistribution and use in source and binary forms, with or without
@@ -45,9 +45,17 @@ ifeq ($(CONFIG_SENSORS_ADXL345),y)
   CSRCS += adxl345_base.c
 endif
 
+ifeq ($(CONFIG_SENSORS_DHTXX),y)
+  CSRCS += dhtxx.c
+endif
+
 # These drivers depend on I2C support
 
 ifeq ($(CONFIG_I2C),y)
+
+ifeq ($(CONFIG_SENSORS_APDS9960),y)
+  CSRCS += apds9960.c
+endif
 
 ifeq ($(CONFIG_SENSORS_AS5048B),y)
   CSRCS += as5048b.c
@@ -63,6 +71,14 @@ endif
 
 ifeq ($(CONFIG_LIS331DL),y)
   CSRCS += lis331dl.c
+endif
+
+ifeq ($(CONFIG_SENSORS_LSM303AGR),y)
+  CSRCS += lsm303agr.c
+endif
+
+ifeq ($(CONFIG_SENSORS_LSM6DSL),y)
+  CSRCS += lsm6dsl.c
 endif
 
 ifeq ($(CONFIG_SENSORS_LSM9DS1),y)
@@ -101,6 +117,10 @@ ifeq ($(CONFIG_SENSORS_LM92),y)
   CSRCS += lm92.c
 endif
 
+ifeq ($(CONFIG_SENSORS_MAX44009),y)
+  CSRCS += max44009.c
+endif
+
 ifeq ($(CONFIG_SENSORS_MB7040),y)
   CSRCS += mb7040.c
 endif
@@ -113,12 +133,48 @@ ifeq ($(CONFIG_SENSORS_MLX90393),y)
   CSRCS += mlx90393.c
 endif
 
+ifeq ($(CONFIG_SENSORS_MLX90614),y)
+  CSRCS += mlx90614.c
+endif
+
 ifeq ($(CONFIG_SENSORS_MS58XX),y)
   CSRCS += ms58xx.c
 endif
 
 ifeq ($(CONFIG_SENSORS_LTC4151),y)
   CSRCS += ltc4151.c
+endif
+
+ifeq ($(CONFIG_SENSORS_INA219),y)
+  CSRCS += ina219.c
+endif
+
+ifeq ($(CONFIG_SENSORS_INA226),y)
+  CSRCS += ina226.c
+endif
+
+ifeq ($(CONFIG_SENSORS_INA3221),y)
+  CSRCS += ina3221.c
+endif
+
+ifeq ($(CONFIG_SENSORS_SCD30),y)
+  CSRCS += scd30.c
+endif
+
+ifeq ($(CONFIG_SENSORS_SGP30),y)
+  CSRCS += sgp30.c
+endif
+
+ifeq ($(CONFIG_SENSORS_SHT21),y)
+  CSRCS += sht21.c
+endif
+
+ifeq ($(CONFIG_SENSORS_SPS30),y)
+  CSRCS += sps30.c
+endif
+
+ifeq ($(CONFIG_SENSORS_T67XX),y)
+  CSRCS += t67xx.c
 endif
 
 endif # CONFIG_I2C
@@ -130,8 +186,16 @@ ifeq ($(CONFIG_ADXL345_SPI),y)
   CSRCS += adxl345_spi.c
 endif
 
+ifeq ($(CONFIG_SENSORS_ADXL372),y)
+  CSRCS += adxl372.c
+endif
+
 ifeq ($(CONFIG_LIS3DSH),y)
   CSRCS += lis3dsh.c
+endif
+
+ifeq ($(CONFIG_LIS3DH),y)
+  CSRCS += lis3dh.c
 endif
 
 ifeq ($(CONFIG_SENSORS_MAX31855),y)
@@ -148,6 +212,10 @@ endif
 
 ifeq ($(CONFIG_SENSORS_LIS3MDL),y)
   CSRCS += lis3mdl.c
+endif
+
+ifeq ($(CONFIG_SENSORS_LSM330SPI),y)
+  CSRCS += lsm330_spi.c
 endif
 
 ifeq ($(CONFIG_SENSORS_L3GD20),y)

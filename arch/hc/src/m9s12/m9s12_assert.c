@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/hc/src/m9s12/m9s12_assert.c
  *
- *   Copyright (C) 2011-2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2011-2016, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
+#include <nuttx/syslog/syslog.h>
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <arch/board/board.h>
@@ -58,10 +59,23 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
 /* USB trace dumping */
 
 #ifndef CONFIG_USBDEV_TRACE
 #  undef CONFIG_ARCH_USBDUMP
+#endif
+
+#ifndef CONFIG_BOARD_RESET_ON_ASSERT
+#  define CONFIG_BOARD_RESET_ON_ASSERT 0
+#endif
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+#ifdef CONFIG_ARCH_STACKDUMP
+static uint8_t s_last_regs[XCPTCONTEXT_REGS];
 #endif
 
 /****************************************************************************
@@ -97,33 +111,40 @@ static void up_stackdump(uint16_t sp, uint16_t stack_base)
 #ifdef CONFIG_ARCH_STACKDUMP
 static inline void up_registerdump(void)
 {
+  volatile uint8_t *regs = g_current_regs;
+
   /* Are user registers available from interrupt processing? */
 
-  if (g_current_regs)
+  if (regs == NULL)
     {
-      _alert("A:%02x B:%02x X:%02x%02x Y:%02x%02x PC:%02x%02x CCR:%02x\n",
-             g_current_regs[REG_A], g_current_regs[REG_B], g_current_regs[REG_XH],
-             g_current_regs[REG_XL], g_current_regs[REG_YH], g_current_regs[REG_YL],
-             g_current_regs[REG_PCH], g_current_regs[REG_PCL], g_current_regs[REG_CCR]);
-      _alert("SP:%02x%02x FRAME:%02x%02x TMP:%02x%02x Z:%02x%02x XY:%02x\n",
-             g_current_regs[REG_SPH], g_current_regs[REG_SPL],
-             g_current_regs[REG_FRAMEH], g_current_regs[REG_FRAMEL],
-             g_current_regs[REG_TMPL], g_current_regs[REG_TMPH], g_current_regs[REG_ZL],
-             g_current_regs[REG_ZH], g_current_regs[REG_XY], g_current_regs[REG_XY+1]);
+      /* No.. capture user registers by hand */
+
+      up_saveusercontext(s_last_regs);
+      regs = s_last_regs;
+    }
+
+  _alert("A:%02x B:%02x X:%02x%02x Y:%02x%02x PC:%02x%02x CCR:%02x\n",
+         regs[REG_A],  regs[REG_B],  regs[REG_XH],  regs[REG_XL],
+         regs[REG_YH], regs[REG_YL], regs[REG_PCH], regs[REG_PCL],
+         regs[REG_CCR]);
+  _alert("SP:%02x%02x FRAME:%02x%02x TMP:%02x%02x Z:%02x%02x XY:%02x\n",
+         regs[REG_SPH],  regs[REG_SPL],  regs[REG_FRAMEH], regs[REG_FRAMEL],
+         regs[REG_TMPL], regs[REG_TMPH], regs[REG_ZL],     regs[REG_ZH],
+         regs[REG_XY],   regs[REG_XY+1]);
 
 #if CONFIG_HCS12_MSOFTREGS > 2
 #  error "Need to save more registers"
 #elif CONFIG_HCS12_MSOFTREGS == 2
-      _alert("SOFTREGS: %02x%02x :%02x%02x\n",
-            g_current_regs[REG_SOFTREG1], g_current_regs[REG_SOFTREG1+1],
-            g_current_regs[REG_SOFTREG2], g_current_regs[REG_SOFTREG2+1]);
+  _alert("SOFTREGS: %02x%02x :%02x%02x\n",
+        regs[REG_SOFTREG1], regs[REG_SOFTREG1+1],
+        regs[REG_SOFTREG2], regs[REG_SOFTREG2+1]);
 #elif CONFIG_HCS12_MSOFTREGS == 1
-      _alert("SOFTREGS: %02x%02x\n", g_current_regs[REG_SOFTREG1],
-            g_current_regs[REG_SOFTREG1+1]);
+  _alert("SOFTREGS: %02x%02x\n",
+        regs[REG_SOFTREG1], regs[REG_SOFTREG1+1]);
 #endif
 
 #ifndef CONFIG_HCS12_NONBANKED
-      _alert("PPAGE: %02x\n", g_current_regs[REG_PPAGE],);
+      _alert("PPAGE: %02x\n", regs[REG_PPAGE]);
 #endif
     }
 }
@@ -141,10 +162,10 @@ static int usbtrace_syslog(FAR const char *fmt, ...)
   va_list ap;
   int ret;
 
-  /* Let vsyslog do the real work */
+  /* Let nx_vsyslog do the real work */
 
   va_start(ap, fmt);
-  ret = vsyslog(LOG_EMERG, fmt, ap);
+  ret = nx_vsyslog(LOG_EMERG, fmt, &ap);
   va_end(ap);
   return ret;
 }
@@ -163,7 +184,7 @@ static int assert_tracecallback(FAR struct usbtrace_s *trace, FAR void *arg)
 #ifdef CONFIG_ARCH_STACKDUMP
 static void up_dumpstate(void)
 {
-  struct tcb_s *rtcb = this_task();
+  struct tcb_s *rtcb = running_task();
   uint16_t sp = up_getsp();
   uint16_t ustackbase;
   uint16_t ustacksize;
@@ -172,9 +193,13 @@ static void up_dumpstate(void)
   uint16_t istacksize;
 #endif
 
+  /* Dump the registers (if available) */
+
+  up_registerdump();
+
   /* Get the limits on the user stack memory */
 
-  if (rtcb->pid == 0)
+  if (rtcb->flink == NULL)
     {
       ustackbase = g_idle_topstack - 4;
       ustacksize = CONFIG_IDLETHREAD_STACKSIZE;
@@ -215,6 +240,11 @@ static void up_dumpstate(void)
       sp = g_intstackbase;
       _alert("sp:     %04x\n", sp);
     }
+  else if (g_current_regs)
+    {
+      _alert("ERROR: Stack pointer is not within the interrupt stack\n");
+      up_stackdump(istackbase - istacksize, istackbase);
+    }
 
   /* Show user stack info */
 
@@ -233,18 +263,13 @@ static void up_dumpstate(void)
 
   if (sp > ustackbase || sp <= ustackbase - ustacksize)
     {
-#if !defined(CONFIG_ARCH_INTERRUPTSTACK) || CONFIG_ARCH_INTERRUPTSTACK < 4
       _alert("ERROR: Stack pointer is not within allocated stack\n");
-#endif
+      up_stackdump(ustackbase - ustacksize, ustackbase);
     }
   else
     {
       up_stackdump(sp, ustackbase);
     }
-
-  /* Then dump the registers (if available) */
-
-  up_registerdump();
 
 #ifdef CONFIG_ARCH_USBDUMP
   /* Dump USB trace data */
@@ -263,13 +288,20 @@ static void up_dumpstate(void)
 static void _up_assert(int errorcode) noreturn_function;
 static void _up_assert(int errorcode)
 {
+  /* Flush any buffered SYSLOG data */
+
+  (void)syslog_flush();
+
   /* Are we in an interrupt handler or the idle task? */
 
-  if (g_current_regs || (this_task())->pid == 0)
+  if (g_current_regs || (running_task())->flink == NULL)
     {
        (void)up_irq_save();
         for (;;)
           {
+#if CONFIG_BOARD_RESET_ON_ASSERT >= 1
+            board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
+#endif
 #ifdef CONFIG_ARCH_LEDS
             board_autoled_on(LED_PANIC);
             up_mdelay(250);
@@ -280,6 +312,9 @@ static void _up_assert(int errorcode)
     }
   else
     {
+#if CONFIG_BOARD_RESET_ON_ASSERT >= 2
+      board_reset(CONFIG_BOARD_ASSERT_RESET_VALUE);
+#endif
       exit(errorcode);
     }
 }
@@ -295,10 +330,14 @@ static void _up_assert(int errorcode)
 void up_assert(const uint8_t *filename, int lineno)
 {
 #if CONFIG_TASK_NAME_SIZE > 0 && defined(CONFIG_DEBUG_ALERT)
-  struct tcb_s *rtcb = this_task();
+  struct tcb_s *rtcb = running_task();
 #endif
 
   board_autoled_on(LED_ASSERTION);
+
+  /* Flush any buffered SYSLOG data (from prior to the assertion) */
+
+  (void)syslog_flush();
 
 #if CONFIG_TASK_NAME_SIZE > 0
   _alert("Assertion failed at file:%s line: %d task: %s\n",
@@ -310,8 +349,12 @@ void up_assert(const uint8_t *filename, int lineno)
 
   up_dumpstate();
 
+  /* Flush any buffered SYSLOG data (from the above) */
+
+  (void)syslog_flush();
+
 #ifdef CONFIG_BOARD_CRASHDUMP
-  board_crashdump(up_getsp(), this_task(), filename, lineno);
+  board_crashdump(up_getsp(), running_task(), filename, lineno);
 #endif
 
   _up_assert(EXIT_FAILURE);

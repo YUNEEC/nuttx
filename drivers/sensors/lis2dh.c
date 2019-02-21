@@ -49,9 +49,10 @@
 #include <poll.h>
 #include <debug.h>
 
-#include <nuttx/i2c/i2c_master.h>
 #include <nuttx/kmalloc.h>
+#include <nuttx/signal.h>
 #include <nuttx/random.h>
+#include <nuttx/i2c/i2c_master.h>
 
 #include <nuttx/sensors/lis2dh.h>
 
@@ -275,14 +276,14 @@ static int lis2dh_close(FAR struct file *filep)
 static int lis2dh_fifo_start(FAR struct lis2dh_dev_s *priv)
 {
   uint8_t buf;
-  int err = OK;
+  int ret = OK;
 
   buf =  0x00 | priv->setup->trigger_selection |
       priv->setup->fifo_trigger_threshold;
   if (lis2dh_access(priv, ST_LIS2DH_FIFO_CTRL_REG, &buf, -1) != 1)
     {
       lis2dh_dbg("lis2dh: Failed to write FIFO control register\n");
-      err = -EIO;
+      ret = -EIO;
     }
   else
     {
@@ -291,7 +292,7 @@ static int lis2dh_fifo_start(FAR struct lis2dh_dev_s *priv)
       if (lis2dh_access(priv, ST_LIS2DH_FIFO_CTRL_REG, &buf, -1) != 1)
         {
           lis2dh_dbg("lis2dh: Failed to write FIFO control register\n");
-          err = -EIO;
+          ret = -EIO;
         }
       else
         {
@@ -301,7 +302,7 @@ static int lis2dh_fifo_start(FAR struct lis2dh_dev_s *priv)
         }
     }
 
-  return err;
+  return ret;
 }
 
 /****************************************************************************
@@ -323,7 +324,7 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
   uint8_t int1_src = 0;
   uint8_t int2_src = 0;
   irqstate_t flags;
-  int err;
+  int ret;
 
   if (buflen <  sizeof(struct lis2dh_result) ||
       (buflen - sizeof(struct lis2dh_res_header)) % sizeof(struct lis2dh_vector_s) != 0)
@@ -332,10 +333,10 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
       return -EINVAL;
     }
 
-  err = sem_wait(&priv->devsem);
-  if (err < 0)
+  ret = nxsem_wait(&priv->devsem);
+  if (ret < 0)
     {
-      return -EINTR;
+      return ret;
     }
 
   /* Do not allow read() if no SNIOC_WRITESETUP first. */
@@ -370,8 +371,8 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
 
       if (readcount > 0)
         {
-          err = lis2dh_get_reading(priv, &ptr->measurements[0], true);
-          if (err < 0)
+          ret = lis2dh_get_reading(priv, &ptr->measurements[0], true);
+          if (ret < 0)
             {
               lis2dh_dbg("lis2dh: Failed to read xyz\n");
             }
@@ -440,7 +441,7 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
             }
 
           ptr->header.meas_count +=
-              lis2dh_get_fifo_readings(priv, ptr, fifo_num_samples, &err);
+              lis2dh_get_fifo_readings(priv, ptr, fifo_num_samples, &ret);
         }
       while (!fifo_empty && ptr->header.meas_count < readcount);
 
@@ -468,7 +469,7 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
            * further reading.
            */
 
-          err = lis2dh_fifo_start(priv);
+          ret = lis2dh_fifo_start(priv);
         }
     }
 
@@ -480,7 +481,7 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
   if (lis2dh_access(priv, ST_LIS2DH_INT1_SRC_REG, &buf, 1) != 1)
     {
       lis2dh_dbg("lis2dh: Failed to read INT1_SRC_REG\n");
-      err = -EIO;
+      ret = -EIO;
     }
   if (buf & ST_LIS2DH_INT_SR_ACTIVE)
     {
@@ -502,7 +503,7 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
   if (lis2dh_access(priv, ST_LIS2DH_INT2_SRC_REG, &buf, 1) != 1)
     {
       lis2dh_dbg("lis2dh: Failed to read INT2_SRC_REG\n");
-      err = -EIO;
+      ret = -EIO;
     }
   if (buf & ST_LIS2DH_INT_SR_ACTIVE)
     {
@@ -518,9 +519,9 @@ static ssize_t lis2dh_read(FAR struct file *filep, FAR char *buffer,
   ptr->header.int1_source = int1_src;
   ptr->header.int2_source = int2_src;
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
 
-  /* 'err' was just for debugging, we do return partial reads here. */
+  /* 'ret' was just for debugging, we do return partial reads here. */
 
   return sizeof(ptr->header) +
       ptr->header.meas_count * sizeof(struct lis2dh_vector_s);
@@ -562,10 +563,10 @@ static int lis2dh_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct lis2dh_dev_s *)inode->i_private;
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
-      return -EINTR;
+      return ret;
     }
 
   switch (cmd)
@@ -595,7 +596,7 @@ static int lis2dh_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
           ret = -EIO;
         }
 
-      lis2dh_clear_interrupts(priv, LIS2DH_INT2);
+      lis2dh_clear_interrupts(priv, LIS2DH_INT1);
     }
     break;
 
@@ -662,7 +663,7 @@ static int lis2dh_ioctl(FAR struct file *filep, int cmd, unsigned long arg)
     break;
   }
 
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -680,7 +681,7 @@ static int lis2dh_poll(FAR struct file *filep, FAR struct pollfd *fds,
 {
   FAR struct inode *inode;
   FAR struct lis2dh_dev_s *priv;
-  int ret = OK;
+  int ret;
   int i;
 
   DEBUGASSERT(filep && fds);
@@ -689,10 +690,10 @@ static int lis2dh_poll(FAR struct file *filep, FAR struct pollfd *fds,
   DEBUGASSERT(inode && inode->i_private);
   priv = (FAR struct lis2dh_dev_s *)inode->i_private;
 
-  ret = sem_wait(&priv->devsem);
+  ret = nxsem_wait(&priv->devsem);
   if (ret < 0)
     {
-      return -EINTR;
+      return ret;
     }
 
   if (setup)
@@ -749,7 +750,7 @@ static int lis2dh_poll(FAR struct file *filep, FAR struct pollfd *fds,
     }
 
 out:
-  sem_post(&priv->devsem);
+  nxsem_post(&priv->devsem);
   return ret;
 }
 
@@ -772,7 +773,7 @@ static void lis2dh_notify(FAR struct lis2dh_dev_s *priv)
         {
           fds->revents |= POLLIN;
           lis2dh_dbg("lis2dh: Report events: %02x\n", fds->revents);
-          sem_post(fds->sem);
+          nxsem_post(fds->sem);
         }
     }
 }
@@ -1047,8 +1048,8 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
       abs_st_y_value = abs(avg_y_with_st - avg_y_no_st);
       abs_st_z_value = abs(avg_z_with_st - avg_z_no_st);
 
-      dbg ("ST %d, ABSX: %d, ABSY: %d, ABSZ: %d\n",
-            i, abs_st_x_value, abs_st_y_value, abs_st_z_value);
+      syslog(LOG_NOTICE, "ST %d, ABSX: %d, ABSY: %d, ABSZ: %d\n",
+             i, abs_st_x_value, abs_st_y_value, abs_st_z_value);
 
       if (abs_st_x_value < SELFTEST_ABS_DIFF_MIN_12BIT ||
           abs_st_x_value > SELFTEST_ABS_DIFF_MAX_12BIT ||
@@ -1057,11 +1058,11 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
           abs_st_z_value < SELFTEST_ABS_DIFF_MIN_12BIT ||
           abs_st_z_value > SELFTEST_ABS_DIFF_MAX_12BIT)
         {
-          dbg("Selftest %d fail! Limits (%d <= value <= %d). "
-              "Results: x: %d, y: %d, z: %d ",
-              i,
-              SELFTEST_ABS_DIFF_MIN_12BIT, SELFTEST_ABS_DIFF_MAX_12BIT,
-              abs_st_x_value, abs_st_y_value, abs_st_z_value);
+          syslog(LOG_NOTICE, "Selftest %d fail! Limits (%d <= value <= %d). "
+                 "Results: x: %d, y: %d, z: %d ",
+                 i,
+                 SELFTEST_ABS_DIFF_MIN_12BIT, SELFTEST_ABS_DIFF_MAX_12BIT,
+                 abs_st_x_value, abs_st_y_value, abs_st_z_value);
           ret = -ERANGE;
           goto out;
         }
@@ -1077,18 +1078,21 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
 
   /* Both INT lines should be low */
 
-  if (priv->config->read_int1_pin() != 0)
+  if (priv->config->read_int1_pin != NULL)
     {
-      dbg("INT1 line is HIGH - expected LOW\n");
-      ret = -ENXIO;
-      goto out;
+      if (priv->config->read_int1_pin() != 0)
+        {
+          syslog(LOG_NOTICE, "INT1 line is HIGH - expected LOW\n");
+          ret = -ENXIO;
+          goto out;
+        }
     }
 
   if (priv->config->read_int2_pin)
     {
       if (priv->config->read_int2_pin() != 0)
         {
-          dbg("INT2 line is HIGH - expected LOW\n");
+          syslog(LOG_NOTICE, "INT2 line is HIGH - expected LOW\n");
           ret = -ENODEV;
           goto out;
         }
@@ -1106,7 +1110,7 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
       (lis2dh_write_register(priv, ST_LIS2DH_FIFO_CTRL_REG, 0x40) != OK) ||
       (lis2dh_write_register(priv, ST_LIS2DH_INT1_CFG_REG, 0x3f) != OK))
     {
-      dbg("Writing registers for INT line check failed\n");
+      syslog(LOG_NOTICE, "Writing registers for INT line check failed\n");
       ret = -EIO;
       goto out;
     }
@@ -1116,27 +1120,30 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
   if ((lis2dh_read_register(priv, ST_LIS2DH_INT1_SRC_REG) == ERROR) ||
       (lis2dh_read_register(priv, ST_LIS2DH_INT2_SRC_REG) == ERROR))
     {
-      dbg("Failed to clear INT1 / INT2 registers\n");
+      syslog(LOG_NOTICE, "Failed to clear INT1 / INT2 registers\n");
       ret = -EIO;
       goto out;
     }
 
-  usleep(20000);
+  nxsig_usleep(20000);
 
   /* Now INT1 should have been latched high and INT2 should be still low */
 
-  if (priv->config->read_int1_pin() != 1)
+  if (priv->config->read_int1_pin)
     {
-      dbg("INT1 line is LOW - expected HIGH\n");
-      ret = -ENXIO;
-      goto out;
+      if (priv->config->read_int1_pin() != 1)
+        {
+          syslog(LOG_NOTICE, "INT1 line is LOW - expected HIGH\n");
+          ret = -ENXIO;
+          goto out;
+        }
     }
 
-  if (priv->config->read_int2_pin)
+  if (priv->config->read_int2_pin != NULL)
     {
       if (priv->config->read_int2_pin() != 0)
         {
-          dbg("INT2 line is HIGH - expected LOW\n");
+          syslog(LOG_NOTICE, "INT2 line is HIGH - expected LOW\n");
           ret = -ENODEV;
           goto out;
         }
@@ -1145,16 +1152,16 @@ static int lis2dh_handle_selftest(FAR struct lis2dh_dev_s *priv)
 
       if (lis2dh_write_register(priv, ST_LIS2DH_CTRL_REG6, 0x40) != OK)
         {
-          dbg("Failed to enable interrupt 1 on INT2 pin");
+          syslog(LOG_NOTICE, "Failed to enable interrupt 1 on INT2 pin");
           ret = -EIO;
           goto out;
         }
 
-      usleep(20000);
+      nxsig_usleep(20000);
 
       if (priv->config->read_int2_pin() != 1)
         {
-          dbg("INT2 line is LOW - expected HIGH\n");
+          syslog(LOG_NOTICE, "INT2 line is LOW - expected HIGH\n");
           ret = -ENODEV;
           goto out;
         }
@@ -1256,7 +1263,7 @@ static FAR const struct lis2dh_vector_s *
 
   while (--retries_left > 0)
     {
-      usleep(20000);
+      nxsig_usleep(20000);
       if (lis2dh_data_available(dev))
         {
           if (lis2dh_access(dev, ST_LIS2DH_OUT_X_L_REG, retval,
@@ -1545,7 +1552,7 @@ static int lis2dh_access(FAR struct lis2dh_dev_s *dev, uint8_t subaddr,
     }
   else
     {
-      flags = I2C_M_NORESTART;
+      flags = I2C_M_NOSTART;
       length = -length;
     }
 
@@ -1657,7 +1664,13 @@ static int lis2dh_reboot(FAR struct lis2dh_dev_s *dev)
   int32_t diff_msec;
   uint8_t value;
 
+  /* Prefer monotonic for timeout calculation when enabled. */
+
+#ifdef CONFIG_CLOCK_MONOTONIC
   (void)clock_gettime(CLOCK_MONOTONIC, &start);
+#else
+  (void)clock_gettime(CLOCK_REALTIME, &start);
+#endif
 
   /* Reboot to reset chip. */
 
@@ -1682,7 +1695,11 @@ static int lis2dh_reboot(FAR struct lis2dh_dev_s *dev)
           break;
         }
 
+#ifdef CONFIG_CLOCK_MONOTONIC
       (void)clock_gettime(CLOCK_MONOTONIC, &curr);
+#else
+      (void)clock_gettime(CLOCK_REALTIME, &curr);
+#endif
 
       diff_msec = (curr.tv_sec - start.tv_sec) * 1000;
       diff_msec += (curr.tv_nsec - start.tv_nsec) / (1000 * 1000);
@@ -1692,7 +1709,7 @@ static int lis2dh_reboot(FAR struct lis2dh_dev_s *dev)
           return -ETIMEDOUT;
         }
 
-       usleep(1);
+       nxsig_usleep(1);
     }
   while (true);
 
@@ -2015,7 +2032,7 @@ int lis2dh_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
       return -ENOMEM;
     }
 
-  sem_init(&priv->devsem, 0, 1);
+  nxsem_init(&priv->devsem, 0, 1);
 
   priv->fifo_used = false;
 #ifdef LIS2DH_COUNT_INTS
@@ -2044,7 +2061,7 @@ int lis2dh_register(FAR const char *devpath, FAR struct i2c_master_s *i2c,
   return OK;
 
 errout_with_priv:
-  sem_destroy(&priv->devsem);
+  nxsem_destroy(&priv->devsem);
   kmm_free(priv);
 
   return ret;

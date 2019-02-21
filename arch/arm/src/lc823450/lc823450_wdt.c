@@ -1,7 +1,7 @@
 /****************************************************************************
  * arch/arm/src/lc823450/lc823450_wdt.c
  *
- *   Copyright (C) 2014-2017 Sony Corporation. All rights reserved.
+ *   Copyright 2014,2015,2017 Sony Video & Sound Products Inc.
  *   Author: Masayuki Ishikawa <Masayuki.Ishikawa@jp.sony.com>
  *   Author: Nobutaka Toyoshima <Nobutaka.Toyoshima@jp.sony.com>
  *   Author: Masatoshi Tateishi <Masatoshi.Tateishi@jp.sony.com>
@@ -43,9 +43,9 @@
 #include <nuttx/arch.h>
 
 #include <stdint.h>
+#include <syslog.h>
 #include <errno.h>
 #include <debug.h>
-#include <stdio.h>
 
 #include <nuttx/timers/watchdog.h>
 
@@ -182,7 +182,7 @@ static void wdg_work_func(void *arg)
  * Input Parameters:
  *   Usual interrupt handler arguments.
  *
- * Returned Values:
+ * Returned Value:
  *   Always returns OK.
  *
  ****************************************************************************/
@@ -194,7 +194,7 @@ static int lc823450_wdt_interrupt(int irq, FAR void *context, FAR void *arg)
 
   if (!(getreg32(WDT_PT0STS) & (1 << WDT_PT0STS_CSTS)))
     {
-      PANIC();
+      DEBUGPANIC();
     }
 
   /* Is there a registered handler? */
@@ -223,7 +223,7 @@ static int lc823450_wdt_interrupt(int irq, FAR void *context, FAR void *arg)
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -246,7 +246,7 @@ static int lc823450_wdt_start(FAR struct watchdog_lowerhalf_s *lower)
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -271,7 +271,7 @@ static int lc823450_wdt_stop(FAR struct watchdog_lowerhalf_s *lower)
  *   lower - A pointer the publicly visible representation of the "lower-half"
  *           driver state structure.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -299,7 +299,7 @@ static int lc823450_wdt_keepalive(FAR struct watchdog_lowerhalf_s *lower)
  *             driver state structure.
  *   stawtus - The location to return the watchdog status information.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -362,7 +362,7 @@ static int lc823450_wdt_getstatus(FAR struct watchdog_lowerhalf_s *lower,
  *             driver state structure.
  *   timeout - The new timeout value in millisecnds.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -430,7 +430,7 @@ static int lc823450_wdt_settimeout(FAR struct watchdog_lowerhalf_s *lower,
  *                function pointer is NULL, then the reset-on-expiration
  *                behavior is restored,
  *
- * Returned Values:
+ * Returned Value:
  *   The previous watchdog expiration function pointer or NULL is there was
  *   no previous function pointer, i.e., if the previous behavior was
  *   reset-on-expiration (NULL is also returned if an error occurs).
@@ -496,7 +496,7 @@ static xcpt_t lc823450_wdt_capture(FAR struct watchdog_lowerhalf_s *lower,
  *           interpretation of this argument depends on the particular
  *           command.
  *
- * Returned Values:
+ * Returned Value:
  *   Zero on success; a negated errno value on failure.
  *
  ****************************************************************************/
@@ -526,7 +526,7 @@ static int lc823450_wdt_ioctl(FAR struct watchdog_lowerhalf_s *lower, int cmd,
  * Input Parameters:
  *   None
  *
- * Returned Values:
+ * Returned Value:
  *   None
  *
  ****************************************************************************/
@@ -550,7 +550,7 @@ int lc823450_wdt_initialize(void)
 #else
   if (getreg32(WDT_WT0RSTS) & (1 << WDT_WT0RSTS_RSTS))
     {
-      printf("**** WATCHDOG RESET****\n");
+      syslog(LOG_EMERG, "**** WATCHDOG RESET****\n");
     }
 #endif
 
@@ -578,7 +578,7 @@ void lc823450_wdt_work_enable(int en)
 
       if (getreg32(WDT_WT0RSTS) & (1 << WDT_WT0RSTS_RSTS))
         {
-          printf("**** WATCHDOG RESET****\n");
+          syslog(LOG_EMERG, "**** WATCHDOG RESET****\n");
         }
 
       if (getreg32(LOCKUPR) & LOCKUPR_LOCKUPR0)

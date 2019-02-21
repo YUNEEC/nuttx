@@ -1,7 +1,7 @@
 /****************************************************************************
  * sched/irq/irq_initialize.c
  *
- *   Copyright (C) 2007-2008, 2010 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2007-2008, 2010, 2018 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,5 +91,21 @@ void irq_initialize(void)
 #if !defined(CONFIG_NOIRQARGS)
       g_irqvector[i].arg     = NULL;
 #endif
+#ifdef CONFIG_SCHED_IRQMONITOR
+      g_irqvector[i].start   = 0;
+#ifdef CONFIG_HAVE_LONG_LONG
+      g_irqvector[i].count   = 0;
+#else
+      g_irqvector[i].mscount = 0;
+      g_irqvector[i].lscount = 0;
+#endif
+      g_irqvector[i].time    = 0;
+#endif
     }
+
+#ifdef CONFIG_IRQCHAIN
+  /* Initialize IRQ chain support */
+
+  irqchain_initialize();
+#endif
 }

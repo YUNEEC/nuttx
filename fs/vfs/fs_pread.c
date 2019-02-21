@@ -1,7 +1,7 @@
 /****************************************************************************
  * fs/vfs/fs_pread.c
  *
- *   Copyright (C) 2014, 2016 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2014, 2016-2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+#include <assert.h>
 #include <errno.h>
 
 #include <nuttx/cancelpt.h>
@@ -66,46 +67,43 @@ ssize_t file_pread(FAR struct file *filep, FAR void *buf, size_t nbytes,
   off_t savepos;
   off_t pos;
   ssize_t ret;
-  int errcode;
 
   /* Perform the seek to the current position.  This will not move the
    * file pointer, but will return its current setting
    */
 
   savepos = file_seek(filep, 0, SEEK_CUR);
-  if (savepos == (off_t)-1)
+  if (savepos < 0)
     {
       /* file_seek might fail if this if the media is not seekable */
 
-      return ERROR;
+      return (ssize_t)savepos;
     }
 
   /* Then seek to the correct position in the file */
 
   pos = file_seek(filep, offset, SEEK_SET);
-  if (pos == (off_t)-1)
+  if (pos < 0)
     {
       /* This might fail is the offset is beyond the end of file */
 
-      return ERROR;
+      return (ssize_t)pos;
     }
 
   /* Then perform the read operation */
 
   ret = file_read(filep, buf, nbytes);
-  errcode = get_errno();
 
   /* Restore the file position */
 
   pos = file_seek(filep, savepos, SEEK_SET);
-  if (pos == (off_t)-1 && ret >= 0)
+  if (pos < 0 && ret >= 0)
     {
       /* This really should not fail */
 
-      return ERROR;
+      ret = (ssize_t)pos;
     }
 
-  set_errno(errcode);
   return ret;
 }
 
@@ -125,13 +123,13 @@ ssize_t file_pread(FAR struct file *filep, FAR void *buf, size_t nbytes,
  *   require four system calls.  If it is implemented within the kernel,
  *   only three.
  *
- * Parameters:
+ * Input Parameters:
  *   file     File structure instance
  *   buf      User-provided to save the data
  *   nbytes   The maximum size of the user-provided buffer
  *   offset   The file offset
  *
- * Return:
+ * Returned Value:
  *   The positive non-zero number of bytes read on success, 0 on if an
  *   end-of-file condition, or -1 on failure with errno set appropriately.
  *   See read() return values
@@ -149,20 +147,27 @@ ssize_t pread(int fd, FAR void *buf, size_t nbytes, off_t offset)
 
   /* Get the file structure corresponding to the file descriptor. */
 
-  filep = fs_getfilep(fd);
-  if (!filep)
+  ret = (ssize_t)fs_getfilep(fd, &filep);
+  if (ret < 0)
     {
-      /* The errno value has already been set */
-
-      ret = (ssize_t)ERROR;
+      goto errout;
     }
-  else
-    {
-      /* Let file_pread do the real work */
 
-      ret = file_pread(filep, buf, nbytes, offset);
+  DEBUGASSERT(filep != NULL);
+
+  /* Let file_pread do the real work */
+
+  ret = file_pread(filep, buf, nbytes, offset);
+  if (ret < 0)
+    {
+      goto errout;
     }
 
   leave_cancellation_point();
   return ret;
+
+errout:
+  set_errno((int)-ret);
+  leave_cancellation_point();
+  return (ssize_t)ERROR;
 }
