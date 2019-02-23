@@ -157,19 +157,19 @@ void stm32_flash_lock(void)
  *
  ************************************************************************************/
 
-int stm32_flash_writeprotect(size_t page, bool enabled)
+int stm32_flash_writeprotect(size_t pages, bool enabled)
 {
   uint32_t reg;
   uint32_t val;
 
-  if (page >= STM32_FLASH_NPAGES)
+  if (pages > ((1 << STM32_FLASH_NPAGES) - 1))
     {
       return -EFAULT;
     }
 
   /* Select the register that contains the bit to be changed */
 
-  if (page < 12)
+  if (pages & ((1 << STM32_FLASH_NPAGES) - 1))
     {
       reg = STM32_FLASH_OPTCR;
     }
@@ -186,6 +186,11 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
     }
 #endif
 
+  /* Unlock options */
+
+  putreg32(FLASH_OPTKEY1, STM32_FLASH_OPTKEYR);
+  putreg32(FLASH_OPTKEY2, STM32_FLASH_OPTKEYR);
+
   /* Read the option status */
 
   val = getreg32(reg);
@@ -194,17 +199,12 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
 
   if (enabled)
     {
-      val &= ~(1 << (16+page) );
+      val &= ~(pages << 16);
     }
   else
     {
-      val |=  (1 << (16+page) );
+      val |=  (pages << 16);
     }
-
-  /* Unlock options */
-
-  putreg32(FLASH_OPTKEY1, STM32_FLASH_OPTKEYR);
-  putreg32(FLASH_OPTKEY2, STM32_FLASH_OPTKEYR);
 
   /* Write options */
 
@@ -221,6 +221,7 @@ int stm32_flash_writeprotect(size_t page, bool enabled)
   /* Re-lock options */
 
   modifyreg32(STM32_FLASH_OPTCR, 0, FLASH_OPTCR_OPTLOCK);
+
   return 0;
 }
 
@@ -346,6 +347,13 @@ ssize_t up_progmem_eraseblock(size_t block)
 
   /* Verify */
 
+  if (getreg32(STM32_FLASH_SR) & FLASH_SR_WRPERR)
+    {
+      ferr("FLASH_SR_WRITE_PROTECTION_ERROR\n");
+      modifyreg32(STM32_FLASH_SR, 0, FLASH_SR_WRPERR);
+      return -EROFS;
+    }
+
   if (up_progmem_ispageerased(block) == 0)
     {
       return up_progmem_pagesize(block); /* success */
@@ -409,7 +417,16 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
       /* Verify */
 
-      if (getreg32(STM32_FLASH_SR) & FLASH_CR_SER)
+      if (getreg32(STM32_FLASH_SR) & FLASH_SR_WRPERR)
+        {
+          ferr("FLASH_SR_WRITE_PROTECTION_ERROR\n");
+          modifyreg32(STM32_FLASH_CR, FLASH_CR_PG, 0);
+          modifyreg32(STM32_FLASH_SR, 0, FLASH_SR_WRPERR);
+          sem_unlock();
+          return -EROFS;
+        }
+
+      if (getreg32(STM32_FLASH_SR) & FLASH_SR_OPERR)
         {
           modifyreg32(STM32_FLASH_CR, FLASH_CR_PG, 0);
           sem_unlock();
