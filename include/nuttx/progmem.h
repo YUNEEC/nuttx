@@ -214,7 +214,14 @@ ssize_t up_progmem_ispageerased(size_t page);
 
 ssize_t up_progmem_write(size_t addr, FAR const void *buf, size_t count);
 
+#if defined(CONFIG_STM32_STM32F20XX) || defined(CONFIG_STM32_STM32F4XXX) || defined (CONFIG_STM32F7_STM32F76XX)
 int stm32_flash_writeprotect(size_t pages, bool enabled);
+#else
+static inline int stm32_flash_writeprotect(size_t pages, bool enabled)
+{
+  return 0;
+}
+#endif
 
 #undef EXTERN
 #if defined(__cplusplus)
