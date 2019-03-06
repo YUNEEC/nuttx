@@ -367,10 +367,10 @@ static int smartfs_open(FAR struct file *filep, const char *relpath,
 
       /* TODO: Test open mode based on the file mode */
 
-      /* The file exists.  Check if we are opening it for O_CREAT or
-       * O_TRUNC mode and delete the sector chain if we are. */
+      /* The file exists.  Check if we are opening it for O_TRUNC
+       * mode and delete the sector chain if we are. */
 
-      if ((oflags & (O_CREAT | O_TRUNC)) != 0)
+      if ((oflags & O_TRUNC) != 0)
         {
           /* Don't truncate if open for APPEND */
 
