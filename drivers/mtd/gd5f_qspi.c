@@ -58,7 +58,6 @@
 
 #include "spi_flash.h"
 
-#define CONFIG_GD5F_SYNC_WRITE
 //#define CONFIG_GD5F_DEBUG
 //#define CONFIG_GD5F_SPI_DEBUG
 //#define CONFIG_GD5F_COMMAND_DEBUG
@@ -410,28 +409,6 @@ static uint8_t gd5f_waitcomplete_locked(FAR struct spi_flash_dev_s *priv)
         usleep(500);
     } while (1);
 
-    if (status & GD5F_SR_ERR_ERASE) {
-        gd5f_unlock(priv->qspi);
-
-#ifdef CONFIG_GD5F_DEBUG
-        ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-        spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-        gd5f_lock(priv->qspi);
-    }
-
-    if (status & GD5F_SR_ERR_PROGRAM) {
-        gd5f_unlock(priv->qspi);
-
-#ifdef CONFIG_GD5F_DEBUG
-        ferr("program error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-        spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-        gd5f_lock(priv->qspi);
-    }
-
     return status;
 }
 
@@ -454,11 +431,6 @@ static int gd5f_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
 
     gd5f_lock(priv->qspi);
 
-#ifndef CONFIG_GD5F_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)gd5f_waitcomplete_locked(priv);
-#endif
     priv->lastaddr = address;
 
     /* Send write enable instruction */
@@ -476,16 +448,13 @@ static int gd5f_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
     gd5f_command(priv->qspi, GD5F_BE, commandaddr, 3);
     priv->prev_instr = GD5F_BE;
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
+    /* Wait for erase operation to complete. */
     uint8_t status = gd5f_waitcomplete_locked(priv);
-#endif
 
     gd5f_wrdi_locked(priv->qspi);
 
     gd5f_unlock(priv->qspi);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
     if (status & GD5F_SR_ERR_ERASE) {
 #ifdef CONFIG_GD5F_DEBUG
         ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
@@ -493,7 +462,6 @@ static int gd5f_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
         spi_mark_badblock(priv, address >> priv->block_shift);
         ret = -EIO;
     }
-#endif
 
 errout:
     return ret;
@@ -510,12 +478,6 @@ static ssize_t gd5f_pageread(FAR struct spi_flash_dev_s *priv, off_t address, si
         return -EFAULT;
 
     gd5f_lock(priv->qspi);
-
-#ifndef CONFIG_GD5F_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)gd5f_waitcomplete_locked(priv);
-#endif
 
     /* Make sure that writing is disabled */
 
@@ -595,12 +557,6 @@ static ssize_t gd5f_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 
     gd5f_lock(priv->qspi);
 
-#ifndef CONFIG_GD5F_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)gd5f_waitcomplete_locked(priv);
-#endif
-
     /* Enable write access to the FLASH */
 
     gd5f_wren_locked(priv->qspi);
@@ -619,16 +575,13 @@ static ssize_t gd5f_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
     off_t commandaddr = (off_t)page;
     gd5f_command(priv->qspi, GD5F_WRPAGE, commandaddr, 3);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
     /* Wait for any preceding write or erase operation to complete. */
     uint8_t status = gd5f_waitcomplete_locked(priv);
-#endif
 
     gd5f_wrdi_locked(priv->qspi);
 
     gd5f_unlock(priv->qspi);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
     if (status & GD5F_SR_ERR_PROGRAM) {
         if(!spare) {
          spi_mark_badblock(priv, address >> priv->block_shift);
@@ -638,7 +591,6 @@ static ssize_t gd5f_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 #endif
         ret = -EIO;
     }
-#endif
 
     return ret;
 }
@@ -721,12 +673,6 @@ static void gd5f_quad_io_enable(FAR struct spi_flash_dev_s *priv)
 static void gd5f_unprotect(FAR struct spi_flash_dev_s *priv)
 {
     gd5f_lock(priv->qspi);
-
-#ifndef CONFIG_GD5F_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)gd5f_waitcomplete_locked(priv);
-#endif
 
     /* Send "Write enable (WREN)" */
 

@@ -59,7 +59,6 @@
 
 #include "spi_flash.h"
 
-#define CONFIG_W25_SYNC_WRITE
 //#define CONFIG_W25_DEBUG
 //#define CONFIG_W25_SPI_DEBUG
 
@@ -311,12 +310,6 @@ static inline int w25_readid(FAR struct spi_flash_dev_s *priv)
 
     w25_lock(priv->spi);
 
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)w25_waitcomplete_locked(priv);
-#endif
-
     /* Select this FLASH part. */
 
     SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
@@ -433,12 +426,6 @@ static void w25_unprotect(FAR struct spi_flash_dev_s *priv, int die)
 
     w25_select_die_locked(priv->spi, die);
 
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)w25_waitcomplete_locked(priv);
-#endif
-
     /* Send "Write enable (WREN)" */
 
     w25_wren_locked(priv->spi);
@@ -499,28 +486,6 @@ static uint8_t w25_waitcomplete_locked(FAR struct spi_flash_dev_s *priv)
       }
     while (1);
 
-    if (status & W25_ERR_ERASE) {
-      w25_unlock(priv->spi);
-
-#ifdef CONFIG_W25_DEBUG
-      ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-      spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-      w25_lock(priv->spi);
-    }
-
-    if (status & W25_ERR_PROGRAM) {
-      w25_unlock(priv->spi);
-
-#ifdef CONFIG_W25_DEBUG
-      ferr("program error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-      spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-      w25_lock(priv->spi);
-    }
-
     return status;
 }
 
@@ -544,12 +509,6 @@ static int w25_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
     w25_lock(priv->spi);
 
     w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
-
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)w25_waitcomplete_locked(priv);
-#endif
 
     priv->lastaddr = address;
 
@@ -579,16 +538,13 @@ static int w25_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
 
     SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
 
-#ifdef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
+    /* Wait for erase operation to complete. */
     uint8_t status = w25_waitcomplete_locked(priv);
-#endif
 
     w25_wrdi_locked(priv->spi);
 
     w25_unlock(priv->spi);
 
-#ifdef CONFIG_W25_SYNC_WRITE
     if (status & W25_ERR_ERASE) {
 #ifdef CONFIG_W25_DEBUG
       ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
@@ -596,7 +552,6 @@ static int w25_blockerase(FAR struct spi_flash_dev_s *priv, size_t block)
       spi_mark_badblock(priv, address >> priv->block_shift);
       ret = -EIO;
     }
-#endif
 
 errout:
     return ret;
@@ -615,12 +570,6 @@ static ssize_t w25_pageread(FAR struct spi_flash_dev_s *priv, off_t address, siz
     w25_lock(priv->spi);
 
     w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
-
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-
-    (void)w25_waitcomplete_locked(priv);
-#endif
 
     /* Make sure that writing is disabled */
 
@@ -721,11 +670,6 @@ static ssize_t w25_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 
     w25_select_die_locked(priv->spi, (uint8_t)(address>>W25_DIE_SHIFT));
 
-#ifndef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
-    (void)w25_waitcomplete_locked(priv);
-#endif
-
     /* Enable write access to the FLASH */
 
     w25_wren_locked(priv->spi);
@@ -768,16 +712,13 @@ static ssize_t w25_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 
     SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
 
-#ifdef CONFIG_W25_SYNC_WRITE
-    /* Wait for any preceding write or erase operation to complete. */
+    /* Wait for write operation to complete. */
     uint8_t status = w25_waitcomplete_locked(priv);
-#endif
 
     w25_wrdi_locked(priv->spi);
 
     w25_unlock(priv->spi);
 
-#ifdef CONFIG_W25_SYNC_WRITE
     if (status & W25_ERR_PROGRAM) {
       spi_mark_badblock(priv, address >> priv->block_shift);
 #ifdef CONFIG_W25_DEBUG
@@ -785,7 +726,6 @@ static ssize_t w25_pagewrite(FAR struct spi_flash_dev_s *priv, off_t address,
 #endif
       ret = -EIO;
     }
-#endif
 
     return ret;
 }

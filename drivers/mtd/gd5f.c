@@ -58,7 +58,6 @@
 
 #include "spi_flash.h"
 
-#define CONFIG_GD5F_SYNC_WRITE
 //#define CONFIG_GD5F_DEBUG
 //#define CONFIG_GD5F_SPI_DEBUG
 
@@ -196,12 +195,6 @@ static inline int gd5f_readid(struct spi_flash_dev_s *priv)
 
   gd5f_lock(priv->spi);
 
-#ifndef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
-
-  (void)gd5f_waitcomplete_locked(priv);
-#endif
-
   /* Select this FLASH part. */
 
   SPI_SELECT(priv->spi, SPIDEV_FLASH(0), true);
@@ -274,12 +267,6 @@ static void gd5f_unprotect(FAR struct spi_flash_dev_s *priv)
 {
   gd5f_lock(priv->spi);
 
-#ifndef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
-
-  (void)gd5f_waitcomplete_locked(priv);
-#endif
-
   /* Send "Write enable (WREN)" */
 
   gd5f_wren_locked(priv->spi);
@@ -339,28 +326,6 @@ static uint8_t gd5f_waitcomplete_locked(struct spi_flash_dev_s *priv)
     }
   while (1);
 
-  if (status & GD5F_SR_ERR_ERASE) {
-    gd5f_unlock(priv->spi);
-
-#ifdef CONFIG_GD5F_DEBUG
-    ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-    spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-    gd5f_lock(priv->spi);
-  }
-
-  if (status & GD5F_SR_ERR_PROGRAM) {
-    gd5f_unlock(priv->spi);
-
-#ifdef CONFIG_GD5F_DEBUG
-    ferr("program error block = %08x\n", priv->lastaddr >> priv->block_shift);
-#endif
-    spi_mark_badblock(priv, priv->lastaddr >> priv->block_shift);
-
-    gd5f_lock(priv->spi);
-  }
-
   return status;
 }
 
@@ -382,12 +347,6 @@ static int gd5f_blockerase(struct spi_flash_dev_s *priv, size_t block)
   /* Lock and configure the SPI bus */
 
   gd5f_lock(priv->spi);
-
-#ifndef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
-
-  (void)gd5f_waitcomplete_locked(priv);
-#endif
 
   priv->lastaddr = address;
 
@@ -417,16 +376,13 @@ static int gd5f_blockerase(struct spi_flash_dev_s *priv, size_t block)
 
   SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
+  /* Wait for erase operation to complete. */
   uint8_t status = gd5f_waitcomplete_locked(priv);
-#endif
 
   gd5f_wrdi_locked(priv->spi);
 
   gd5f_unlock(priv->spi);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
   if (status & GD5F_SR_ERR_ERASE) {
 #ifdef CONFIG_GD5F_DEBUG
     ferr("erase error block = %08x\n", priv->lastaddr >> priv->block_shift);
@@ -434,7 +390,6 @@ static int gd5f_blockerase(struct spi_flash_dev_s *priv, size_t block)
     spi_mark_badblock(priv, address >> priv->block_shift);
     ret = -EIO;
   }
-#endif
 
 errout:
   return ret;
@@ -451,12 +406,6 @@ static ssize_t gd5f_pageread(FAR struct spi_flash_dev_s *priv, off_t address, si
     return -EFAULT;
 
   gd5f_lock(priv->spi);
-
-#ifndef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
-
-  (void)gd5f_waitcomplete_locked(priv);
-#endif
 
   /* Make sure that writing is disabled */
 
@@ -556,11 +505,6 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 
   gd5f_lock(priv->spi);
 
-#ifndef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
-  (void)gd5f_waitcomplete_locked(priv);
-#endif
-
   /* Enable write access to the FLASH */
 
   gd5f_wren_locked(priv->spi);
@@ -603,16 +547,13 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 
   SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
-  /* Wait for any preceding write or erase operation to complete. */
+  /* Wait for write operation to complete. */
   uint8_t status = gd5f_waitcomplete_locked(priv);
-#endif
 
   gd5f_wrdi_locked(priv->spi);
 
   gd5f_unlock(priv->spi);
 
-#ifdef CONFIG_GD5F_SYNC_WRITE
   if (status & GD5F_SR_ERR_PROGRAM) {
     if (!spare) {
       spi_mark_badblock(priv, address >> priv->block_shift);
@@ -622,7 +563,6 @@ static ssize_t gd5f_pagewrite(struct spi_flash_dev_s *priv, off_t address,
 #endif
     ret = -EIO;
   }
-#endif
 
   return ret;
 }
