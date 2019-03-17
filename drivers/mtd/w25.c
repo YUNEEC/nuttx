@@ -491,11 +491,11 @@ static uint8_t w25_waitcomplete_locked(FAR struct spi_flash_dev_s *priv)
         if (priv->prev_instr != W25_WRPAGE && (status & W25_SR_BUSY) != 0)
           {
             w25_unlock(priv->spi);
-            usleep(1000);
+            nxsig_usleep(1000);
             w25_lock(priv->spi);
           }
 #endif
-        usleep(500);
+        nxsig_usleep(500);
       }
     while (1);
 
@@ -818,7 +818,7 @@ int w25_spi_flash_initialize(FAR struct spi_flash_dev_s *priv)
     SPI_SELECT(priv->spi, SPIDEV_FLASH(0), false);
 
     w25_reset(priv->spi);
-    usleep(5000);
+    nxsig_usleep(5000);
 
     /* Identify the FLASH chip and get its capacity */
 

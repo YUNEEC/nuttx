@@ -403,11 +403,11 @@ static uint8_t gd5f_waitcomplete_locked(FAR struct spi_flash_dev_s *priv)
         if (priv->prev_instr != GD5F_WRPAGE && (status & GD5F_SR_BUSY) != 0)
         {
             gd5f_unlock(priv->qspi);
-            usleep(1000);
+            nxsig_usleep(1000);
             gd5f_lock(priv->qspi);
         }
 #endif
-        usleep(500);
+        nxsig_usleep(500);
     } while (1);
 
     if (status & GD5F_SR_ERR_ERASE) {
@@ -769,7 +769,7 @@ int gd5f_qspi_flash_initialize(FAR struct spi_flash_dev_s *priv)
       }
 
     gd5f_reset(priv->qspi);
-    usleep(5000);
+    nxsig_usleep(5000);
 
     /* Identify the FLASH chip and get its capacity */
 
